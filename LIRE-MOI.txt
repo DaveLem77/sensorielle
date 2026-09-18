@@ -1,0 +1,9 @@
+Sensorielle — https://sensorielle.ca/
+
+Remplacez votre index.html par celui de ce dossier. Les 39 vidéos sont intégrées au code : aucun dossier media/signs à téléverser.
+
+Conservez vos autres fichiers et dossiers existants. La favicon et l’image de partage utilisent media/favicon.png et media/share.png. Ces deux images sont également incluses ici.
+
+Ajoutez robots.txt et sitemap.xml à côté de index.html pour le référencement. LIRE-MOI.txt n’est pas nécessaire sur votre hébergement.
+
+Le site doit être accessible en HTTPS sur https://sensorielle.ca/. Ce dossier ne publie pas le site à lui seul.
