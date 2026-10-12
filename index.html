@@ -4182,6 +4182,7 @@ if (typeof document !== "undefined") {
     let micWasOnBeforePause = false;
     let lastUtteranceSigns = []; // [{ key, source }] de la dernière phrase reconnue, pour la relecture
     let lastFinalAt = 0; // horodatage (Date.now()) du dernier résultat final reçu
+    let lastUtteranceText = ""; // texte complet accumulé de la phrase en cours (pour le repli IA)
 
     function showIdle(show) {
       idleMsg.hidden = !show;
@@ -4375,9 +4376,95 @@ if (typeof document !== "undefined") {
         now - lastFinalAt < UTTERANCE_GAP_MS && lastUtteranceSigns.length > 0;
       lastFinalAt = now;
       if (isContinuation) {
+        lastUtteranceText = (lastUtteranceText + " " + text).trim();
         appendToUtterance(text);
       } else {
+        lastUtteranceText = text;
         renderUtterance(text);
+      }
+      maybeTryAiFallback(lastUtteranceText, playToken);
+    }
+
+    // ---- Repli IA (reformulation avec le vocabulaire disponible) ----------
+    // Quand un mot important de la phrase (pas juste "le"/"de"/"je"...) ne
+    // correspond à aucun signe connu, on demande à une IA (Claude, via un
+    // petit serveur relais — voir AI_FALLBACK_URL) de reformuler toute la
+    // phrase en n'utilisant QUE des mots déjà disponibles comme signes.
+    // Volontairement silencieux en cas d'échec (pas de clé configurée,
+    // serveur relais hors service, pas de réseau, délai dépassé...) : la
+    // correspondance directe déjà affichée à l'écran reste alors la seule
+    // chose jouée, exactement comme avant cet ajout — jamais de blocage, ni
+    // de message d'erreur visible pour autant.
+    //
+    // À REMPLIR par toi une fois le serveur relais déployé (voir
+    // instructions fournies séparément) — tant que c'est vide, cette
+    // fonctionnalité ne fait simplement rien.
+    const AI_FALLBACK_URL = "";
+    const AI_FALLBACK_TIMEOUT_MS = 8000;
+
+    // Mots grammaticaux français qu'on ne s'attend JAMAIS à voir dans le
+    // vocabulaire de signes (articles, pronoms, prépositions, formes
+    // courantes d'être/avoir...) — leur absence est normale et ne doit
+    // jamais, à elle seule, déclencher un appel IA.
+    const STOPWORDS = new Set([
+      "le","la","les","l","un","une","des","du","de","d","au","aux","a",
+      "et","ou","mais","donc","or","ni","car","que","qui","quoi","dont","ou",
+      "ce","cet","cette","ces","mon","ma","mes","ton","ta","tes","son","sa","ses",
+      "notre","nos","votre","vos","leur","leurs",
+      "je","tu","il","elle","on","nous","vous","ils","elles","me","te","se","lui","y","en",
+      "dans","sur","sous","avec","sans","pour","par","entre","chez","vers","depuis","pendant",
+      "est","es","suis","sont","serai","sera","seront","etait","etais","etaient",
+      "ai","as","avons","avez","ont","avais","avait","avaient",
+      "ne","pas","plus","tres","si","comme","alors","aussi","bien",
+      "tout","toute","tous","toutes","quand","pourquoi","comment","combien"
+    ]);
+
+    let aiFallbackAbort = null;
+
+    async function maybeTryAiFallback(text, token) {
+      if (!AI_FALLBACK_URL) return;
+      const rawWords = text.split(/\s+/).filter(Boolean);
+      const hasUnmatchedContentWord = rawWords.some((raw) => {
+        const norm = normalize(raw);
+        if (!norm || STOPWORDS.has(norm)) return false;
+        if (localWordFiles[norm]) return false;
+        if (WORD_MAP[norm]) return false;
+        return true;
+      });
+      if (!hasUnmatchedContentWord) return;
+
+      if (aiFallbackAbort) aiFallbackAbort.abort();
+      const controller = new AbortController();
+      aiFallbackAbort = controller;
+      const timer = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
+      try {
+        const resp = await fetch(AI_FALLBACK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sentence: text, vocabulary: Object.keys(VIDEOS) }),
+          signal: controller.signal,
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        // La phrase en cours a changé pendant l'appel (nouvelle phrase
+        // commencée) : cette réponse ne correspond plus à rien à l'écran.
+        if (token !== playToken) return;
+        const words = Array.isArray(data.words) ? data.words : [];
+        const signs = words.filter((w) => VIDEOS[w]).map((w) => ({ key: w, source: "builtin" }));
+        if (!signs.length) return;
+        // La reformulation de l'IA porte sur la phrase ENTIÈRE (pas juste
+        // le mot manquant) : elle remplace la suite de la file plutôt que
+        // de s'y ajouter, pour éviter de rejouer deux fois les mots déjà
+        // trouvés par la correspondance directe. Ce qui joue déjà à
+        // l'écran en ce moment continue sans interruption.
+        queue = signs;
+        lastUtteranceSigns = signs;
+        if (!paused) startPlayback();
+      } catch (e) {
+        // Repli silencieux (réseau, serveur relais absent, délai dépassé).
+      } finally {
+        clearTimeout(timer);
+        if (aiFallbackAbort === controller) aiFallbackAbort = null;
       }
     }
 

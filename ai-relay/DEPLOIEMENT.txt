@@ -1,0 +1,80 @@
+========================================================================
+ Repli IA pour Sensorielle — guide de déploiement (à faire toi-même)
+========================================================================
+
+Ce dossier contient un petit "serveur relais" (worker.js) qui reçoit une
+phrase + ta liste de 227 mots signés, demande à l'IA Claude de reformuler
+la phrase avec seulement ces mots-là, et renvoie le résultat au site.
+
+Pourquoi un serveur à part : le site (GitHub Pages) ne peut pas contenir
+ta clé API directement — n'importe qui pourrait l'y voir et s'en servir
+à tes frais. Ce petit serveur (gratuit chez Cloudflare pour ce volume)
+garde la clé secrète et fait l'appel à ta place.
+
+IMPORTANT : je ne peux pas créer de compte, ni saisir ta clé API, ni
+entrer tes informations de paiement à ta place — tu dois faire ces
+étapes toi-même. Je peux par contre t'accompagner à l'écran si tu veux
+(dis-le-moi) et répondre à tes questions à chaque étape.
+
+------------------------------------------------------------------------
+ÉTAPE 1 — Créer ta clé API Anthropic (le "cerveau" qui reformule)
+------------------------------------------------------------------------
+1. Va sur https://console.anthropic.com et crée un compte (ou connecte-toi).
+2. Dans la section "Billing", ajoute un petit montant de crédit (quelques
+   dollars suffisent largement pour commencer — chaque phrase traitée
+   coûte environ 0,0002 $ avec le modèle utilisé ici, Claude Haiku 5.5,
+   donc même 1000 phrases reviennent à moins de 25 cents).
+3. Va dans "API Keys" → "Create Key". Donne-lui un nom (ex. "sensorielle").
+4. COPIE cette clé immédiatement (elle ne se réaffiche plus après) et
+   garde-la de côté temporairement (ex. dans un fichier texte PRIVÉ sur
+   ton ordi, jamais partagé, jamais collé dans un message public).
+
+------------------------------------------------------------------------
+ÉTAPE 2 — Créer le Worker Cloudflare (le serveur relais, gratuit)
+------------------------------------------------------------------------
+1. Va sur https://dash.cloudflare.com et crée un compte gratuit (ou
+   connecte-toi).
+2. Dans le menu de gauche : "Workers & Pages" → "Create" → "Workers" →
+   donne-lui un nom (ex. "sensorielle-ai") → "Deploy" (il déploie un
+   exemple vide pour commencer, c'est normal).
+3. Clique "Edit code" (ou "Quick edit"). Un éditeur en ligne s'ouvre.
+4. EFFACE tout le code d'exemple qui y est, et COLLE à la place tout le
+   contenu du fichier "worker.js" de ce dossier (ouvre-le avec le Bloc-
+   notes ou VS Code, copie tout, colle-le dans l'éditeur Cloudflare).
+5. Clique "Save and deploy" (ou "Deploy").
+6. Note l'URL qui s'affiche en haut, du genre :
+   https://sensorielle-ai.TON-PSEUDO.workers.dev
+   → Envoie-moi cette URL exacte dans le chat, j'en ai besoin pour
+     relier le site à ton Worker (ça, par contre, je peux le faire moi
+     dans le code — ce n'est pas une information secrète).
+
+------------------------------------------------------------------------
+ÉTAPE 3 — Ajouter ta clé API comme secret (TOI SEUL, jamais dans le code)
+------------------------------------------------------------------------
+1. Toujours sur la page de ton Worker Cloudflare : va dans l'onglet
+   "Settings" → "Variables and Secrets".
+2. Clique "Add" → Type : "Secret" → Nom EXACT : ANTHROPIC_API_KEY
+   → Valeur : colle la clé copiée à l'étape 1.
+3. Sauvegarde / Deploy à nouveau si demandé.
+
+C'est la seule étape où ta clé existe quelque part — elle reste dans ce
+coffre-fort de Cloudflare, jamais visible dans le code du site, jamais
+vue par moi.
+
+------------------------------------------------------------------------
+ÉTAPE 4 — Relier le site à ton Worker (je m'en occupe)
+------------------------------------------------------------------------
+Une fois que tu m'as donné l'URL de l'étape 2, je mets à jour une seule
+ligne dans index.html (AI_FALLBACK_URL) et je prépare le commit — il ne
+te restera qu'à faire "git push origin main" comme les fois précédentes.
+
+------------------------------------------------------------------------
+Pour tester une fois tout branché
+------------------------------------------------------------------------
+Dis une phrase contenant un mot qui n'est PAS dans tes 227 signes (par
+ex. un mot comme "restaurant" si tu n'as pas ce signe) — après 1 à 3
+secondes, les signes correspondant à la reformulation de l'IA devraient
+s'ajouter à la suite. Si rien ne se passe au-delà de ce qui matchait
+déjà avant, vérifie dans l'ordre : la clé API Anthropic a-t-elle du
+crédit, le secret ANTHROPIC_API_KEY est-il bien orthographié sur
+Cloudflare, et l'URL dans index.html est-elle la bonne.
