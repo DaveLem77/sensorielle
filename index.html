@@ -4181,6 +4181,7 @@ if (typeof document !== "undefined") {
     let paused = false;
     let micWasOnBeforePause = false;
     let lastUtteranceSigns = []; // [{ key, source }] de la dernière phrase reconnue, pour la relecture
+    let lastFinalAt = 0; // horodatage (Date.now()) du dernier résultat final reçu
 
     function showIdle(show) {
       idleMsg.hidden = !show;
@@ -4325,10 +4326,59 @@ if (typeof document !== "undefined") {
       if (!paused) playFromQueue(token);
     }
 
+    // Ajoute les signes d'un nouveau résultat final à LA FILE EN COURS (sans
+    // la vider ni interrompre ce qui joue déjà) — utilisé quand ce résultat
+    // final arrive peu après le précédent, signe qu'il fait partie de la
+    // MÊME phrase simplement découpée en plusieurs morceaux par le moteur
+    // de reconnaissance (observé sur Safari iOS, qui finalise beaucoup plus
+    // souvent que Chrome en cours de phrase continue — corrigé le
+    // 2026-10-12 : "mange une banane" ne faisait jouer que "mange" car le
+    // morceau suivant remplaçait la file au lieu de s'y ajouter).
+    function appendToUtterance(text) {
+      const rawWords = text.split(/\s+/).filter(Boolean);
+      if (!rawWords.length) return;
+      transcriptBox.hidden = false;
+      captionEl.textContent = captionEl.textContent
+        ? captionEl.textContent + " " + text
+        : text;
+
+      const newSigns = [];
+      rawWords.forEach((raw) => {
+        const norm = normalize(raw);
+        const localEntry = localWordFiles[norm];
+        if (localEntry) {
+          newSigns.push({ key: norm, source: "local" });
+          return;
+        }
+        const builtinKey = WORD_MAP[norm];
+        if (builtinKey) {
+          newSigns.push({ key: builtinKey, source: "builtin" });
+        }
+      });
+      if (!newSigns.length) return;
+      queue.push(...newSigns);
+      lastUtteranceSigns = lastUtteranceSigns.concat(newSigns);
+      if (!paused) startPlayback();
+    }
+
+    // Deux résultats finaux séparés de moins de UTTERANCE_GAP_MS sont
+    // traités comme la MÊME phrase découpée par le moteur de
+    // reconnaissance (append) ; au-delà, c'est une nouvelle phrase qui
+    // repart à zéro (replace), comme avant.
+    const UTTERANCE_GAP_MS = 2500;
+
     function handleFinalTranscript(text) {
       const hadWords = /\S/.test(text);
       if (!hadWords) return;
-      renderUtterance(text);
+      const now = Date.now();
+      const isContinuation =
+        now - lastFinalAt < UTTERANCE_GAP_MS && lastUtteranceSigns.length > 0;
+      lastFinalAt = now;
+      if (isContinuation) {
+        appendToUtterance(text);
+      } else {
+        renderUtterance(text);
+      }
     }
 
     // ---- Pause / reprise ----------------------------------------------------
