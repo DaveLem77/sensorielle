@@ -1,9 +1,16 @@
 Sensorielle — https://sensorielle.ca/
 
-Remplacez votre index.html par celui de ce dossier. Les 39 vidéos sont intégrées au code : aucun dossier media/signs à téléverser.
+Remplacez votre index.html par celui de ce dossier ET téléversez le dossier
+media/signs/ (227 vidéos) à côté : les vidéos ne sont plus intégrées dans le
+code, chaque mot pointe vers son fichier dans media/signs/, chargé seulement
+au moment où il est réellement signé.
 
-Conservez vos autres fichiers et dossiers existants. La favicon et l’image de partage utilisent media/favicon.png et media/share.png. Ces deux images sont également incluses ici.
+Conservez vos autres fichiers et dossiers existants. La favicon et l’image de
+partage utilisent media/favicon.png et media/share.png — ne touchez pas à ces
+deux-là, seulement media/signs/ est nouveau.
 
-Ajoutez robots.txt et sitemap.xml à côté de index.html pour le référencement. LIRE-MOI.txt n’est pas nécessaire sur votre hébergement.
+Ajoutez robots.txt et sitemap.xml à côté de index.html pour le référencement.
+LIRE-MOI.txt n’est pas nécessaire sur votre hébergement.
 
-Le site doit être accessible en HTTPS sur https://sensorielle.ca/. Ce dossier ne publie pas le site à lui seul.
+Le site doit être accessible en HTTPS sur https://sensorielle.ca/. Ce dossier
+ne publie pas le site à lui seul.
