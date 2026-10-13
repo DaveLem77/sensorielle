@@ -4368,6 +4368,20 @@ if (typeof document !== "undefined") {
     // repart à zéro (replace), comme avant.
     const UTTERANCE_GAP_MS = 2500;
 
+    // L'appel IA est RETARDÉ (debounce) plutôt qu'immédiat : Safari iOS
+    // peut finaliser un seul résultat toutes les quelques centaines de ms
+    // pendant qu'on parle encore (voir plus haut), et appeler l'IA à
+    // chaque morceau causait plusieurs requêtes réseau empilées, chacune
+    // remplaçant la file en cours — gels visibles, vidéos qui sautent,
+    // une phrase pouvant prendre jusqu'à 2 minutes à s'afficher en entier
+    // (signalé le 2026-10-13). On attend maintenant AI_FALLBACK_DEBOUNCE_MS
+    // de silence (plus aucun nouveau résultat final) avant de faire UN
+    // SEUL appel avec la phrase complète — exactement comme la détection
+    // de "nouvelle phrase" un peu plus haut, mais pensé pour la fin de la
+    // phrase plutôt que son début.
+    const AI_FALLBACK_DEBOUNCE_MS = 1200;
+    let aiFallbackDebounceTimer = null;
+
     function handleFinalTranscript(text) {
       const hadWords = /\S/.test(text);
       if (!hadWords) return;
@@ -4382,7 +4396,13 @@ if (typeof document !== "undefined") {
         lastUtteranceText = text;
         renderUtterance(text);
       }
-      maybeTryAiFallback(lastUtteranceText, playToken);
+      if (aiFallbackDebounceTimer) clearTimeout(aiFallbackDebounceTimer);
+      const textAtSchedule = lastUtteranceText;
+      const tokenAtSchedule = playToken;
+      aiFallbackDebounceTimer = setTimeout(() => {
+        aiFallbackDebounceTimer = null;
+        maybeTryAiFallback(textAtSchedule, tokenAtSchedule);
+      }, AI_FALLBACK_DEBOUNCE_MS);
     }
 
     // ---- Repli IA (reformulation avec le vocabulaire disponible) ----------
