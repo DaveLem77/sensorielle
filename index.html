@@ -4013,6 +4013,24 @@ if (typeof document !== "undefined") {
 
     const VIDEOS = window.SENSORIELLE_SPEECH_VIDEOS || {};
 
+    // === DIAGNOSTIC TEMPORAIRE (2026-10-13, à enlever une fois le bug
+    // "jamais plus que 2 vidéos / mots qui ne se lancent pas" résolu) =====
+    const DEBUG_PANEL = document.createElement("div");
+    DEBUG_PANEL.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow-y:auto;background:rgba(0,0,0,0.88);color:#4f4;font:10px/1.4 monospace;padding:6px;z-index:999999;white-space:pre-wrap;pointer-events:none;";
+    document.addEventListener("DOMContentLoaded", () => document.body.appendChild(DEBUG_PANEL));
+    if (document.body) document.body.appendChild(DEBUG_PANEL);
+    const dbgLines = [];
+    function dbg(msg) {
+      const t = new Date();
+      const ts = String(t.getMinutes()).padStart(2, "0") + ":" + String(t.getSeconds()).padStart(2, "0") + "." + String(t.getMilliseconds()).padStart(3, "0");
+      dbgLines.push(ts + " " + msg);
+      if (dbgLines.length > 50) dbgLines.shift();
+      DEBUG_PANEL.textContent = dbgLines.join("\n");
+      DEBUG_PANEL.scrollTop = DEBUG_PANEL.scrollHeight;
+    }
+    // === FIN installation diagnostic (la suite est éparpillée dans le
+    // code ci-dessous, cherche "dbg(" pour tout retrouver) ================
+
     function normalize(word) {
       return word
         .toLowerCase()
@@ -4246,12 +4264,13 @@ if (typeof document !== "undefined") {
     async function playFromQueue(token) {
       if (token !== playToken) return;
       if (paused) { busy = false; return; }
-      if (queue.length === 0) { busy = false; return; }
+      if (queue.length === 0) { busy = false; dbg("playFromQueue: file VIDE, lecture arrêtée"); return; }
       busy = true;
       const item = queue.shift();
+      dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
       const src = await resolveSrc(item);
-      if (token !== playToken) return;
-      if (!src) { playFromQueue(token); return; }
+      if (token !== playToken) { dbg("playFromQueue: token périmé pour '" + item.key + "', abandon"); return; }
+      if (!src) { dbg("playFromQueue: AUCUNE SOURCE pour '" + item.key + "' (source=" + item.source + "), on saute"); playFromQueue(token); return; }
       // Une URL de Blob (dossier local) doit être libérée une fois la
       // lecture terminée ou en erreur — une chaîne data: (mot intégré) n'en
       // a pas besoin, `revokeUrl` reste alors null.
@@ -4268,6 +4287,7 @@ if (typeof document !== "undefined") {
       function advance() {
         if (advanced) return;
         advanced = true;
+        dbg("advance() pour '" + item.key + "'");
         nextVideo.removeEventListener("timeupdate", onTimeUpdate);
         nextVideo.onended = null;
         nextVideo.onerror = null;
@@ -4286,6 +4306,7 @@ if (typeof document !== "undefined") {
         curVideo.classList.remove("showing");
         showIdle(false);
         curIdx = nextIdx;
+        dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
         prefetchUpcoming();
       };
@@ -4293,7 +4314,7 @@ if (typeof document !== "undefined") {
       // supporté par ce navigateur précis) ne doit jamais bloquer le reste
       // de la file en silence — on passe simplement au mot suivant.
       nextVideo.onended = advance;
-      nextVideo.onerror = () => { nextVideo.oncanplay = null; advance(); };
+      nextVideo.onerror = (ev) => { dbg("ERREUR vidéo pour '" + item.key + "': " + (nextVideo.error ? nextVideo.error.code : ev)); nextVideo.oncanplay = null; advance(); };
       nextVideo.src = src;
       nextVideo.load();
     }
@@ -4344,6 +4365,7 @@ if (typeof document !== "undefined") {
         }
       });
       lastUtteranceSigns = queue.slice();
+      dbg("NOUVELLE phrase \"" + text + "\" -> matché:[" + queue.map((s) => s.key).join(",") + "] (" + queue.length + "/" + rawWords.length + " mots)");
       if (!paused) playFromQueue(token);
     }
 
@@ -4376,6 +4398,7 @@ if (typeof document !== "undefined") {
           newSigns.push({ key: builtinKey, source: "builtin" });
         }
       });
+      dbg("SUITE phrase \"" + text + "\" -> ajout:[" + newSigns.map((s) => s.key).join(",") + "] (" + newSigns.length + "/" + rawWords.length + " mots, file totale=" + (queue.length + newSigns.length) + ")");
       if (!newSigns.length) return;
       queue.push(...newSigns);
       lastUtteranceSigns = lastUtteranceSigns.concat(newSigns);
@@ -4406,8 +4429,9 @@ if (typeof document !== "undefined") {
       const hadWords = /\S/.test(text);
       if (!hadWords) return;
       const now = Date.now();
-      const isContinuation =
-        now - lastFinalAt < UTTERANCE_GAP_MS && lastUtteranceSigns.length > 0;
+      const gapMs = now - lastFinalAt;
+      const isContinuation = gapMs < UTTERANCE_GAP_MS && lastUtteranceSigns.length > 0;
+      dbg("handleFinalTranscript \"" + text + "\" (écart=" + gapMs + "ms -> " + (isContinuation ? "SUITE" : "NOUVELLE") + ")");
       lastFinalAt = now;
       if (isContinuation) {
         lastUtteranceText = (lastUtteranceText + " " + text).trim();
@@ -4471,7 +4495,8 @@ if (typeof document !== "undefined") {
         if (WORD_MAP[norm]) return false;
         return true;
       });
-      if (!hasUnmatchedContentWord) return;
+      if (!hasUnmatchedContentWord) { dbg("IA: pas déclenchée (tous les mots importants matchent déjà)"); return; }
+      dbg("IA: appel en cours pour \"" + text + "\"...");
 
       if (aiFallbackAbort) aiFallbackAbort.abort();
       const controller = new AbortController();
@@ -4484,13 +4509,14 @@ if (typeof document !== "undefined") {
           body: JSON.stringify({ sentence: text, vocabulary: Object.keys(VIDEOS) }),
           signal: controller.signal,
         });
-        if (!resp.ok) return;
+        if (!resp.ok) { dbg("IA: erreur HTTP " + resp.status); return; }
         const data = await resp.json();
         // La phrase en cours a changé pendant l'appel (nouvelle phrase
         // commencée) : cette réponse ne correspond plus à rien à l'écran.
         if (token !== playToken) return;
         const words = Array.isArray(data.words) ? data.words : [];
         const signs = words.filter((w) => VIDEOS[w]).map((w) => ({ key: w, source: "builtin" }));
+        dbg("IA: réponse = [" + words.join(",") + "] -> remplace la file par " + signs.length + " mots");
         if (!signs.length) return;
         // La reformulation de l'IA porte sur la phrase ENTIÈRE (pas juste
         // le mot manquant) : elle remplace la suite de la file plutôt que
@@ -4502,6 +4528,7 @@ if (typeof document !== "undefined") {
         if (!paused) startPlayback();
       } catch (e) {
         // Repli silencieux (réseau, serveur relais absent, délai dépassé).
+        dbg("IA: ÉCHEC (" + (e && e.name) + ": " + (e && e.message) + ")");
       } finally {
         clearTimeout(timer);
         if (aiFallbackAbort === controller) aiFallbackAbort = null;
@@ -4578,10 +4605,12 @@ if (typeof document !== "undefined") {
       recognizer.interimResults = false;
       recognizer.onresult = (e) => {
         for (let k = e.resultIndex; k < e.results.length; k++) {
+          dbg("onresult[" + k + "] isFinal=" + e.results[k].isFinal + " -> \"" + e.results[k][0].transcript + "\"");
           if (e.results[k].isFinal) handleFinalTranscript(e.results[k][0].transcript);
         }
       };
       recognizer.onerror = (e) => {
+        dbg("recognizer.onerror: " + e.error);
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           transcriptBox.hidden = false;
           captionEl.textContent = "Accès au micro refusé.";
@@ -4600,6 +4629,7 @@ if (typeof document !== "undefined") {
       // relance (via startMic()), avec un tout petit délai pour laisser le
       // moteur vocal du navigateur se libérer.
       recognizer.onend = () => {
+        dbg("recognizer.onend (micOn=" + micOn + ", paused=" + paused + ") -> relance dans 200ms");
         if (micOn && !paused) {
           setTimeout(() => { if (micOn && !paused) startMic(); }, 200);
         }
