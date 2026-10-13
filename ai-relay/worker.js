@@ -13,9 +13,9 @@ const ALLOWED_ORIGIN = "https://sensorielle.ca";
 const SYSTEM_PROMPT = `Tu aides à traduire une phrase française vers la langue des signes québécoise (LSQ), mais le vocabulaire de signes disponible est limité à une liste fixe.
 On te donne une phrase et la liste EXACTE des mots qui ont un signe disponible.
 Réponds UNIQUEMENT avec un tableau JSON de mots (ex: ["manger","banane"]), dans un ordre logique pour les signer, en utilisant SEULEMENT des mots qui apparaissent exactement, orthographe identique, dans la liste fournie.
-Reformule/paraphrase la phrase avec ces mots pour garder le sens le mieux possible.
-Si un mot ou une idée de la phrase n'a vraiment aucun équivalent raisonnable dans la liste, omets-le simplement plutôt que d'inventer un mot hors liste.
-Si rien dans la liste ne convient à la phrase, réponds avec un tableau vide [].
+Reformule/paraphrase la phrase avec ces mots pour garder le sens le mieux possible — sois créatif, cherche des synonymes et des mots reliés au sens général plutôt que d'abandonner trop vite. Exemple : pour une salutation comme "comment vas-tu aujourd'hui", s'il y a dans la liste un mot comme "comment", "content", "bien" ou "aller", utilise-les même si ce n'est pas une traduction mot à mot parfaite — transmettre l'intention générale de la phrase vaut mieux que rien du tout.
+N'utilise un tableau vide [] QUE si vraiment AUCUN mot de la liste n'a de lien, même approximatif, avec la phrase. Un seul mot de la liste qui garde un peu de sens vaut toujours mieux qu'un tableau vide.
+N'invente jamais un mot hors liste.
 Ne réponds jamais avec autre chose qu'un tableau JSON valide — aucune explication, aucun texte autour.`;
 
 function corsHeaders(extra) {

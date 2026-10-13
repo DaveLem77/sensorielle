@@ -4637,7 +4637,30 @@ if (typeof document !== "undefined") {
       try {
         recognizer.start();
         micOn = true;
-      } catch (e) {}
+        dbg("startMic: recognizer.start() OK");
+      } catch (e) {
+        // Échec SILENCIEUX historiquement (voir plus haut, bug du
+        // 2026-09-14) : ça pouvait laisser le micro mort pour de bon sans
+        // aucun indice. On journalise maintenant l'erreur ET on réessaie
+        // une fois après un court délai au lieu d'abandonner — signalé le
+        // 2026-10-13 ("quand j'arrête de parler et reparle, ça ne
+        // continue pas").
+        dbg("startMic: ÉCHEC de recognizer.start() -> " + (e && e.message ? e.message : e) + " — nouvel essai dans 400ms");
+        setTimeout(() => {
+          // micOn reste déjà "true" depuis le tout premier démarrage
+          // réussi (ce n'est pas un indicateur de connexion en direct) :
+          // seul `paused` doit bloquer ce deuxième essai.
+          if (!paused) {
+            try {
+              recognizer.start();
+              micOn = true;
+              dbg("startMic: 2e essai OK");
+            } catch (e2) {
+              dbg("startMic: 2e essai ÉCHEC aussi -> " + (e2 && e2.message ? e2.message : e2));
+            }
+          }
+        }, 400);
+      }
     }
 
     function stopMic() {
