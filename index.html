@@ -4014,11 +4014,31 @@ if (typeof document !== "undefined") {
     const VIDEOS = window.SENSORIELLE_SPEECH_VIDEOS || {};
 
     // === DIAGNOSTIC TEMPORAIRE (2026-10-13, à enlever une fois le bug
-    // "jamais plus que 2 vidéos / mots qui ne se lancent pas" résolu) =====
+    // résolu) — masqué par défaut, un petit bouton rond "i" discret
+    // l'ouvre, un "x" dans le panneau le referme (demandé le 2026-10-13).
     const DEBUG_PANEL = document.createElement("div");
-    DEBUG_PANEL.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow-y:auto;background:rgba(0,0,0,0.88);color:#4f4;font:10px/1.4 monospace;padding:6px;z-index:999999;white-space:pre-wrap;pointer-events:none;";
-    document.addEventListener("DOMContentLoaded", () => document.body.appendChild(DEBUG_PANEL));
-    if (document.body) document.body.appendChild(DEBUG_PANEL);
+    DEBUG_PANEL.style.cssText = "display:none;position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow-y:auto;background:rgba(0,0,0,0.88);color:#4f4;font:10px/1.4 monospace;padding:6px 28px 6px 6px;z-index:999999;white-space:pre-wrap;";
+    const DEBUG_CLOSE = document.createElement("button");
+    DEBUG_CLOSE.textContent = "×";
+    DEBUG_CLOSE.setAttribute("aria-label", "Fermer le journal de diagnostic");
+    DEBUG_CLOSE.style.cssText = "position:fixed;right:6px;bottom:calc(42vh - 26px);width:22px;height:22px;border-radius:50%;border:none;background:#333;color:#fff;font:14px/22px monospace;cursor:pointer;z-index:1000001;display:none;";
+    const DEBUG_TOGGLE = document.createElement("button");
+    DEBUG_TOGGLE.textContent = "i";
+    DEBUG_TOGGLE.setAttribute("aria-label", "Afficher le journal de diagnostic");
+    DEBUG_TOGGLE.style.cssText = "position:fixed;right:10px;bottom:10px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(0,0,0,0.35);color:rgba(255,255,255,0.75);font:13px/26px monospace;cursor:pointer;z-index:1000000;";
+    function setDebugPanelOpen(open) {
+      DEBUG_PANEL.style.display = open ? "block" : "none";
+      DEBUG_CLOSE.style.display = open ? "block" : "none";
+    }
+    DEBUG_TOGGLE.addEventListener("click", () => setDebugPanelOpen(true));
+    DEBUG_CLOSE.addEventListener("click", () => setDebugPanelOpen(false));
+    function mountDebugUi() {
+      document.body.appendChild(DEBUG_PANEL);
+      document.body.appendChild(DEBUG_CLOSE);
+      document.body.appendChild(DEBUG_TOGGLE);
+    }
+    document.addEventListener("DOMContentLoaded", mountDebugUi);
+    if (document.body) mountDebugUi();
     const dbgLines = [];
     function dbg(msg) {
       const t = new Date();
@@ -4240,7 +4260,7 @@ if (typeof document !== "undefined") {
     // d'un côté, pour ne pas casser les signes les plus courts (ex.
     // "merci", ~1,4s).
     const PLAYBACK_RATE = 1.5;
-    const EXTRA_TRIM = 0.5;
+    const EXTRA_TRIM = 0.8;
 
     // Préchauffe (fetch en arrière-plan, sans l'afficher) le PROCHAIN mot
     // de la file dès que le mot actuel commence à s'afficher, plutôt que
@@ -4251,14 +4271,20 @@ if (typeof document !== "undefined") {
     // s'affiche (toujours piloté par playFromQueue/oncanplay comme
     // avant) — juste à quel moment son téléchargement commence.
     const prefetchedUrls = new Set();
-    function prefetchUpcoming() {
-      if (queue.length === 0) return;
-      const peek = queue[0];
+    function prefetchOne(peek) {
       if (!peek || peek.source !== "builtin") return;
       const src = VIDEOS[peek.key];
       if (!src || prefetchedUrls.has(src)) return;
       prefetchedUrls.add(src);
       fetch(src, { cache: "force-cache" }).catch(() => {});
+    }
+    // Préchauffe les DEUX prochains mots (pas juste le suivant) pour
+    // donner plus de marge au réseau mobile le temps que le mot courant
+    // s'affiche (demandé le 2026-10-13 : "la vidéo suivante doit partir
+    // vraiment plus vite").
+    function prefetchUpcoming() {
+      prefetchOne(queue[0]);
+      prefetchOne(queue[1]);
     }
 
     async function playFromQueue(token) {

@@ -7,16 +7,25 @@
 // La clé API Anthropic ne vit QUE dans les secrets de ce Worker (jamais
 // dans le code du site, jamais visible par qui que ce soit d'autre) —
 // voir ai-relay/DEPLOIEMENT.txt pour l'installation complète.
+//
+// 2026-10-13 : David a signalé que l'IA proposait parfois un mot qui
+// n'existe pas dans ses vidéos (ex. "salut"), ce qui faisait échouer
+// TOUTE la réponse (le filtre après-coup l'enlevait, laissant 0 mot).
+// Avant, on demandait juste par texte à l'IA de respecter la liste —
+// une simple consigne qu'elle pouvait mal suivre. Maintenant, on force
+// l'appel à passer par un "outil" (tool use) dont le schéma JSON limite
+// CHAQUE mot à un "enum" = exactement la liste fournie : l'IA ne peut
+// structurellement pas produire autre chose qu'un mot de la liste. Le
+// filtre après-coup reste en place en plus, par sécurité (défense en
+// profondeur), mais ce n'est plus la seule barrière.
 
 const ALLOWED_ORIGIN = "https://sensorielle.ca";
+const TOOL_NAME = "choisir_signes";
 
 const SYSTEM_PROMPT = `Tu aides à traduire une phrase française vers la langue des signes québécoise (LSQ), mais le vocabulaire de signes disponible est limité à une liste fixe.
-On te donne une phrase et la liste EXACTE des mots qui ont un signe disponible.
-Réponds UNIQUEMENT avec un tableau JSON de mots (ex: ["manger","banane"]), dans un ordre logique pour les signer, en utilisant SEULEMENT des mots qui apparaissent exactement, orthographe identique, dans la liste fournie.
-Reformule/paraphrase la phrase avec ces mots pour garder le sens le mieux possible — sois créatif, cherche des synonymes et des mots reliés au sens général plutôt que d'abandonner trop vite. Exemple : pour une salutation comme "comment vas-tu aujourd'hui", s'il y a dans la liste un mot comme "comment", "content", "bien" ou "aller", utilise-les même si ce n'est pas une traduction mot à mot parfaite — transmettre l'intention générale de la phrase vaut mieux que rien du tout.
-N'utilise un tableau vide [] QUE si vraiment AUCUN mot de la liste n'a de lien, même approximatif, avec la phrase. Un seul mot de la liste qui garde un peu de sens vaut toujours mieux qu'un tableau vide.
-N'invente jamais un mot hors liste.
-Ne réponds jamais avec autre chose qu'un tableau JSON valide — aucune explication, aucun texte autour.`;
+On te donne une phrase et la liste EXACTE des mots qui ont un signe disponible. Utilise l'outil fourni pour répondre — tu ne peux de toute façon choisir que des mots qui apparaissent dans la liste, l'outil ne te laisse pas en sortir.
+Choisis les mots dans un ordre logique pour les signer, et reformule/paraphrase la phrase avec ces mots pour garder le sens le mieux possible — sois créatif, cherche des synonymes et des mots reliés au sens général plutôt que d'abandonner trop vite. Exemple : pour une salutation comme "comment vas-tu aujourd'hui", s'il y a dans la liste un mot comme "comment", "content", "bien" ou "aller", utilise-les même si ce n'est pas une traduction mot à mot parfaite — transmettre l'intention générale de la phrase vaut mieux que rien du tout.
+Choisis une liste vide UNIQUEMENT si vraiment AUCUN mot de la liste n'a de lien, même approximatif, avec la phrase. Un seul mot qui garde un peu de sens vaut toujours mieux qu'une liste vide.`;
 
 function corsHeaders(extra) {
   return Object.assign(
@@ -64,10 +73,29 @@ export default {
       return json({ words: [] });
     }
 
-    const userPrompt =
-      'Phrase : "' + sentence.trim() + '"\n\n' +
-      "Mots disponibles (utilise exactement ces mots-ci, rien d'autre) :\n" +
-      vocabulary.join(", ");
+    const userPrompt = 'Phrase : "' + sentence.trim() + '"';
+
+    // Le schéma de l'outil contraint CHAQUE élément du tableau "words" à
+    // être l'un des mots exacts de "vocabulary" (enum) — c'est Anthropic,
+    // pas l'IA elle-même, qui empêche un mot hors liste d'être choisi.
+    const tool = {
+      name: TOOL_NAME,
+      description:
+        "Choisit, dans l'ordre, les mots à signer pour représenter la phrase — strictement tirés de la liste de vocabulaire fournie.",
+      input_schema: {
+        type: "object",
+        properties: {
+          words: {
+            type: "array",
+            description:
+              "Mots à signer dans l'ordre. Liste vide si vraiment aucun mot de la liste n'a de lien avec la phrase.",
+            items: { type: "string", enum: vocabulary },
+            maxItems: 30,
+          },
+        },
+        required: ["words"],
+      },
+    };
 
     let resp;
     try {
@@ -80,8 +108,10 @@ export default {
         },
         body: JSON.stringify({
           model: "claude-haiku-5-5",
-          max_tokens: 200,
+          max_tokens: 400,
           system: SYSTEM_PROMPT,
+          tools: [tool],
+          tool_choice: { type: "tool", name: TOOL_NAME },
           messages: [{ role: "user", content: userPrompt }],
         }),
       });
@@ -101,16 +131,13 @@ export default {
       return json({ error: "réponse Anthropic illisible" }, 502);
     }
 
-    const text = (data.content && data.content[0] && data.content[0].text) || "[]";
-    let words;
-    try {
-      const match = text.match(/\[[\s\S]*\]/);
-      words = JSON.parse(match ? match[0] : text);
-    } catch (e) {
-      words = [];
-    }
-    if (!Array.isArray(words)) words = [];
+    const toolUse = (data.content || []).find((b) => b && b.type === "tool_use" && b.name === TOOL_NAME);
+    let words = toolUse && toolUse.input && Array.isArray(toolUse.input.words) ? toolUse.input.words : [];
 
+    // Filtre de sécurité en plus (défense en profondeur) : même si le
+    // schéma devrait déjà garantir ceci, on ne fait jamais confiance à
+    // 100% à une IA — seuls des mots EXACTEMENT dans la liste fournie
+    // peuvent ressortir d'ici.
     const vocabSet = new Set(vocabulary);
     words = words.filter((w) => typeof w === "string" && vocabSet.has(w)).slice(0, 30);
 
