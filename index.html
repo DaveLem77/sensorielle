@@ -4260,7 +4260,12 @@ if (typeof document !== "undefined") {
     // d'un côté, pour ne pas casser les signes les plus courts (ex.
     // "merci", ~1,4s).
     const PLAYBACK_RATE = 1.5;
-    const EXTRA_TRIM = 0.8;
+    // Remonté à 0,8s le 2026-10-13 puis redescendu ici à 0,5s le même
+    // jour : à 0,8s, un clip court (ex. 2s) ne laissait plus qu'environ
+    // 0,4s réelles de marge avant de devoir enchaîner — pas assez pour
+    // que le préchargement ait le temps de finir sur un réseau mobile
+    // plus lent, d'où des vidéos qui semblaient "couper et recommencer".
+    const EXTRA_TRIM = 0.5;
 
     // Préchauffe (fetch en arrière-plan, sans l'afficher) le PROCHAIN mot
     // de la file dès que le mot actuel commence à s'afficher, plutôt que
@@ -4278,13 +4283,13 @@ if (typeof document !== "undefined") {
       prefetchedUrls.add(src);
       fetch(src, { cache: "force-cache" }).catch(() => {});
     }
-    // Préchauffe les DEUX prochains mots (pas juste le suivant) pour
-    // donner plus de marge au réseau mobile le temps que le mot courant
-    // s'affiche (demandé le 2026-10-13 : "la vidéo suivante doit partir
-    // vraiment plus vite").
+    // Revenu à UN SEUL mot préchauffé à l'avance (pas deux) le
+    // 2026-10-13 : précharger 2 clips en même temps fait concurrence à
+    // la bande passante du clip en train de JOUER sur un réseau mobile
+    // limité, ce qui causait des saccades dans la vidéo affichée —
+    // contre-productif par rapport au but recherché.
     function prefetchUpcoming() {
       prefetchOne(queue[0]);
-      prefetchOne(queue[1]);
     }
 
     async function playFromQueue(token) {
@@ -4513,15 +4518,20 @@ if (typeof document !== "undefined") {
 
     async function maybeTryAiFallback(text, token) {
       if (!AI_FALLBACK_URL) return;
+      // Avant (jusqu'au 2026-10-13) : l'IA n'était appelée QUE si un mot
+      // important ne correspondait à aucun signe. David a demandé que la
+      // phrase soit traduite dans son ENSEMBLE (son contexte), pas juste
+      // mot à mot, même quand la correspondance directe trouve déjà tout
+      // — donc l'IA est maintenant appelée systématiquement (dès qu'il y a
+      // au moins un mot qui n'est pas purement grammatical), et vient
+      // affiner/remplacer ce qui joue déjà, sans jamais retarder le tout
+      // premier mot affiché (la correspondance directe reste immédiate).
       const rawWords = text.split(/\s+/).filter(Boolean);
-      const hasUnmatchedContentWord = rawWords.some((raw) => {
+      const hasContentWord = rawWords.some((raw) => {
         const norm = normalize(raw);
-        if (!norm || STOPWORDS.has(norm)) return false;
-        if (localWordFiles[norm]) return false;
-        if (WORD_MAP[norm]) return false;
-        return true;
+        return norm && !STOPWORDS.has(norm);
       });
-      if (!hasUnmatchedContentWord) { dbg("IA: pas déclenchée (tous les mots importants matchent déjà)"); return; }
+      if (!hasContentWord) { dbg("IA: pas déclenchée (aucun mot de contenu)"); return; }
       dbg("IA: appel en cours pour \"" + text + "\"...");
 
       if (aiFallbackAbort) aiFallbackAbort.abort();
@@ -4617,6 +4627,12 @@ if (typeof document !== "undefined") {
     // est purement informative, rien à cliquer dessus.
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognizer = null;
+    // Texte "intermédiaire" (pas encore final) le plus récent : utilisé
+    // pour ne pas perdre le mot en cours si Safari iOS coupe la
+    // reconnaissance AVANT qu'elle n'ait eu le temps de le finaliser
+    // (voir plus bas, recognizer.onend) — signalé le 2026-10-13 ("il doit
+    // quand même enregistrer le mot que je dis en redémarrant").
+    let pendingInterimText = "";
     let micOn = false;
 
     function startMic() {
@@ -4628,11 +4644,26 @@ if (typeof document !== "undefined") {
       recognizer = new SpeechRecognitionCtor();
       recognizer.lang = "fr-FR";
       recognizer.continuous = true;
-      recognizer.interimResults = false;
+      // Activé le 2026-10-13 (était "false") : sans ça, on n'a AUCUNE
+      // idée de ce qui est en train d'être dit tant que ce n'est pas
+      // "final" — si le moteur s'arrête juste avant la finalisation
+      // (très fréquent sur iPhone), le mot est perdu pour de bon. Avec
+      // les résultats intermédiaires, on garde une copie du dernier mot
+      // en cours et on peut la récupérer dans onend ci-dessous.
+      recognizer.interimResults = true;
       recognizer.onresult = (e) => {
         for (let k = e.resultIndex; k < e.results.length; k++) {
           dbg("onresult[" + k + "] isFinal=" + e.results[k].isFinal + " -> \"" + e.results[k][0].transcript + "\"");
-          if (e.results[k].isFinal) handleFinalTranscript(e.results[k][0].transcript);
+          if (e.results[k].isFinal) {
+            // Résultat finalisé : plus rien "en suspens" à récupérer pour
+            // ce bout de phrase, il vient d'être traité normalement.
+            pendingInterimText = "";
+            handleFinalTranscript(e.results[k][0].transcript);
+          } else {
+            // Pas encore final — on garde une copie à jour, au cas où le
+            // moteur s'arrête (onend) avant de finaliser ce morceau.
+            pendingInterimText = e.results[k][0].transcript;
+          }
         }
       };
       recognizer.onerror = (e) => {
@@ -4656,6 +4687,18 @@ if (typeof document !== "undefined") {
       // moteur vocal du navigateur se libérer.
       recognizer.onend = () => {
         dbg("recognizer.onend (micOn=" + micOn + ", paused=" + paused + ") -> relance dans 200ms");
+        // Le moteur vient de s'arrêter (fin naturelle OU coupure en plein
+        // milieu d'un mot, fréquent sur iPhone). S'il restait un bout de
+        // phrase "en suspens" (jamais finalisé), on le traite maintenant
+        // comme final plutôt que de le perdre silencieusement — c'est la
+        // seule façon de "capturer le mot en cours au redémarrage" sans
+        // changer de moteur de reconnaissance vocale.
+        if (pendingInterimText.trim()) {
+          const rescued = pendingInterimText;
+          pendingInterimText = "";
+          dbg("onend: récupération du texte en suspens -> \"" + rescued + "\"");
+          handleFinalTranscript(rescued);
+        }
         if (micOn && !paused) {
           setTimeout(() => { if (micOn && !paused) startMic(); }, 200);
         }
