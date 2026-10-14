@@ -4746,6 +4746,28 @@ if (typeof document !== "undefined") {
     // prochain test plutôt que de deviner.
     let micStoppedAt = 0;
     let loggedFirstResultThisSession = true;
+    // Chien de garde du micro — ajouté le 2026-10-14 : un journal a
+    // montré le moteur rester "démarré" selon iOS, sans ERREUR ni fin
+    // déclenchée, mais sans capter la voix pendant ~20-25 secondes alors
+    // que la personne parlait activement (confirmé : "j'ai attendu
+    // genre 5 secondes... ça a pris un bon 20-25 secondes avant de
+    // détecter quand même") — iOS n'a donc pas toujours détecté lui-même
+    // que son moteur était bloqué. Plutôt que d'attendre qu'iOS s'en
+    // aperçoive (ce qui peut prendre 20-30s), on force nous-mêmes un
+    // redémarrage complet si aucun résultat — même intermédiaire — n'est
+    // arrivé depuis MIC_WATCHDOG_MS, bornant le pire cas à cette durée
+    // au lieu de 20-30s.
+    const MIC_WATCHDOG_MS = 7000;
+    let lastMicActivityAt = 0;
+    setInterval(() => {
+      if (!micOn || paused || !lastMicActivityAt) return;
+      const silentFor = Date.now() - lastMicActivityAt;
+      if (silentFor > MIC_WATCHDOG_MS) {
+        dbg("⚠️ chien de garde micro : aucune activité depuis " + silentFor + "ms -> redémarrage forcé (sans attendre une erreur iOS)");
+        lastRecognizerErrorType = "watchdog";
+        startMic();
+      }
+    }, 2000);
 
     function startMic() {
       if (!SpeechRecognitionCtor) {
@@ -4778,6 +4800,7 @@ if (typeof document !== "undefined") {
       // en cours et on peut la récupérer dans onend ci-dessous.
       recognizer.interimResults = true;
       recognizer.onresult = (e) => {
+        lastMicActivityAt = Date.now();
         if (!loggedFirstResultThisSession) {
           loggedFirstResultThisSession = true;
           if (micStoppedAt) dbg("⏱️ premier résultat reçu " + (Date.now() - micStoppedAt) + "ms après la coupure précédente");
@@ -4850,6 +4873,7 @@ if (typeof document !== "undefined") {
       try {
         recognizer.start();
         micOn = true;
+        lastMicActivityAt = Date.now();
         dbg("startMic: recognizer.start() OK");
       } catch (e) {
         // Échec SILENCIEUX historiquement (voir plus haut, bug du
@@ -4878,6 +4902,7 @@ if (typeof document !== "undefined") {
 
     function stopMic() {
       micOn = false;
+      lastMicActivityAt = 0;
       if (recognizer) { try { recognizer.stop(); } catch (e) {} recognizer = null; }
     }
 
