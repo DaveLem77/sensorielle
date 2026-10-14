@@ -4757,7 +4757,19 @@ if (typeof document !== "undefined") {
     // redémarrage complet si aucun résultat — même intermédiaire — n'est
     // arrivé depuis MIC_WATCHDOG_MS, bornant le pire cas à cette durée
     // au lieu de 20-30s.
-    const MIC_WATCHDOG_MS = 7000;
+    // Il n'existe tout simplement AUCUN événement à écouter pour "le micro
+    // vient de se bloquer" dans ce cas précis — c'est justement ça, le bug
+    // d'iOS : tant qu'il ne s'en est pas rendu compte lui-même (ce qui a
+    // pris 20-25s dans le test), il ne déclenche ni erreur ni fin, donc
+    // rien à écouter directement. Seul un délai d'inactivité peut le
+    // détecter — raccourci ici à 3,5s (vérifié chaque seconde) demandé
+    // le 2026-10-14 ("tu peux pas forcer directement quand il se ferme").
+    // Un redémarrage déclenché par erreur pendant un VRAI silence (la
+    // personne ne parle juste pas encore) ne coûte presque rien, puisque
+    // rien n'a été dit pendant ce silence de toute façon — 1,5s semblait
+    // trop court (risque de redémarrer en pleine respiration entre deux
+    // mots), 7s trop long pour "ne jamais perdre un mot".
+    const MIC_WATCHDOG_MS = 3500;
     let lastMicActivityAt = 0;
     setInterval(() => {
       if (!micOn || paused || !lastMicActivityAt) return;
@@ -4767,7 +4779,7 @@ if (typeof document !== "undefined") {
         lastRecognizerErrorType = "watchdog";
         startMic();
       }
-    }, 2000);
+    }, 1000);
 
     function startMic() {
       if (!SpeechRecognitionCtor) {
