@@ -4264,6 +4264,22 @@ if (typeof document !== "undefined") {
     // bascule de vidéo — sert à ne jamais faire rejouer par l'IA un mot
     // qu'on vient tout juste de montrer (voir maybeTryAiFallback).
     let currentlyShowingKey = null;
+    // Évite de remontrer deux fois DE SUITE le même signe, quelle que
+    // soit la source (reconnaissance normale, répétition captée au
+    // redémarrage du moteur vocal sur iPhone, ou réponse de l'IA) —
+    // signalé le 2026-10-14 ("deux mots d'affilée identiques, pas
+    // nécessairement le premier"). `precedingKey` est le dernier mot
+    // déjà en place (affiché ou encore en file) juste avant ce lot.
+    function dedupeAdjacent(items, precedingKey) {
+      const out = [];
+      let prev = precedingKey || null;
+      for (const it of items) {
+        if (it.key === prev) continue;
+        out.push(it);
+        prev = it.key;
+      }
+      return out;
+    }
 
     function showIdle(show) {
       idleMsg.hidden = !show;
@@ -4439,6 +4455,7 @@ if (typeof document !== "undefined") {
           queue.push({ key: builtinKey, source: "builtin" });
         }
       });
+      queue = dedupeAdjacent(queue, currentlyShowingKey);
       lastUtteranceSigns = queue.slice();
       dbg("NOUVELLE phrase \"" + text + "\" -> matché:[" + queue.map((s) => s.key).join(",") + "] (" + queue.length + "/" + rawWords.length + " mots)");
       if (!paused) playFromQueue(token);
@@ -4473,10 +4490,16 @@ if (typeof document !== "undefined") {
           newSigns.push({ key: builtinKey, source: "builtin" });
         }
       });
-      dbg("SUITE phrase \"" + text + "\" -> ajout:[" + newSigns.map((s) => s.key).join(",") + "] (" + newSigns.length + "/" + rawWords.length + " mots, file totale=" + (queue.length + newSigns.length) + ")");
-      if (!newSigns.length) return;
-      queue.push(...newSigns);
-      lastUtteranceSigns = lastUtteranceSigns.concat(newSigns);
+      // Un redémarrage du moteur vocal (fréquent sur iPhone) peut recapter
+      // une fraction de seconde déjà reconnue juste avant la coupure —
+      // sans ce retrait, le même mot pouvait réapparaître collé au
+      // précédent, n'importe où dans la phrase (pas seulement au début).
+      const precedingKey = queue.length ? queue[queue.length - 1].key : currentlyShowingKey;
+      const dedupedNew = dedupeAdjacent(newSigns, precedingKey);
+      dbg("SUITE phrase \"" + text + "\" -> ajout:[" + dedupedNew.map((s) => s.key).join(",") + "] (" + dedupedNew.length + "/" + rawWords.length + " mots, file totale=" + (queue.length + dedupedNew.length) + ")");
+      if (!dedupedNew.length) return;
+      queue.push(...dedupedNew);
+      lastUtteranceSigns = lastUtteranceSigns.concat(dedupedNew);
       if (!paused) startPlayback();
     }
 
@@ -4601,10 +4624,11 @@ if (typeof document !== "undefined") {
         // savoir ce qui a déjà été montré à l'écran pendant qu'on
         // attendait sa réponse — si son premier mot est le même que
         // celui déjà affiché, on le retire pour ne jamais le rejouer.
-        while (signs.length && currentlyShowingKey && signs[0].key === currentlyShowingKey) {
-          signs.shift();
-        }
-        dbg("IA: réponse = [" + words.join(",") + "] -> remplace la file par " + signs.length + " mots (après retrait du mot déjà affiché)");
+        // Retrait centralisé des doublons (voir dedupeAdjacent plus
+        // haut) : évite de remontrer le mot déjà affiché, et les
+        // doublons internes à la propre réponse de l'IA.
+        signs = dedupeAdjacent(signs, currentlyShowingKey);
+        dbg("IA: réponse = [" + words.join(",") + "] -> remplace la file par " + signs.length + " mots (après retrait des doublons)");
         if (!signs.length) return;
         // La reformulation de l'IA porte sur la phrase ENTIÈRE (pas juste
         // le mot manquant) : elle remplace la suite de la file plutôt que
@@ -4692,6 +4716,14 @@ if (typeof document !== "undefined") {
     // ("au départ il ne m'entend pas", "ne redétecte plus après la
     // première phrase").
     let lastRecognizerErrorType = null;
+    // Horodatage de la dernière coupure du moteur vocal, et si on a déjà
+    // mesuré le délai avant le premier résultat de la session suivante —
+    // sert à journaliser précisément combien de temps dure le "trou"
+    // signalé le 2026-10-14 ("on dirait qu'il doit se réinitialiser
+    // pendant quelques secondes"), pour avoir de vrais chiffres au
+    // prochain test plutôt que de deviner.
+    let micStoppedAt = 0;
+    let loggedFirstResultThisSession = true;
 
     function startMic() {
       if (!SpeechRecognitionCtor) {
@@ -4724,6 +4756,10 @@ if (typeof document !== "undefined") {
       // en cours et on peut la récupérer dans onend ci-dessous.
       recognizer.interimResults = true;
       recognizer.onresult = (e) => {
+        if (!loggedFirstResultThisSession) {
+          loggedFirstResultThisSession = true;
+          if (micStoppedAt) dbg("⏱️ premier résultat reçu " + (Date.now() - micStoppedAt) + "ms après la coupure précédente");
+        }
         for (let k = e.resultIndex; k < e.results.length; k++) {
           dbg("onresult[" + k + "] isFinal=" + e.results[k].isFinal + " -> \"" + e.results[k][0].transcript + "\"");
           if (e.results[k].isFinal) {
@@ -4768,6 +4804,7 @@ if (typeof document !== "undefined") {
         // 2026-10-14 : mic qui ne redétecte plus après la 1re phrase).
         // On attend alors plus longtemps avant de relancer ; sinon le
         // délai court habituel reste.
+        micStoppedAt = Date.now();
         const restartDelay = lastRecognizerErrorType === "audio-capture" || lastRecognizerErrorType === "network" ? 700 : 200;
         dbg("recognizer.onend (micOn=" + micOn + ", paused=" + paused + ", dernière erreur=" + lastRecognizerErrorType + ") -> relance dans " + restartDelay + "ms");
         lastRecognizerErrorType = null;
@@ -4787,6 +4824,7 @@ if (typeof document !== "undefined") {
           setTimeout(() => { if (micOn && !paused) startMic(); }, restartDelay);
         }
       };
+      loggedFirstResultThisSession = false;
       try {
         recognizer.start();
         micOn = true;
