@@ -4771,13 +4771,37 @@ if (typeof document !== "undefined") {
     // mots), 7s trop long pour "ne jamais perdre un mot".
     const MIC_WATCHDOG_MS = 3500;
     let lastMicActivityAt = 0;
+    // Bug corrigé le 2026-10-14 ("ça force juste le redémarrage et ne
+    // détecte plus jamais de son") : le chien de garde coupait l'ancien
+    // moteur puis en recréait un nouveau et appelait .start() dans LE
+    // MÊME instant, sans aucune pause — contrairement à recognizer.onend
+    // qui, lui, laisse toujours un délai (200-700ms) avant de relancer.
+    // iOS n'avait donc jamais le temps de vraiment libérer le micro avant
+    // que le nouvel objet essaie de le reprendre : .start() "réussissait"
+    // (aucune exception) mais ne captait plus jamais rien, et comme
+    // aucune activité n'arrivait, le chien de garde redéclenchait en
+    // boucle toutes les 3,5s sans jamais obtenir une vraie session
+    // fonctionnelle. Coupe maintenant l'ancien moteur IMMÉDIATEMENT, puis
+    // attend 500ms avant de créer et démarrer le nouveau — comme le fait
+    // déjà le chemin normal (onend).
     setInterval(() => {
       if (!micOn || paused || !lastMicActivityAt) return;
       const silentFor = Date.now() - lastMicActivityAt;
       if (silentFor > MIC_WATCHDOG_MS) {
-        dbg("⚠️ chien de garde micro : aucune activité depuis " + silentFor + "ms -> redémarrage forcé (sans attendre une erreur iOS)");
+        dbg("⚠️ chien de garde micro : aucune activité depuis " + silentFor + "ms -> coupure immédiate, redémarrage dans 500ms");
+        // Empêche le chien de garde de redéclencher pendant qu'on attend
+        // ces 500ms (sinon il redétecterait "silence" à chaque tour tant
+        // que startMic() n'a pas encore remis lastMicActivityAt à jour).
+        lastMicActivityAt = Date.now();
         lastRecognizerErrorType = "watchdog";
-        startMic();
+        if (recognizer) {
+          recognizer.onresult = null;
+          recognizer.onerror = null;
+          recognizer.onend = null;
+          try { recognizer.stop(); } catch (e) {}
+          recognizer = null;
+        }
+        setTimeout(() => { if (micOn && !paused) startMic(); }, 500);
       }
     }, 1000);
 
@@ -4799,7 +4823,7 @@ if (typeof document !== "undefined") {
         recognizer.onresult = null;
         recognizer.onerror = null;
         recognizer.onend = null;
-        try { recognizer.abort(); } catch (e) {}
+        try { recognizer.stop(); } catch (e) {}
       }
       recognizer = new SpeechRecognitionCtor();
       recognizer.lang = "fr-FR";
