@@ -4354,7 +4354,20 @@ if (typeof document !== "undefined") {
     async function playFromQueue(token) {
       if (token !== playToken) return;
       if (paused) { busy = false; return; }
-      if (queue.length === 0) { busy = false; dbg("playFromQueue: file VIDE, lecture arrêtée"); return; }
+      if (queue.length === 0) {
+        busy = false;
+        // Bug corrigé le 2026-10-14 : "currentlyShowingKey" restait sur le
+        // dernier mot montré indéfiniment (même des minutes plus tard),
+        // donc toute NOUVELLE phrase qui recommençait par ce même mot se
+        // le faisait retirer par erreur (ex. "manger" ne matchait plus du
+        // tout après avoir déjà été montré une fois). Une fois la
+        // lecture vraiment terminée (file vide), ce mot n'est plus "en
+        // cours" — on remet à zéro pour ne bloquer que les vraies
+        // répétitions immédiates, jamais une phrase future.
+        currentlyShowingKey = null;
+        dbg("playFromQueue: file VIDE, lecture arrêtée");
+        return;
+      }
       busy = true;
       const item = queue.shift();
       dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
@@ -4710,6 +4723,15 @@ if (typeof document !== "undefined") {
     // quand même enregistrer le mot que je dis en redémarrant").
     let pendingInterimText = "";
     let micOn = false;
+    // Journalise les changements de visibilité de la page (écran
+    // verrouillé, onglet mis en arrière-plan...) : iOS peut couper
+    // l'accès au micro dans ces cas-là sans erreur claire côté Web
+    // Speech API avant un bon moment — ajouté le 2026-10-14 pour
+    // vérifier si de longs trous de détection silencieux (ex. ~29s
+    // observés dans un journal) coïncident avec ça.
+    document.addEventListener("visibilitychange", () => {
+      dbg("visibilitychange -> " + document.visibilityState);
+    });
     // Dernier type d'erreur vu ("audio-capture", "network"...) — sert à
     // attendre plus longtemps avant de relancer après ce genre d'erreur
     // précis (voir recognizer.onend plus bas), signalé le 2026-10-14
