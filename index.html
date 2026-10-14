@@ -4052,7 +4052,7 @@ if (typeof document !== "undefined") {
       debugPanelOpen = open;
       if (open) {
         if (!DEBUG_PANEL.isConnected) document.body.appendChild(DEBUG_PANEL);
-        DEBUG_LOG.scrollTop = DEBUG_LOG.scrollHeight;
+        renderDebugLog();
       } else if (DEBUG_PANEL.isConnected) {
         DEBUG_PANEL.remove();
       }
@@ -4067,15 +4067,25 @@ if (typeof document !== "undefined") {
     document.addEventListener("DOMContentLoaded", mountDebugUi);
     if (document.body) mountDebugUi();
     const dbgLines = [];
+    function renderDebugLog() {
+      DEBUG_LOG.innerHTML = dbgLines
+        .map((l) => '<div style="padding:1px 0"><span style="color:rgba(143,227,154,0.45)">' + l.ts + "</span> " + l.msg.replace(/</g, "&lt;") + "</div>")
+        .join("");
+      DEBUG_LOG.scrollTop = DEBUG_LOG.scrollHeight;
+    }
+    // Avec les résultats intermédiaires (interimResults) activés, dbg()
+    // peut maintenant être appelée plusieurs fois par seconde pendant
+    // qu'on parle — reconstruire le HTML du panneau à CHAQUE appel, même
+    // quand il est fermé (donc invisible), ajoutait un travail inutile et
+    // répété sur un téléphone, signalé le 2026-10-14 ("gros délai", "pas
+    // fluide"). Le tableau reste toujours à jour ; seul l'affichage à
+    // l'écran attend que le panneau soit réellement ouvert.
     function dbg(msg) {
       const t = new Date();
       const ts = String(t.getMinutes()).padStart(2, "0") + ":" + String(t.getSeconds()).padStart(2, "0") + "." + String(t.getMilliseconds()).padStart(3, "0");
       dbgLines.push({ ts, msg });
       if (dbgLines.length > 50) dbgLines.shift();
-      DEBUG_LOG.innerHTML = dbgLines
-        .map((l) => '<div style="padding:1px 0"><span style="color:rgba(143,227,154,0.45)">' + l.ts + "</span> " + l.msg.replace(/</g, "&lt;") + "</div>")
-        .join("");
-      if (debugPanelOpen) DEBUG_LOG.scrollTop = DEBUG_LOG.scrollHeight;
+      if (debugPanelOpen) renderDebugLog();
     }
     // === FIN installation diagnostic (la suite est éparpillée dans le
     // code ci-dessous, cherche "dbg(" pour tout retrouver) ================
@@ -4250,6 +4260,10 @@ if (typeof document !== "undefined") {
     let lastUtteranceSigns = []; // [{ key, source }] de la dernière phrase reconnue, pour la relecture
     let lastFinalAt = 0; // horodatage (Date.now()) du dernier résultat final reçu
     let lastUtteranceText = ""; // texte complet accumulé de la phrase en cours (pour le repli IA)
+    // Mot (clé) actuellement affiché à l'écran, mis à jour à chaque
+    // bascule de vidéo — sert à ne jamais faire rejouer par l'IA un mot
+    // qu'on vient tout juste de montrer (voir maybeTryAiFallback).
+    let currentlyShowingKey = null;
 
     function showIdle(show) {
       idleMsg.hidden = !show;
@@ -4366,6 +4380,7 @@ if (typeof document !== "undefined") {
         curVideo.classList.remove("showing");
         showIdle(false);
         curIdx = nextIdx;
+        currentlyShowingKey = item.key;
         dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
         prefetchUpcoming();
@@ -4580,8 +4595,16 @@ if (typeof document !== "undefined") {
         // commencée) : cette réponse ne correspond plus à rien à l'écran.
         if (token !== playToken) return;
         const words = Array.isArray(data.words) ? data.words : [];
-        const signs = words.filter((w) => VIDEOS[w]).map((w) => ({ key: w, source: "builtin" }));
-        dbg("IA: réponse = [" + words.join(",") + "] -> remplace la file par " + signs.length + " mots");
+        let signs = words.filter((w) => VIDEOS[w]).map((w) => ({ key: w, source: "builtin" }));
+        // Bug corrigé le 2026-10-14 ("le premier mot joue deux fois,
+        // gros délai après") : l'IA reformule la phrase ENTIÈRE sans
+        // savoir ce qui a déjà été montré à l'écran pendant qu'on
+        // attendait sa réponse — si son premier mot est le même que
+        // celui déjà affiché, on le retire pour ne jamais le rejouer.
+        while (signs.length && currentlyShowingKey && signs[0].key === currentlyShowingKey) {
+          signs.shift();
+        }
+        dbg("IA: réponse = [" + words.join(",") + "] -> remplace la file par " + signs.length + " mots (après retrait du mot déjà affiché)");
         if (!signs.length) return;
         // La reformulation de l'IA porte sur la phrase ENTIÈRE (pas juste
         // le mot manquant) : elle remplace la suite de la file plutôt que
@@ -4663,12 +4686,32 @@ if (typeof document !== "undefined") {
     // quand même enregistrer le mot que je dis en redémarrant").
     let pendingInterimText = "";
     let micOn = false;
+    // Dernier type d'erreur vu ("audio-capture", "network"...) — sert à
+    // attendre plus longtemps avant de relancer après ce genre d'erreur
+    // précis (voir recognizer.onend plus bas), signalé le 2026-10-14
+    // ("au départ il ne m'entend pas", "ne redétecte plus après la
+    // première phrase").
+    let lastRecognizerErrorType = null;
 
     function startMic() {
       if (!SpeechRecognitionCtor) {
         transcriptBox.hidden = false;
         captionEl.textContent = "La reconnaissance vocale n'est pas proposée par ce navigateur.";
         return;
+      }
+      // Corrigé le 2026-10-14 : l'ancien objet de reconnaissance (s'il en
+      // reste un) gardait ses gestionnaires d'événements attachés — si
+      // iOS lui envoyait encore un événement tardif après qu'on soit déjà
+      // reparti avec un nouvel objet, ça pouvait déclencher une relance en
+      // double (deux reconnaissances actives en même temps, qui se
+      // disputent le micro) et expliquer les échecs de détection après la
+      // première phrase. On coupe maintenant explicitement ses
+      // gestionnaires avant de le remplacer.
+      if (recognizer) {
+        recognizer.onresult = null;
+        recognizer.onerror = null;
+        recognizer.onend = null;
+        try { recognizer.abort(); } catch (e) {}
       }
       recognizer = new SpeechRecognitionCtor();
       recognizer.lang = "fr-FR";
@@ -4697,14 +4740,18 @@ if (typeof document !== "undefined") {
       };
       recognizer.onerror = (e) => {
         dbg("recognizer.onerror: " + e.error);
+        lastRecognizerErrorType = e.error;
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           transcriptBox.hidden = false;
           captionEl.textContent = "Accès au micro refusé.";
           stopMic();
         }
-        // Les autres erreurs ("no-speech", "network", "aborted"...) sont
-        // volontairement ignorées ici : elles déclenchent presque toujours
-        // "onend" juste après, qui se charge de relancer l'écoute.
+        // Les autres erreurs ("no-speech", "network", "aborted",
+        // "audio-capture"...) sont volontairement ignorées ICI : elles
+        // déclenchent presque toujours "onend" juste après, qui se charge
+        // de relancer l'écoute (avec un délai plus long pour
+        // "audio-capture", voir plus bas — c'est le signe qu'iOS n'a pas
+        // encore fini de libérer le micro).
       };
       // Bug corrigé le 2026-09-14 : le navigateur arrête la reconnaissance
       // après chaque silence, même en mode continu (normal), mais rappeler
@@ -4715,7 +4762,15 @@ if (typeof document !== "undefined") {
       // relance (via startMic()), avec un tout petit délai pour laisser le
       // moteur vocal du navigateur se libérer.
       recognizer.onend = () => {
-        dbg("recognizer.onend (micOn=" + micOn + ", paused=" + paused + ") -> relance dans 200ms");
+        // Après "audio-capture" (ou "network"), iOS n'a souvent pas
+        // encore fini de libérer le micro — relancer tout de suite dans
+        // ce cas précis échouait silencieusement plus souvent (signalé le
+        // 2026-10-14 : mic qui ne redétecte plus après la 1re phrase).
+        // On attend alors plus longtemps avant de relancer ; sinon le
+        // délai court habituel reste.
+        const restartDelay = lastRecognizerErrorType === "audio-capture" || lastRecognizerErrorType === "network" ? 700 : 200;
+        dbg("recognizer.onend (micOn=" + micOn + ", paused=" + paused + ", dernière erreur=" + lastRecognizerErrorType + ") -> relance dans " + restartDelay + "ms");
+        lastRecognizerErrorType = null;
         // Le moteur vient de s'arrêter (fin naturelle OU coupure en plein
         // milieu d'un mot, fréquent sur iPhone). S'il restait un bout de
         // phrase "en suspens" (jamais finalisé), on le traite maintenant
@@ -4729,7 +4784,7 @@ if (typeof document !== "undefined") {
           handleFinalTranscript(rescued);
         }
         if (micOn && !paused) {
-          setTimeout(() => { if (micOn && !paused) startMic(); }, 200);
+          setTimeout(() => { if (micOn && !paused) startMic(); }, restartDelay);
         }
       };
       try {
