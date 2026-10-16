@@ -5251,23 +5251,25 @@ if (typeof document !== "undefined") {
     }
 
 
+    const MIC_REOPEN_STORAGE_KEY = "sensorielleSonASigneAutoReopen";
     if (micStuckBtn) {
       micStuckBtn.addEventListener("click", () => {
-        micStuckBtn.hidden = true;
-        consecutiveWatchdogRestarts = 0;
-        dbg("bouton de secours touché -> redémarrage complet du micro");
-        releaseVideoElementsForMicRecovery();
-        if (recognizer) {
-          recognizer.onresult = null;
-          recognizer.onerror = null;
-          recognizer.onend = null;
-          try { recognizer.stop(); } catch (e) {}
-          recognizer = null;
-        }
-        lastMicActivityAt = Date.now();
-        if (micOn && !paused) startMic();
+        dbg("bouton de secours touché -> rechargement complet de la page (seule façon fiable de tout réinitialiser côté iOS)");
+        try { sessionStorage.setItem(MIC_REOPEN_STORAGE_KEY, "1"); } catch (e) {}
+        location.reload();
       });
     }
+
+    // Au chargement de la page : si on vient d'un rechargement demandé par
+    // le bouton de secours ci-dessus, rouvrir automatiquement le mode
+    // "Son à signe" (sans que la personne ait à re-cliquer) dès que tout
+    // est prêt.
+    try {
+      if (sessionStorage.getItem(MIC_REOPEN_STORAGE_KEY) === "1") {
+        sessionStorage.removeItem(MIC_REOPEN_STORAGE_KEY);
+        setTimeout(() => { openBtn.click(); }, 50);
+      }
+    } catch (e) {}
 
     openBtn.addEventListener("click", () => {
       if (emptyState) emptyState.style.display = "none";
