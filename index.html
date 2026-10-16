@@ -5083,6 +5083,7 @@ if (typeof document !== "undefined") {
         }
         lastMicActivityAt = Date.now();
         lastRecognizerErrorType = "watchdog";
+        if (consecutiveWatchdogRestarts >= 2) releaseVideoElementsForMicRecovery();
         if (recognizer) {
           recognizer.onresult = null;
           recognizer.onerror = null;
@@ -5093,6 +5094,22 @@ if (typeof document !== "undefined") {
         setTimeout(() => { if (micOn && !paused) startMic(); }, restartDelay);
       }
     }, 1000);
+
+    function releaseVideoElementsForMicRecovery() {
+      videos.forEach((v) => {
+        v.pause();
+        v.oncanplay = null;
+        v.onended = null;
+        v.onerror = null;
+        v.classList.remove("showing");
+        v.removeAttribute("src");
+        v.load();
+      });
+      stopExpressionLoop();
+      showIdle(true);
+      currentlyShowingKey = null;
+      dbg("vidéos relâchées (simulation fermeture/réouverture) avant redémarrage micro");
+    }
 
     function startMic() {
       if (!SpeechRecognitionCtor) {
@@ -5239,6 +5256,7 @@ if (typeof document !== "undefined") {
         micStuckBtn.hidden = true;
         consecutiveWatchdogRestarts = 0;
         dbg("bouton de secours touché -> redémarrage complet du micro");
+        releaseVideoElementsForMicRecovery();
         if (recognizer) {
           recognizer.onresult = null;
           recognizer.onerror = null;
