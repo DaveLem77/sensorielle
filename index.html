@@ -1009,6 +1009,20 @@
                    noir malgré ce basculement instantané. */
   }
   .speech-video.showing { opacity: 1; }
+  /* Filtre d'expression faciale (2026-10-16) : une fois MediaPipe
+     charge avec succes, le rendu visuel passe du <video> brut a ce
+     <canvas> (meme recadrage via object-fit/object-position) pour
+     pouvoir y dessiner la deformation du visage image par image. Si le
+     chargement echoue (reseau, vieux navigateur), cette classe n'est
+     JAMAIS ajoutee et les <video> restent visibles comme avant -> aucune
+     regression possible dans ce cas. */
+  .speech-video-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: 50% 12%;
+    opacity: 0; display: none;
+  }
+  .speech-video-wrap.canvas-mode .speech-video { opacity: 0 !important; }
+  .speech-video-wrap.canvas-mode .speech-video-canvas { display: block; opacity: 1; }
   .speech-idle {
     position: relative; z-index: 1; max-width: 26ch; text-align: center;
     font-size: 15px; line-height: 1.5;
@@ -1402,6 +1416,7 @@
   <div class="speech-video-wrap">
     <video id="speechVideoA" class="speech-video" muted playsinline></video>
     <video id="speechVideoB" class="speech-video" muted playsinline></video>
+    <canvas id="speechVideoCanvas" class="speech-video-canvas"></canvas>
     <p class="speech-idle" id="speechIdle">Parle — les signes correspondants s'enchaînent ici, en direct.</p>
   </div>
   <div class="speech-transcript" id="speechTranscript">
@@ -4285,6 +4300,162 @@ if (typeof document !== "undefined") {
       idleMsg.hidden = !show;
     }
 
+    // ---- Filtre d'expression faciale (ajoute 2026-10-16) -------------------
+    // Pourquoi : en LSQ, l'expression du visage (sourcils, bouche) fait
+    // partie de la grammaire (question, exclamation, negation) - ce n'est
+    // pas juste decoratif. Nos videos de signes ont une expression figee
+    // reprise du clip source, et KlingAI Motion Control ne permet pas de
+    // la modifier via un prompt texte (verifie). Un vrai filtre "a la
+    // Snapchat" existe, mais ces compagnies (Snapchat/DeepAR/Banuba) ont
+    // des annees d'ingenierie et des SDK payants en production - la
+    // version gratuite et realiste ici : MediaPipe Face Landmarker
+    // (Google, open source, tourne 100% dans le navigateur) detecte le
+    // visage sur la video en cours de lecture, et on deplace legerement
+    // une petite zone (sourcils, coins de bouche) avec un bord doux en
+    // degrade pour accentuer l'expression deja presente dans le clip,
+    // selon le type de phrase detecte. Ce n'est PAS une regeneration
+    // neuronale complete de l'expression (ca, ca prend un serveur GPU et
+    // plusieurs secondes par clip) - c'est une exageration ciblee, gratuite
+    // et en temps reel. Si MediaPipe ne charge pas (reseau coupe, vieux
+    // navigateur), EXPRESSION_FILTER_ENABLED reste sans effet et l'app
+    // fonctionne exactement comme avant (aucune classe canvas-mode
+    // ajoutee -> les <video> normaux restent visibles).
+    const EXPRESSION_FILTER_ENABLED = true;
+    const EXPR_WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+    const EXPR_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+
+    // Indices des points de repere MediaPipe (topologie a 478 points) pour
+    // les 4 zones deplacees. Trouves dans la documentation/des exemples
+    // publics, PAS verifies image par image sur tes videos precises -> si
+    // le retour visuel reel montre que la zone touchee n'est pas la bonne
+    // (ex. ca deplace le nez au lieu du sourcil), c'est ICI qu'il faut
+    // corriger les 4 nombres, rien d'autre a toucher.
+    const EXPR_POINTS = { browLeft: 105, browRight: 334, mouthLeft: 61, mouthRight: 291 };
+
+    // Deplacement cible par type de phrase, en fraction de la hauteur
+    // video (donc independant de la resolution). y negatif = vers le haut.
+    // Volontairement petit au depart : plus facile d'exagerer un peu plus
+    // ensuite que de corriger un visage qui a l'air casse/deforme.
+    const EXPR_TARGETS = {
+      neutral: { brow: 0, mouth: 0 },
+      question: { brow: -0.022, mouth: 0.004 },
+      exclamation: { brow: -0.012, mouth: -0.016 },
+      negation: { brow: 0.014, mouth: 0.006 },
+    };
+    const EXPR_PATCH_RADIUS_FRAC = 0.055; // rayon de la zone deplacee (fraction de la hauteur video)
+
+    let currentSentiment = "neutral";
+    function detectSentiment(text) {
+      const t = (text || "").trim();
+      if (!t) return "neutral";
+      if (/\?\s*$/.test(t) || /^(est-ce que|qui|quoi|où|ou|quand|comment|pourquoi|combien)\b/i.test(t)) return "question";
+      if (/!\s*$/.test(t)) return "exclamation";
+      if (/\b(pas|jamais|aucun[e]?|non)\b/i.test(t)) return "negation";
+      return "neutral";
+    }
+
+    let faceLandmarker = null;
+    let expressionFilterReady = false;
+    const speechVideoCanvas = document.getElementById("speechVideoCanvas");
+    const speechVideoWrap = document.querySelector(".speech-video-wrap");
+    const exprCtx = speechVideoCanvas ? speechVideoCanvas.getContext("2d") : null;
+
+    async function initExpressionFilter() {
+      if (!EXPRESSION_FILTER_ENABLED || !speechVideoCanvas || !exprCtx) return;
+      try {
+        const { FilesetResolver, FaceLandmarker } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
+        const vision = await FilesetResolver.forVisionTasks(EXPR_WASM_URL);
+        const makeOptions = (delegate) => ({
+          baseOptions: { modelAssetPath: EXPR_MODEL_URL, delegate },
+          runningMode: "VIDEO",
+          numFaces: 1,
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
+        });
+        try {
+          faceLandmarker = await FaceLandmarker.createFromOptions(vision, makeOptions("GPU"));
+        } catch (eGpu) {
+          dbg("filtre expression: delegue GPU indisponible, essai CPU (" + (eGpu && eGpu.message ? eGpu.message : eGpu) + ")");
+          faceLandmarker = await FaceLandmarker.createFromOptions(vision, makeOptions("CPU"));
+        }
+        expressionFilterReady = true;
+        if (speechVideoWrap) speechVideoWrap.classList.add("canvas-mode");
+        dbg("filtre expression: MediaPipe chargé, filtre actif");
+        startExpressionLoop();
+      } catch (e) {
+        dbg("filtre expression: échec du chargement (" + (e && e.message ? e.message : e) + "), app inchangée");
+      }
+    }
+    initExpressionFilter();
+
+    let expressionLoopHandle = null;
+    let lastExprVideoTime = -1;
+    let lastLandmarks = null;
+
+    function drawPatch(video, lm, idxKey, dxFrac, dyFrac) {
+      const idx = EXPR_POINTS[idxKey];
+      const pt = lm[idx];
+      if (!pt) return;
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const cx = pt.x * vw, cy = pt.y * vh;
+      const r = EXPR_PATCH_RADIUS_FRAC * vh;
+      const dx = dxFrac * vh, dy = dyFrac * vh;
+      const sx = Math.max(0, cx - r), sy = Math.max(0, cy - r);
+      const sw = Math.min(vw - sx, r * 2), sh = Math.min(vh - sy, r * 2);
+      if (sw <= 0 || sh <= 0) return;
+      const patch = document.createElement("canvas");
+      patch.width = sw; patch.height = sh;
+      const pctx = patch.getContext("2d");
+      pctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+      pctx.globalCompositeOperation = "destination-in";
+      const grad = pctx.createRadialGradient(sw / 2, sh / 2, 0, sw / 2, sh / 2, Math.min(sw, sh) / 2);
+      grad.addColorStop(0, "rgba(0,0,0,1)");
+      grad.addColorStop(0.7, "rgba(0,0,0,1)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      pctx.fillStyle = grad;
+      pctx.fillRect(0, 0, sw, sh);
+      exprCtx.drawImage(patch, sx + dx, sy + dy);
+    }
+
+    function renderExpressionFrame(video) {
+      exprCtx.drawImage(video, 0, 0, speechVideoCanvas.width, speechVideoCanvas.height);
+      const target = EXPR_TARGETS[currentSentiment] || EXPR_TARGETS.neutral;
+      if (!lastLandmarks || (target.brow === 0 && target.mouth === 0)) return;
+      drawPatch(video, lastLandmarks, "browLeft", 0, target.brow);
+      drawPatch(video, lastLandmarks, "browRight", 0, target.brow);
+      drawPatch(video, lastLandmarks, "mouthLeft", 0, target.mouth);
+      drawPatch(video, lastLandmarks, "mouthRight", 0, target.mouth);
+    }
+
+    function expressionLoopTick() {
+      expressionLoopHandle = requestAnimationFrame(expressionLoopTick);
+      const video = videos[curIdx];
+      if (!video || video.readyState < 2 || !video.videoWidth) return;
+      if (speechVideoCanvas.width !== video.videoWidth || speechVideoCanvas.height !== video.videoHeight) {
+        speechVideoCanvas.width = video.videoWidth;
+        speechVideoCanvas.height = video.videoHeight;
+      }
+      if (faceLandmarker && video.currentTime !== lastExprVideoTime) {
+        lastExprVideoTime = video.currentTime;
+        try {
+          const result = faceLandmarker.detectForVideo(video, performance.now());
+          if (result && result.faceLandmarks && result.faceLandmarks[0]) lastLandmarks = result.faceLandmarks[0];
+        } catch (e) { /* une frame ratee n'est pas grave, on garde les derniers points connus */ }
+      }
+      renderExpressionFrame(video);
+    }
+
+    function startExpressionLoop() {
+      if (!expressionFilterReady || expressionLoopHandle) return;
+      expressionLoopHandle = requestAnimationFrame(expressionLoopTick);
+    }
+    function stopExpressionLoop() {
+      if (expressionLoopHandle) { cancelAnimationFrame(expressionLoopHandle); expressionLoopHandle = null; }
+      lastLandmarks = null;
+      lastExprVideoTime = -1;
+      if (exprCtx && speechVideoCanvas) exprCtx.clearRect(0, 0, speechVideoCanvas.width, speechVideoCanvas.height);
+    }
+
     // Résout un item de la file vers une URL de vidéo jouable : un mot venu
     // du dossier local se lit depuis le fichier lui-même (Blob -> URL
     // temporaire, révoquée après usage), un mot intégré utilise directement
@@ -4410,6 +4581,7 @@ if (typeof document !== "undefined") {
         showIdle(false);
         curIdx = nextIdx;
         currentlyShowingKey = item.key;
+        startExpressionLoop();
         dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
         prefetchUpcoming();
@@ -4445,6 +4617,8 @@ if (typeof document !== "undefined") {
       if (!rawWords.length) return;
       transcriptBox.hidden = false;
       captionEl.textContent = text;
+      currentSentiment = detectSentiment(text);
+      dbg("filtre expression: sentiment=\"" + currentSentiment + "\"");
 
       // Une nouvelle phrase prend immédiatement le relais de la file :
       // toute lecture encore en cours d'une phrase précédente continue
@@ -4513,6 +4687,7 @@ if (typeof document !== "undefined") {
       if (!dedupedNew.length) return;
       queue.push(...dedupedNew);
       lastUtteranceSigns = lastUtteranceSigns.concat(dedupedNew);
+      currentSentiment = detectSentiment(captionEl.textContent);
       if (!paused) startPlayback();
     }
 
@@ -4985,6 +5160,7 @@ if (typeof document !== "undefined") {
       captionEl.innerHTML = "";
       transcriptBox.hidden = true;
       showIdle(true);
+      stopExpressionLoop();
     });
   })();
 }
