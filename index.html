@@ -5070,6 +5070,28 @@ if (typeof document !== "undefined") {
     // démarrage/arrêt trop rapide et répété) plutôt que de continuer à
     // réessayer au même rythme sans jamais réussir.
     let consecutiveWatchdogRestarts = 0;
+    // Rotation proactive : recrée un moteur neuf toutes les 10s, même si
+    // tout va bien, plutôt que d'attendre un silence suspect pour agir
+    // (le chien de garde plus bas reste un filet en plus, pas remplacé).
+    const PROACTIVE_ROTATE_MS = 10000;
+    let lastProactiveRotateAt = Date.now();
+    setInterval(() => {
+      if (!micOn || paused) { lastProactiveRotateAt = Date.now(); return; }
+      if (Date.now() - lastProactiveRotateAt < PROACTIVE_ROTATE_MS) return;
+      lastProactiveRotateAt = Date.now();
+      dbg("rotation proactive du micro (10s) : nouveau moteur avant qu'il ait une chance de se bloquer");
+      if (recognizer) {
+        recognizer.onresult = null;
+        recognizer.onerror = null;
+        recognizer.onend = null;
+        try { recognizer.stop(); } catch (e) {}
+        recognizer = null;
+      }
+      // Petit délai avant de relancer, comme pour les autres relances
+      // (laisse le moteur vocal du navigateur se libérer) plutôt qu'un
+      // nouvel objet immédiatement après le stop() du précédent.
+      setTimeout(() => { if (micOn && !paused) startMic(); }, 250);
+    }, 1000);
     setInterval(() => {
       if (!micOn || paused || !lastMicActivityAt) return;
       const silentFor = Date.now() - lastMicActivityAt;
@@ -5140,13 +5162,18 @@ if (typeof document !== "undefined") {
       }
       recognizer = new SpeechRecognitionCtor();
       recognizer.lang = "fr-FR";
-      recognizer.continuous = true;
-      // Activé le 2026-10-13 (était "false") : sans ça, on n'a AUCUNE
-      // idée de ce qui est en train d'être dit tant que ce n'est pas
-      // "final" — si le moteur s'arrête juste avant la finalisation
-      // (très fréquent sur iPhone), le mot est perdu pour de bon. Avec
-      // les résultats intermédiaires, on garde une copie du dernier mot
-      // en cours et on peut la récupérer dans onend ci-dessous.
+      // Changé à "false" le 2026-10-16 (était "true" depuis le début) :
+      // nouvelle approche après l'échec de cinq correctifs réactifs
+      // différents aujourd'hui (qui attendaient tous que le moteur soit
+      // déjà bloqué avant d'essayer de le relancer). En mode continu,
+      // une seule session audio reste ouverte indéfiniment - c'est
+      // exactement ce long maintien qui semble, dans tous les journaux
+      // reçus, finir par atteindre l'état bloqué. En mode non-continu,
+      // Safari termine lui-même chaque énoncé bien plus tôt, et on
+      // relance tout de suite dans onend (déjà en place) - des sessions
+      // courtes et fréquentes plutôt qu'une seule longue, pour ne
+      // jamais laisser un objet vivre assez longtemps pour se bloquer.
+      recognizer.continuous = false;
       recognizer.interimResults = true;
       recognizer.onresult = (e) => {
         lastMicActivityAt = Date.now();
