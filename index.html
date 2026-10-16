@@ -1071,6 +1071,14 @@
   .speech-waveform span:nth-child(14n+14) { height: 70%; animation-delay: 1.04s; }
   @keyframes speechWaveformBar { 0%, 100% { transform: scaleY(0.55); opacity: 0.7; } 50% { transform: scaleY(1); opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .speech-waveform span { animation: none; transform: scaleY(0.75); } }
+  .speech-mic-stuck-btn {
+    display: block; margin: 10px auto 0; padding: 8px 16px;
+    border-radius: 999px; border: 1px solid rgba(128,85,255,0.35);
+    background: rgba(128,85,255,0.12); color: #6b46e5;
+    font: 600 13px/1.4 -apple-system,system-ui,sans-serif;
+    cursor: pointer;
+  }
+  .speech-mic-stuck-btn[hidden] { display: none; }
   /* En pause : figée et estompée, comme la petite onde de l'en-tête. */
   .speech-transcript.is-paused .speech-waveform span {
     animation-play-state: paused; opacity: 0.35;
@@ -1429,6 +1437,13 @@
          utilisant un lecteur d'écran peut ainsi tout de même savoir ce qui
          a été reconnu. -->
     <p class="visually-hidden" id="speechCaption" aria-live="polite"></p>
+    <!-- Filet de secours (2026-10-16) : caché tout le temps SAUF après
+         plusieurs redémarrages automatiques du micro sans la moindre
+         vraie détection (bug connu de Safari iOS où le redémarrage
+         programmatique ne relance pas vraiment la capture) — un vrai
+         geste ici (contrairement à un redémarrage déclenché par un
+         minuteur) a de meilleures chances de fonctionner. -->
+    <button type="button" id="speechMicStuckBtn" class="speech-mic-stuck-btn" hidden>Micro bloqué — touche pour relancer</button>
   </div>
   <div class="speech-controls">
     <button type="button" class="speech-pause-btn" id="speechPauseBtn" aria-label="Mettre en pause">
@@ -4017,6 +4032,7 @@ if (typeof document !== "undefined") {
     const idleMsg = document.getElementById("speechIdle");
     const transcriptBox = document.getElementById("speechTranscript");
     const captionEl = document.getElementById("speechCaption");
+    const micStuckBtn = document.getElementById("speechMicStuckBtn");
     const emptyState = document.getElementById("emptyState");
     const folderBtn = document.getElementById("speechFolderBtn");
     const folderStatus = document.getElementById("speechFolderStatus");
@@ -5061,6 +5077,10 @@ if (typeof document !== "undefined") {
         consecutiveWatchdogRestarts += 1;
         const restartDelay = Math.min(500 * consecutiveWatchdogRestarts, 2500);
         dbg("⚠️ chien de garde micro (#" + consecutiveWatchdogRestarts + ") : aucune activité depuis " + silentFor + "ms -> coupure immédiate, redémarrage dans " + restartDelay + "ms");
+        if (consecutiveWatchdogRestarts >= 3 && micStuckBtn) {
+          micStuckBtn.hidden = false;
+          dbg("micro probablement bloqué (3+ redémarrages sans détection) -> bouton de secours affiché");
+        }
         lastMicActivityAt = Date.now();
         lastRecognizerErrorType = "watchdog";
         if (recognizer) {
@@ -5107,6 +5127,7 @@ if (typeof document !== "undefined") {
       recognizer.onresult = (e) => {
         lastMicActivityAt = Date.now();
         consecutiveWatchdogRestarts = 0;
+        if (micStuckBtn && !micStuckBtn.hidden) micStuckBtn.hidden = true;
         if (!loggedFirstResultThisSession) {
           loggedFirstResultThisSession = true;
           if (micStoppedAt) dbg("⏱️ premier résultat reçu " + (Date.now() - micStoppedAt) + "ms après la coupure précédente");
@@ -5213,6 +5234,23 @@ if (typeof document !== "undefined") {
     }
 
 
+    if (micStuckBtn) {
+      micStuckBtn.addEventListener("click", () => {
+        micStuckBtn.hidden = true;
+        consecutiveWatchdogRestarts = 0;
+        dbg("bouton de secours touché -> redémarrage complet du micro");
+        if (recognizer) {
+          recognizer.onresult = null;
+          recognizer.onerror = null;
+          recognizer.onend = null;
+          try { recognizer.stop(); } catch (e) {}
+          recognizer = null;
+        }
+        lastMicActivityAt = Date.now();
+        if (micOn && !paused) startMic();
+      });
+    }
+
     openBtn.addEventListener("click", () => {
       if (emptyState) emptyState.style.display = "none";
       stage.hidden = false;
@@ -5240,6 +5278,8 @@ if (typeof document !== "undefined") {
       micWasOnBeforePause = false;
       lastUtteranceSigns = [];
       shownKeysThisUtterance = [];
+      if (micStuckBtn) micStuckBtn.hidden = true;
+      consecutiveWatchdogRestarts = 0;
       pauseBtn.classList.remove("is-paused");
       transcriptBox.classList.remove("is-paused");
       pauseLabel.textContent = "Mettre en pause";
