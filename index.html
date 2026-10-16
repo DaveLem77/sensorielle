@@ -5077,9 +5077,16 @@ if (typeof document !== "undefined") {
         consecutiveWatchdogRestarts += 1;
         const restartDelay = Math.min(500 * consecutiveWatchdogRestarts, 2500);
         dbg("⚠️ chien de garde micro (#" + consecutiveWatchdogRestarts + ") : aucune activité depuis " + silentFor + "ms -> coupure immédiate, redémarrage dans " + restartDelay + "ms");
-        if (consecutiveWatchdogRestarts >= 3 && micStuckBtn) {
-          micStuckBtn.hidden = false;
-          dbg("micro probablement bloqué (3+ redémarrages sans détection) -> bouton de secours affiché");
+        if (consecutiveWatchdogRestarts >= 3) {
+          dbg("micro probablement bloqué (3+ redémarrages sans détection) -> rechargement automatique de la page (aucun geste requis)");
+          try {
+            sessionStorage.setItem("sensorielleSonASigneAutoReopen", "1");
+            location.reload();
+            return;
+          } catch (e) {
+            dbg("rechargement automatique impossible (" + (e && e.message ? e.message : e) + ") -> filet de secours manuel affiché");
+            if (micStuckBtn) micStuckBtn.hidden = false;
+          }
         }
         lastMicActivityAt = Date.now();
         lastRecognizerErrorType = "watchdog";
