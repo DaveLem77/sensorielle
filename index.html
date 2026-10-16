@@ -5212,6 +5212,53 @@ if (typeof document !== "undefined") {
       if (recognizer) { try { recognizer.stop(); } catch (e) {} recognizer = null; }
     }
 
+    // "Maintien" du micro via Web Audio API — ajouté le 2026-10-16 après
+    // un vrai journal de diagnostic (enfin obtenu grâce au bouton
+    // "Copier") qui a confirmé ceci : dès qu'une vidéo de signe commence
+    // à jouer, le moteur de reconnaissance arrête de produire le moindre
+    // événement (même pas une erreur) PENDANT QUE LA PERSONNE PARLE
+    // ENCORE, et un simple redémarrage (chien de garde) ne suffit pas à
+    // le relancer vraiment — "recognizer.start() OK" sans la moindre
+    // détection ensuite. C'est exactement le bug WebKit #321436 : iOS
+    // reconfigure/coupe la session audio partagée dès qu'un <video> joue,
+    // et la reconnaissance vocale reste "démarrée" selon le JS sans
+    // jamais recevoir de vrai son.
+    //
+    // Hypothèse testée ici (gratuite, aucune garantie officielle — à
+    // confirmer avec un nouveau journal) : garder un flux micro ouvert en
+    // continu via getUserMedia + Web Audio API (volume à zéro, donc
+    // inaudible), SÉPARÉMENT de SpeechRecognition, pendant toute la durée
+    // où le mode est ouvert. Certains développeurs ont rapporté que ça
+    // force iOS à garder la session audio du micro "active" en continu
+    // côté système, au lieu de la relâcher/reconfigurer à chaque lecture
+    // vidéo — ce qui pourrait empêcher exactement le genre de coupure
+    // silencieuse vue dans le journal.
+    let micKeepAliveStream = null;
+    let micKeepAliveCtx = null;
+    async function startMicKeepAlive() {
+      if (micKeepAliveStream) return;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new Ctx();
+        if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+        const source = ctx.createMediaStreamSource(stream);
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0; // inaudible, uniquement pour garder le graphe audio actif
+        source.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        micKeepAliveStream = stream;
+        micKeepAliveCtx = ctx;
+        dbg("maintien micro (Web Audio) : actif");
+      } catch (e) {
+        dbg("maintien micro (Web Audio) : échec (" + (e && e.message ? e.message : e) + "), app inchangée");
+      }
+    }
+    function stopMicKeepAlive() {
+      if (micKeepAliveStream) { micKeepAliveStream.getTracks().forEach((t) => t.stop()); micKeepAliveStream = null; }
+      if (micKeepAliveCtx) { try { micKeepAliveCtx.close(); } catch (e) {} micKeepAliveCtx = null; }
+    }
+
     openBtn.addEventListener("click", () => {
       if (emptyState) emptyState.style.display = "none";
       stage.hidden = false;
@@ -5219,6 +5266,7 @@ if (typeof document !== "undefined") {
       // L'onde sonore anime dès l'ouverture du mode, pas seulement après la
       // première phrase reconnue (demande explicite du 2026-09-09).
       transcriptBox.hidden = false;
+      startMicKeepAlive();
       startMic();
     });
 
@@ -5230,6 +5278,7 @@ if (typeof document !== "undefined") {
 
     backBtn.addEventListener("click", () => {
       stopMic();
+      stopMicKeepAlive();
       stage.hidden = true;
       if (emptyState) emptyState.style.display = "flex";
       playToken += 1; // invalide toute callback de lecture encore en vol
