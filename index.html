@@ -4064,12 +4064,35 @@ if (typeof document !== "undefined") {
     const DEBUG_TITLE = document.createElement("span");
     DEBUG_TITLE.textContent = "Journal de diagnostic";
     DEBUG_TITLE.style.cssText = "color:rgba(255,255,255,0.55);font:600 11px/1.4 -apple-system,system-ui,sans-serif;letter-spacing:.02em;text-transform:uppercase;";
+    const DEBUG_COPY = document.createElement("button");
+    DEBUG_COPY.textContent = "Copier";
+    DEBUG_COPY.setAttribute("aria-label", "Copier le journal de diagnostic");
+    DEBUG_COPY.style.cssText = "margin-right:8px;padding:4px 10px;border-radius:12px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.75);font:600 11px/1.4 -apple-system,system-ui,sans-serif;cursor:pointer;";
+    DEBUG_COPY.addEventListener("click", () => {
+      const text = dbgLines.map((l) => l.ts + " " + l.msg).join("\n");
+      const done = () => { DEBUG_COPY.textContent = "Copié !"; setTimeout(() => { DEBUG_COPY.textContent = "Copier"; }, 1200); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => { DEBUG_COPY.textContent = "Échec"; setTimeout(() => { DEBUG_COPY.textContent = "Copier"; }, 1200); });
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.cssText = "position:fixed;left:-9999px;top:0;";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); done(); } catch (e) { DEBUG_COPY.textContent = "Échec"; setTimeout(() => { DEBUG_COPY.textContent = "Copier"; }, 1200); }
+        ta.remove();
+      }
+    });
     const DEBUG_CLOSE = document.createElement("button");
     DEBUG_CLOSE.textContent = "×";
     DEBUG_CLOSE.setAttribute("aria-label", "Fermer le journal de diagnostic");
     DEBUG_CLOSE.style.cssText = "width:24px;height:24px;border-radius:50%;border:none;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.75);font:16px/24px -apple-system,system-ui,sans-serif;text-align:center;cursor:pointer;";
+    const DEBUG_HEADER_RIGHT = document.createElement("div");
+    DEBUG_HEADER_RIGHT.style.cssText = "display:flex;align-items:center;";
+    DEBUG_HEADER_RIGHT.appendChild(DEBUG_COPY);
+    DEBUG_HEADER_RIGHT.appendChild(DEBUG_CLOSE);
     DEBUG_HEADER.appendChild(DEBUG_TITLE);
-    DEBUG_HEADER.appendChild(DEBUG_CLOSE);
+    DEBUG_HEADER.appendChild(DEBUG_HEADER_RIGHT);
 
     const DEBUG_LOG = document.createElement("div");
     DEBUG_LOG.style.cssText = "overflow-y:auto;padding:8px 14px 12px;font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#8fe39a;white-space:pre-wrap;word-break:break-word;";
@@ -4114,7 +4137,7 @@ if (typeof document !== "undefined") {
       const t = new Date();
       const ts = String(t.getMinutes()).padStart(2, "0") + ":" + String(t.getSeconds()).padStart(2, "0") + "." + String(t.getMilliseconds()).padStart(3, "0");
       dbgLines.push({ ts, msg });
-      if (dbgLines.length > 50) dbgLines.shift();
+      if (dbgLines.length > 600) dbgLines.shift();
       if (debugPanelOpen) renderDebugLog();
     }
     // === FIN installation diagnostic (la suite est éparpillée dans le
@@ -4294,6 +4317,13 @@ if (typeof document !== "undefined") {
     // bascule de vidéo — sert à ne jamais faire rejouer par l'IA un mot
     // qu'on vient tout juste de montrer (voir maybeTryAiFallback).
     let currentlyShowingKey = null;
+    // Historique ordonné des clés déjà MONTRÉES pour la phrase en cours
+    // (remis à zéro à chaque NOUVELLE phrase, jamais lors d'une suite) —
+    // ajouté le 2026-10-16 pour corriger les mots/vidéos dupliqués
+    // ("merci bravo" -> "merci bravo bravo") quand la réponse différée de
+    // l'IA (voir maybeTryAiFallback) rejouait des mots déjà affichés par
+    // la correspondance directe pendant qu'on attendait cette réponse.
+    let shownKeysThisUtterance = [];
     // Évite de remontrer deux fois DE SUITE le même signe, quelle que
     // soit la source (reconnaissance normale, répétition captée au
     // redémarrage du moteur vocal sur iPhone, ou réponse de l'IA) —
@@ -4628,6 +4658,7 @@ if (typeof document !== "undefined") {
         transitionStartTs = performance.now();
         curIdx = nextIdx;
         currentlyShowingKey = item.key;
+        shownKeysThisUtterance.push(item.key);
         startExpressionLoop();
         dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
@@ -4676,6 +4707,7 @@ if (typeof document !== "undefined") {
       const token = playToken;
       queue = [];
       busy = false;
+      shownKeysThisUtterance = [];
 
       rawWords.forEach((raw) => {
         const norm = normalize(raw);
@@ -4862,8 +4894,22 @@ if (typeof document !== "undefined") {
         // Retrait centralisé des doublons (voir dedupeAdjacent plus
         // haut) : évite de remontrer le mot déjà affiché, et les
         // doublons internes à la propre réponse de l'IA.
+        // Retire d'abord tout le préfixe déjà montré (peu importe depuis
+        // combien de mots) : sans ça, une réponse IA arrivant tard (le
+        // temps qu'elle revienne du serveur) rejouait des mots déjà vus,
+        // produisant des répétitions comme "merci bravo" -> "merci bravo
+        // bravo" signalées le 2026-10-16.
+        let alreadyShownCount = 0;
+        while (
+          alreadyShownCount < signs.length &&
+          alreadyShownCount < shownKeysThisUtterance.length &&
+          signs[alreadyShownCount].key === shownKeysThisUtterance[alreadyShownCount]
+        ) {
+          alreadyShownCount++;
+        }
+        if (alreadyShownCount > 0) signs = signs.slice(alreadyShownCount);
         signs = dedupeAdjacent(signs, currentlyShowingKey);
-        dbg("IA: réponse = [" + words.join(",") + "] -> remplace la file par " + signs.length + " mots (après retrait des doublons)");
+        dbg("IA: réponse = [" + words.join(",") + "] -> " + alreadyShownCount + " mot(s) déjà montré(s) retiré(s), remplace la file par " + signs.length + " mots restants");
         if (!signs.length) return;
         // La reformulation de l'IA porte sur la phrase ENTIÈRE (pas juste
         // le mot manquant) : elle remplace la suite de la file plutôt que
@@ -5192,6 +5238,7 @@ if (typeof document !== "undefined") {
       paused = false;
       micWasOnBeforePause = false;
       lastUtteranceSigns = [];
+      shownKeysThisUtterance = [];
       pauseBtn.classList.remove("is-paused");
       transcriptBox.classList.remove("is-paused");
       pauseLabel.textContent = "Mettre en pause";
