@@ -4027,6 +4027,21 @@ if (typeof document !== "undefined") {
     if (!openBtn || !stage || !backBtn || !videos[0] || !videos[1] || !idleMsg || !captionEl) return;
 
     const VIDEOS = window.SENSORIELLE_SPEECH_VIDEOS || {};
+    // Bornes de rognage precises par clip (2026-10-16) : chaque vidéo de
+    // signe part et revient a une pose de repos, et un rognage FIXE
+    // (EXTRA_TRIM) ne convient pas a tous les clips (certains ont 0,2s de
+    // repos, d'autres 1,5s) - couper trop court casse les signes courts,
+    // couper pas assez laisse un "temps mort" qui donne l'impression de
+    // mots separes plutot qu'une phrase fluide. Ce fichier contient, pour
+    // chaque mot, le vrai debut/fin du MOUVEMENT (detecte une fois par
+    // analyse d'image sur les vraies videos, pas un reglage a l'aveugle).
+    // Un mot absent de ce fichier (nouveau mot, ou échec d'analyse comme
+    // "chère") retombe simplement sur l'ancien calcul générique.
+    let CLIP_BOUNDS = {};
+    fetch("media/signs/clip-bounds.json", { cache: "force-cache" })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data) => { CLIP_BOUNDS = data || {}; dbg("bornes de rognage chargées (" + Object.keys(CLIP_BOUNDS).length + " clips)"); })
+      .catch(() => { dbg("bornes de rognage: échec du chargement, repli sur EXTRA_TRIM fixe"); });
 
     // === DIAGNOSTIC TEMPORAIRE (2026-10-13, à enlever une fois le bug
     // résolu) — masqué par défaut, un petit bouton rond "i" discret
@@ -4541,6 +4556,7 @@ if (typeof document !== "undefined") {
       }
       busy = true;
       const item = queue.shift();
+      const bounds = CLIP_BOUNDS[item.key];
       dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
       const src = await resolveSrc(item);
       if (token !== playToken) { dbg("playFromQueue: token périmé pour '" + item.key + "', abandon"); return; }
@@ -4554,7 +4570,8 @@ if (typeof document !== "undefined") {
       const curVideo = videos[curIdx];
       let advanced = false;
       function onTimeUpdate() {
-        if (nextVideo.duration && nextVideo.currentTime >= nextVideo.duration - Math.min(EXTRA_TRIM, nextVideo.duration / 3)) {
+        const outPoint = bounds ? bounds.out : (nextVideo.duration ? nextVideo.duration - Math.min(EXTRA_TRIM, nextVideo.duration / 3) : null);
+        if (outPoint !== null && nextVideo.currentTime >= outPoint) {
           advance();
         }
       }
@@ -4573,7 +4590,7 @@ if (typeof document !== "undefined") {
         nextVideo.oncanplay = null;
         if (token !== playToken) return;
         const dur = nextVideo.duration || 0;
-        nextVideo.currentTime = Math.min(EXTRA_TRIM, dur / 3);
+        nextVideo.currentTime = bounds ? bounds.in : Math.min(EXTRA_TRIM, dur / 3);
         nextVideo.playbackRate = PLAYBACK_RATE;
         nextVideo.play().catch(() => {});
         nextVideo.classList.add("showing");
