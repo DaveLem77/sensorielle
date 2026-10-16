@@ -4629,6 +4629,7 @@ if (typeof document !== "undefined") {
         curIdx = nextIdx;
         currentlyShowingKey = item.key;
         startExpressionLoop();
+        scheduleVideoSwapMicCheck();
         dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
         prefetchUpcoming();
@@ -5027,6 +5028,44 @@ if (typeof document !== "undefined") {
         setTimeout(() => { if (micOn && !paused) startMic(); }, restartDelay);
       }
     }, 1000);
+
+    // Contrôle ciblé après un changement de vidéo de signe — ajouté le
+    // 2026-10-16 suite à la découverte du bug WebKit #321436 : la
+    // reconnaissance vocale (webkitSpeechRecognition) peut arrêter de
+    // produire le moindre événement (ni onresult, ni onerror, ni onend)
+    // juste après qu'un élément <video>/<audio> démarre ou reprenne sa
+    // lecture — exactement le schéma de cette page, qui change de vidéo
+    // à CHAQUE mot signé pendant que le micro doit rester à l'écoute. Un
+    // ingénieur WebKit soupçonne que la session audio partagée d'iOS est
+    // reconfigurée à ce moment précis. Le chien de garde général (plus
+    // bas, 6s) finit par rattraper ce genre de silence, mais seulement
+    // après coup et sans lien avec sa vraie cause : ici, on vise
+    // directement LE moment du changement de vidéo avec un délai plus
+    // court (1,1s) et on ne redémarre que si rien ne s'est passé depuis
+    // AVANT ce changement précis (jamais si le micro a réagi normalement
+    // entre-temps, pour ne pas couper une reconnaissance qui va bien).
+    function scheduleVideoSwapMicCheck() {
+      if (!micOn || paused) return;
+      const swapTs = Date.now();
+      setTimeout(() => {
+        if (!micOn || paused) return;
+        const silentSinceSwap = Date.now() - lastMicActivityAt;
+        if (lastMicActivityAt < swapTs && silentSinceSwap > 900) {
+          consecutiveWatchdogRestarts += 1;
+          dbg("⚠️ relance ciblée après changement de vidéo (#" + consecutiveWatchdogRestarts + ", bug WebKit #321436 suspecté) : aucune activité micro depuis " + silentSinceSwap + "ms -> redémarrage");
+          lastRecognizerErrorType = "watchdog";
+          lastMicActivityAt = Date.now();
+          if (recognizer) {
+            recognizer.onresult = null;
+            recognizer.onerror = null;
+            recognizer.onend = null;
+            try { recognizer.stop(); } catch (e) {}
+            recognizer = null;
+          }
+          setTimeout(() => { if (micOn && !paused) startMic(); }, 250);
+        }
+      }, 1100);
+    }
 
     function startMic() {
       if (!SpeechRecognitionCtor) {
