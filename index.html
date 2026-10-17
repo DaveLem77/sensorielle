@@ -4400,7 +4400,7 @@ if (typeof document !== "undefined") {
     // navigateur), EXPRESSION_FILTER_ENABLED reste sans effet et l'app
     // fonctionne exactement comme avant (aucune classe canvas-mode
     // ajoutee -> les <video> normaux restent visibles).
-    const EXPRESSION_FILTER_ENABLED = false; // désactivé le 2026-10-16 : visage dupliqué + lag confirmés en test réel sur iPhone
+    const EXPRESSION_FILTER_ENABLED = true; // réactivé le 2026-10-17 : cause du "visage dupliqué" trouvée et corrigée (voir plus bas), charge allégée
     const EXPR_WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
     const EXPR_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
@@ -4471,19 +4471,33 @@ if (typeof document !== "undefined") {
     let expressionLoopHandle = null;
     let lastExprVideoTime = -1;
     let lastLandmarks = null;
+    let lastExprDetectTs = 0;
+    const EXPR_DETECT_MIN_INTERVAL_MS = 40;
 
-    // Fondu court au changement de signe (ajoute 2026-10-16, demande par
-    // David apres avoir valide un vrai lissage de mouvement hors-ligne) :
-    // un fondu de mouvement complet (type RIFE/minterpolate) est trop
-    // lourd pour tourner en direct sur mobile - on fait ici une version
-    // beaucoup plus legere (fondu enchaine de ~110ms entre la derniere
-    // image du mot precedent et la premiere du nouveau), qui adoucit le
-    // "coup sec" du changement sans faire tourner de calcul lourd. C'est
-    // moins bon que le vrai lissage teste hors-ligne, mais c'est la seule
-    // version gratuite qui tourne de façon fiable en direct.
-    let transitionFromVideo = null;
-    let transitionStartTs = 0;
-    const TRANSITION_MS = 110;
+    // Fondu entre signes RETIRÉ le 2026-10-17 : c'était la vraie cause du
+    // "visage dupliqué" vu en test réel. Ce fondu de 110ms superposait
+    // l'ANCIEN mot (encore affiché à pleine opacité) et le NOUVEAU mot (qui
+    // apparaissait en transparence croissante) sur le même canvas -> deux
+    // clips différents = deux positions de visage différentes affichées en
+    // même temps pendant 110ms à chaque changement de mot, donc un visage
+    // qui a l'air dédoublé/fantôme en continu pendant qu'on parle. C'est
+    // exactement la même raison qui a fait écarter le fondu pour les mains
+    // (voir plus haut dans ce fichier) : avec deux signes différents, fondre
+    // les rend illisibles au lieu de les rendre fluides. Le canvas affiche
+    // maintenant la nouvelle vidéo directement, comme un <video> normal
+    // (coupure instantanée, sans mélange).
+
+    // Quatre petits canvas réutilisés (un par zone déplacée : sourcil
+    // gauche/droit, bouche gauche/droite) au lieu d'en créer un NOUVEAU à
+    // chaque frame (jusqu'à 240 créations/seconde à 60fps) : c'était une
+    // part du lag confirmé en test réel sur iPhone (allocation mémoire +
+    // calcul de dégradé répétés pour rien, 60 fois par seconde).
+    const EXPR_PATCH_CANVASES = {
+      browLeft: document.createElement("canvas"),
+      browRight: document.createElement("canvas"),
+      mouthLeft: document.createElement("canvas"),
+      mouthRight: document.createElement("canvas"),
+    };
 
     function drawPatch(video, lm, idxKey, dxFrac, dyFrac) {
       const idx = EXPR_POINTS[idxKey];
@@ -4496,9 +4510,11 @@ if (typeof document !== "undefined") {
       const sx = Math.max(0, cx - r), sy = Math.max(0, cy - r);
       const sw = Math.min(vw - sx, r * 2), sh = Math.min(vh - sy, r * 2);
       if (sw <= 0 || sh <= 0) return;
-      const patch = document.createElement("canvas");
-      patch.width = sw; patch.height = sh;
+      const patch = EXPR_PATCH_CANVASES[idxKey];
+      if (patch.width !== sw || patch.height !== sh) { patch.width = sw; patch.height = sh; }
       const pctx = patch.getContext("2d");
+      pctx.globalCompositeOperation = "source-over";
+      pctx.clearRect(0, 0, sw, sh);
       pctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
       pctx.globalCompositeOperation = "destination-in";
       const grad = pctx.createRadialGradient(sw / 2, sh / 2, 0, sw / 2, sh / 2, Math.min(sw, sh) / 2);
@@ -4511,22 +4527,7 @@ if (typeof document !== "undefined") {
     }
 
     function renderExpressionFrame(video) {
-      const now = performance.now();
-      const inTransition = transitionFromVideo
-        && (now - transitionStartTs) < TRANSITION_MS
-        && transitionFromVideo.readyState >= 2
-        && transitionFromVideo.videoWidth;
-      if (inTransition) {
-        const t = Math.min(1, (now - transitionStartTs) / TRANSITION_MS);
-        exprCtx.globalAlpha = 1;
-        exprCtx.drawImage(transitionFromVideo, 0, 0, speechVideoCanvas.width, speechVideoCanvas.height);
-        exprCtx.globalAlpha = t;
-        exprCtx.drawImage(video, 0, 0, speechVideoCanvas.width, speechVideoCanvas.height);
-        exprCtx.globalAlpha = 1;
-      } else {
-        if (transitionFromVideo) transitionFromVideo = null;
-        exprCtx.drawImage(video, 0, 0, speechVideoCanvas.width, speechVideoCanvas.height);
-      }
+      exprCtx.drawImage(video, 0, 0, speechVideoCanvas.width, speechVideoCanvas.height);
       const target = EXPR_TARGETS[currentSentiment] || EXPR_TARGETS.neutral;
       if (!lastLandmarks || (target.brow === 0 && target.mouth === 0)) return;
       drawPatch(video, lastLandmarks, "browLeft", 0, target.brow);
@@ -4543,10 +4544,12 @@ if (typeof document !== "undefined") {
         speechVideoCanvas.width = video.videoWidth;
         speechVideoCanvas.height = video.videoHeight;
       }
-      if (faceLandmarker && video.currentTime !== lastExprVideoTime) {
+      const nowTs = performance.now();
+      if (faceLandmarker && video.currentTime !== lastExprVideoTime && (nowTs - lastExprDetectTs) >= EXPR_DETECT_MIN_INTERVAL_MS) {
         lastExprVideoTime = video.currentTime;
+        lastExprDetectTs = nowTs;
         try {
-          const result = faceLandmarker.detectForVideo(video, performance.now());
+          const result = faceLandmarker.detectForVideo(video, nowTs);
           if (result && result.faceLandmarks && result.faceLandmarks[0]) lastLandmarks = result.faceLandmarks[0];
         } catch (e) { /* une frame ratee n'est pas grave, on garde les derniers points connus */ }
       }
@@ -4689,8 +4692,6 @@ if (typeof document !== "undefined") {
         nextVideo.classList.add("showing");
         curVideo.classList.remove("showing");
         showIdle(false);
-        transitionFromVideo = curVideo;
-        transitionStartTs = performance.now();
         curIdx = nextIdx;
         currentlyShowingKey = item.key;
         shownKeysThisUtterance.push(item.key);
