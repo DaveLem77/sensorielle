@@ -4135,7 +4135,19 @@ if (typeof document !== "undefined") {
     }
     document.addEventListener("DOMContentLoaded", mountDebugUi);
     if (document.body) mountDebugUi();
+    const DBG_STORAGE_KEY = "sensorielleDebugLogV1";
     const dbgLines = [];
+    try {
+      const savedRaw = localStorage.getItem(DBG_STORAGE_KEY);
+      if (savedRaw) {
+        const saved = JSON.parse(savedRaw);
+        if (Array.isArray(saved)) dbgLines.push(...saved);
+      }
+    } catch (e) {}
+    let dbgCallsSincePersist = 0;
+    function persistDbgLines() {
+      try { localStorage.setItem(DBG_STORAGE_KEY, JSON.stringify(dbgLines.slice(-600))); } catch (e) {}
+    }
     function renderDebugLog() {
       DEBUG_LOG.innerHTML = dbgLines
         .map((l) => '<div style="padding:1px 0"><span style="color:rgba(143,227,154,0.45)">' + l.ts + "</span> " + l.msg.replace(/</g, "&lt;") + "</div>")
@@ -4155,7 +4167,14 @@ if (typeof document !== "undefined") {
       dbgLines.push({ ts, msg });
       if (dbgLines.length > 600) dbgLines.shift();
       if (debugPanelOpen) renderDebugLog();
+      // Écriture sur disque (localStorage) espacée toutes les 5 lignes
+      // plutôt qu'à chaque appel (dbg() peut être appelée plusieurs fois
+      // par seconde) — suffisant pour survivre à un rechargement
+      // automatique de secours sans alourdir chaque appel.
+      dbgCallsSincePersist += 1;
+      if (dbgCallsSincePersist >= 5) { dbgCallsSincePersist = 0; persistDbgLines(); }
     }
+    window.addEventListener("pagehide", persistDbgLines);
     // === FIN installation diagnostic (la suite est éparpillée dans le
     // code ci-dessous, cherche "dbg(" pour tout retrouver) ================
 
@@ -5301,6 +5320,7 @@ if (typeof document !== "undefined") {
     try {
       if (sessionStorage.getItem(MIC_REOPEN_STORAGE_KEY) === "1") {
         sessionStorage.removeItem(MIC_REOPEN_STORAGE_KEY);
+        dbg("=== RECHARGEMENT DE SECOURS : la page vient de se recharger automatiquement après un blocage du micro, reprise du journal ci-dessous ===");
         setTimeout(() => { openBtn.click(); }, 50);
       }
     } catch (e) {}
