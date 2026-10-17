@@ -5141,6 +5141,23 @@ if (typeof document !== "undefined") {
     let currentTurnOrder = null;
     let turnWordsAppliedCount = 0;
 
+    // Chien de garde du MICRO (ajouté 2026-10-17, en réponse à "ça peut lui
+    // arriver de ne plus suivre, ne plus traduire") : sur iPhone, iOS peut
+    // suspendre l'AudioContext SANS que la piste micro ne se termine et
+    // sans déclencher d'erreur visible (ex. notification, bascule
+    // silencieux/sonnerie, brève interruption audio d'une autre app) — le
+    // "visibilitychange" existant ne couvre que le retour au premier plan,
+    // pas une suspension pendant qu'on est déjà au premier plan. Dans ce
+    // cas, onaudioprocess arrête simplement d'être appelé : plus aucun son
+    // n'est envoyé à AssemblyAI, mais rien ne le signale — ça "arrête de
+    // traduire" sans aucun message d'erreur, exactement le symptôme
+    // rapporté. Ce chien de garde vérifie régulièrement que du son est
+    // bien capté, et redémarre la capture seul si ce n'est plus le cas.
+    let lastAudioChunkAt = 0;
+    let micWatchdogTimer = null;
+    const MIC_WATCHDOG_INTERVAL_MS = 4000;
+    const MIC_STALL_THRESHOLD_MS = 6000;
+
     document.addEventListener("visibilitychange", () => {
       dbg("visibilitychange -> " + document.visibilityState);
       // iOS suspend parfois le contexte audio quand l'onglet revient au
@@ -5224,6 +5241,11 @@ if (typeof document !== "undefined") {
       // les échantillons bruts sur Safari iOS — amplement suffisant ici.
       micProcessorNode = audioCtx.createScriptProcessor(4096, 1, 1);
       micProcessorNode.onaudioprocess = (ev) => {
+        // Mis à jour même si rien n'est envoyé (socket pas encore prêt,
+        // etc.) : ça reflète la santé du pipeline de CAPTURE lui-même,
+        // indépendamment de la connexion AssemblyAI (qui a déjà sa propre
+        // reconnexion plus bas).
+        lastAudioChunkAt = Date.now();
         if (!micOn || paused || !sttSocketOpen || !sttSocket) return;
         const input = ev.inputBuffer.getChannelData(0);
         const resampled = downsampleTo16k(input, audioCtx.sampleRate);
@@ -5238,10 +5260,13 @@ if (typeof document !== "undefined") {
       silentGainNode.gain.value = 0;
       micProcessorNode.connect(silentGainNode);
       silentGainNode.connect(audioCtx.destination);
+      lastAudioChunkAt = Date.now();
+      startMicWatchdog();
       return true;
     }
 
     function teardownMicCapture() {
+      stopMicWatchdog();
       if (micProcessorNode) {
         try { micProcessorNode.disconnect(); } catch (e) {}
         micProcessorNode.onaudioprocess = null;
@@ -5254,6 +5279,30 @@ if (typeof document !== "undefined") {
         micStream.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
         micStream = null;
       }
+    }
+
+    function micWatchdogTick() {
+      if (!micOn || paused) return;
+      if (!micStream || !audioCtx) return; // capture pas encore démarrée
+      if (audioCtx.state === "suspended") {
+        dbg("micro: AudioContext suspendu de façon inattendue (pas juste au retour au premier plan) -> reprise");
+        audioCtx.resume().catch(() => {});
+        return;
+      }
+      if (lastAudioChunkAt && (Date.now() - lastAudioChunkAt) > MIC_STALL_THRESHOLD_MS) {
+        dbg("micro: plus aucun son capté depuis " + MIC_STALL_THRESHOLD_MS + "ms alors que le micro devrait être actif -> redémarrage de la capture");
+        teardownMicCapture();
+        if (micOn && !paused) {
+          ensureMicCapture().then((ok) => { if (ok && !sttSocketOpen) openSttSocket(); });
+        }
+      }
+    }
+    function startMicWatchdog() {
+      if (micWatchdogTimer) return;
+      micWatchdogTimer = setInterval(micWatchdogTick, MIC_WATCHDOG_INTERVAL_MS);
+    }
+    function stopMicWatchdog() {
+      if (micWatchdogTimer) { clearInterval(micWatchdogTimer); micWatchdogTimer = null; }
     }
 
     function scheduleSttReconnect() {
