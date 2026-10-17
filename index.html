@@ -4844,31 +4844,80 @@ if (typeof document !== "undefined") {
       });
     }
 
-    function handleFinalTranscript(text) {
-      const hadWords = /\S/.test(text);
-      if (!hadWords) return;
-      const now = Date.now();
-      const gapMs = now - lastFinalAt;
-      const isContinuation = gapMs < UTTERANCE_GAP_MS && lastUtteranceSigns.length > 0;
-      dbg("handleFinalTranscript \"" + text + "\" (écart=" + gapMs + "ms -> " + (isContinuation ? "SUITE" : "NOUVELLE") + ")");
-      lastFinalAt = now;
-      if (isContinuation) {
-        lastUtteranceText = (lastUtteranceText + " " + text).trim();
-        appendToUtterance(text);
-      } else {
-        lastUtteranceText = text;
-        renderUtterance(text);
+    // Un "tour" (Turn) d'AssemblyAI peut durer plusieurs secondes et
+    // n'est signalé "terminé" (end_of_turn) qu'après un silence — mais
+    // CHAQUE MOT à l'intérieur est marqué "word_is_final" dès qu'il est
+    // reconnu avec certitude, bien avant la fin du tour. Ajouté le
+    // 2026-10-17 ("comment améliorer la fluidité, la rapidité...") :
+    // avant, on attendait la fin du tour au complet avant d'afficher
+    // quoi que ce soit, ce qui faisait apparaître les signes par gros
+    // blocs après une pause plutôt qu'au même rythme que la parole. On
+    // affiche maintenant chaque mot sitôt qu'il devient final, ce qui
+    // donne une impression beaucoup plus fluide/rapide, plus proche
+    // d'une vraie interprétation en direct.
+    function handleSttTurn(msg) {
+      if (msg.turn_order !== currentTurnOrder) {
+        // Nouveau tour : décide NOUVELLE vs SUITE exactement comme avant
+        // (écart de moins de UTTERANCE_GAP_MS depuis le dernier mot
+        // entendu = probablement la même phrase, juste découpée en
+        // plusieurs tours par le service). Les mots de CE tour arrivent
+        // ensuite un par un, au fur et à mesure.
+        currentTurnOrder = msg.turn_order;
+        turnWordsAppliedCount = 0;
+        const now = Date.now();
+        const gapMs = now - lastFinalAt;
+        const isContinuation = gapMs < UTTERANCE_GAP_MS && lastUtteranceSigns.length > 0;
+        dbg("tour #" + msg.turn_order + " démarre (écart=" + gapMs + "ms -> " + (isContinuation ? "SUITE" : "NOUVELLE") + ")");
+        if (!isContinuation) {
+          playToken += 1;
+          queue = [];
+          busy = false;
+          shownKeysThisUtterance = [];
+          lastUtteranceText = "";
+          lastUtteranceSigns = [];
+          captionEl.textContent = "";
+        }
       }
-      if (textHasContentWord(text)) {
-        if (aiFallbackDebounceTimer) clearTimeout(aiFallbackDebounceTimer);
-        const textAtSchedule = lastUtteranceText;
-        const tokenAtSchedule = playToken;
-        aiFallbackDebounceTimer = setTimeout(() => {
-          aiFallbackDebounceTimer = null;
-          maybeTryAiFallback(textAtSchedule, tokenAtSchedule);
-        }, AI_FALLBACK_DEBOUNCE_MS);
+
+      const words = Array.isArray(msg.words) ? msg.words : [];
+      let k = turnWordsAppliedCount;
+      if (msg.end_of_turn) {
+        // Le tour est fini : tous les mots qui restent comptent comme
+        // finaux, même si leur drapeau individuel n'a pas encore été
+        // mis à jour — on ne veut jamais perdre le dernier mot d'une
+        // phrase.
+        k = words.length;
       } else {
-        dbg("IA: morceau \"" + text + "\" ignoré (aucun mot de contenu) -> pas de nouvel appel");
+        while (k < words.length && words[k] && words[k].word_is_final) k++;
+      }
+      if (k > turnWordsAppliedCount) {
+        const freshlyFinal = words.slice(turnWordsAppliedCount, k).map((w) => w.text);
+        turnWordsAppliedCount = k;
+        lastFinalAt = Date.now();
+        appendToUtterance(freshlyFinal.join(" "));
+      } else if (!msg.end_of_turn && msg.transcript) {
+        // Rien de nouveau n'est encore "final" mot par mot (surtout au
+        // tout début d'un tour) — affichage purement visuel (accessible,
+        // voir plus haut) en attendant, comme avant.
+        transcriptBox.hidden = false;
+        captionEl.textContent = msg.transcript;
+      }
+
+      if (msg.end_of_turn) {
+        const fullText = msg.transcript || lastUtteranceText;
+        dbg("tour #" + msg.turn_order + " terminé -> \"" + fullText + "\"");
+        lastUtteranceText = fullText;
+        if (textHasContentWord(fullText)) {
+          if (aiFallbackDebounceTimer) clearTimeout(aiFallbackDebounceTimer);
+          const textAtSchedule = lastUtteranceText;
+          const tokenAtSchedule = playToken;
+          aiFallbackDebounceTimer = setTimeout(() => {
+            aiFallbackDebounceTimer = null;
+            maybeTryAiFallback(textAtSchedule, tokenAtSchedule);
+          }, AI_FALLBACK_DEBOUNCE_MS);
+        } else {
+          dbg("IA: tour \"" + fullText + "\" ignoré (aucun mot de contenu) -> pas de nouvel appel");
+        }
       }
     }
 
@@ -5086,6 +5135,10 @@ if (typeof document !== "undefined") {
     let sttSocketOpen = false;
     let sttReconnectAttempts = 0;
     let sttReconnectTimer = null;
+    // Suivi des mots déjà affichés DANS LE TOUR EN COURS (voir
+    // handleSttTurn plus bas) — remis à zéro à chaque nouveau tour.
+    let currentTurnOrder = null;
+    let turnWordsAppliedCount = 0;
 
     document.addEventListener("visibilitychange", () => {
       dbg("visibilitychange -> " + document.visibilityState);
@@ -5253,17 +5306,7 @@ if (typeof document !== "undefined") {
         let msg;
         try { msg = JSON.parse(ev.data); } catch (e) { return; }
         if (msg.type === "Turn") {
-          if (!msg.transcript) return;
-          if (msg.end_of_turn) {
-            dbg("STT Turn (final) -> \"" + msg.transcript + "\"");
-            handleFinalTranscript(msg.transcript);
-          } else {
-            // Affichage en direct pendant que la personne parle encore
-            // (pas encore finalisé) — purement visuel, rien n'est encore
-            // envoyé à la file des signes pour ce bout de phrase.
-            transcriptBox.hidden = false;
-            captionEl.textContent = msg.transcript;
-          }
+          handleSttTurn(msg);
         } else if (msg.type === "Begin") {
           dbg("STT: session démarrée (id=" + msg.id + ")");
         } else if (msg.type === "Termination") {
@@ -5343,6 +5386,8 @@ if (typeof document !== "undefined") {
       micWasOnBeforePause = false;
       lastUtteranceSigns = [];
       shownKeysThisUtterance = [];
+      currentTurnOrder = null;
+      turnWordsAppliedCount = 0;
       if (micStuckBtn) micStuckBtn.hidden = true;
       sttReconnectAttempts = 0;
       pauseBtn.classList.remove("is-paused");
