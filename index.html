@@ -5011,311 +5011,279 @@ if (typeof document !== "undefined") {
       playFromQueue(token);
     });
 
-    // ---- Reconnaissance vocale (API Web Speech, locale au navigateur) ----
-    // Volontairement AUCUN bouton à presser pour démarrer/arrêter l'écoute :
-    // ouvrir ce mode (bouton "Essayer « Son à signe »") suffit, l'écoute
-    // démarre immédiatement et continue tant que le mode reste ouvert (et
-    // non mis en pause) — l'onde violette qui pulse en haut ("À l'écoute")
-    // est purement informative, rien à cliquer dessus.
-    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognizer = null;
-    // Texte "intermédiaire" (pas encore final) le plus récent : utilisé
-    // pour ne pas perdre le mot en cours si Safari iOS coupe la
-    // reconnaissance AVANT qu'elle n'ait eu le temps de le finaliser
-    // (voir plus bas, recognizer.onend) — signalé le 2026-10-13 ("il doit
-    // quand même enregistrer le mot que je dis en redémarrant").
-    let pendingInterimText = "";
+    // ---- Reconnaissance vocale (service cloud AssemblyAI) --------------
+    // Historique (2026-10-16) : la version précédente utilisait le moteur
+    // vocal intégré de Safari (Web Speech API). Après une journée complète
+    // de tests réels sur iPhone et SIX techniques différentes essayées
+    // pour contourner son bug (relance ciblée après chaque vidéo, flux
+    // micro séparé en continu, relâchement des vidéos avant relance,
+    // bouton de secours manuel, rechargement automatique de la page,
+    // sessions courtes + rotation proactive) — AUCUNE n'a rétabli une
+    // vraie détection après quelques secondes de silence, pas même le
+    // rechargement complet de la page. Conclusion : le bug est dans le
+    // moteur vocal de Safari lui-même (bug connu de WebKit), impossible à
+    // réparer depuis le site. David a choisi de passer à un vrai service
+    // de reconnaissance vocale payant (AssemblyAI) plutôt que de continuer
+    // à dépendre de ce moteur buggé.
+    //
+    // Fonctionnement : le micro n'est capturé QU'UNE SEULE FOIS avec
+    // getUserMedia (comme pour un appel vidéo) et reste ouvert tant que ce
+    // mode reste ouvert — contrairement à l'ancien moteur qui redémarrait
+    // sans arrêt. L'audio est envoyé en continu par WebSocket à
+    // AssemblyAI, qui renvoie le texte reconnu en français. Ce n'est plus
+    // le moteur de Safari qui "écoute" : seule la CONNEXION réseau peut se
+    // couper, et elle se reconnecte alors seule, sans aucun geste.
+    //
+    // Toujours AUCUN bouton à presser pour démarrer/arrêter l'écoute :
+    // ouvrir ce mode suffit, l'écoute démarre immédiatement.
+    //
+    // Sécurité : la clé API AssemblyAI ne vit JAMAIS dans ce fichier — le
+    // navigateur demande un jeton temporaire (valide 60 secondes, juste
+    // pour se connecter) à notre propre serveur relais Cloudflare (même
+    // principe que pour l'IA de reformulation plus haut), qui lui seul
+    // connaît la vraie clé. Voir ai-relay/worker.js et DEPLOIEMENT.txt.
+    const STT_TOKEN_URL = "https://shy-sky-5923.dlemieux730.workers.dev/stt-token";
+    const STT_WS_BASE = "wss://streaming.assemblyai.com/v3/ws";
+
     let micOn = false;
-    // Journalise les changements de visibilité de la page (écran
-    // verrouillé, onglet mis en arrière-plan...) : iOS peut couper
-    // l'accès au micro dans ces cas-là sans erreur claire côté Web
-    // Speech API avant un bon moment — ajouté le 2026-10-14 pour
-    // vérifier si de longs trous de détection silencieux (ex. ~29s
-    // observés dans un journal) coïncident avec ça.
+    let micStream = null;
+    let audioCtx = null;
+    let micSourceNode = null;
+    let micProcessorNode = null;
+    let silentGainNode = null;
+    let sttSocket = null;
+    let sttSocketOpen = false;
+    let sttReconnectAttempts = 0;
+    let sttReconnectTimer = null;
+
     document.addEventListener("visibilitychange", () => {
       dbg("visibilitychange -> " + document.visibilityState);
-    });
-    // Dernier type d'erreur vu ("audio-capture", "network"...) — sert à
-    // attendre plus longtemps avant de relancer après ce genre d'erreur
-    // précis (voir recognizer.onend plus bas), signalé le 2026-10-14
-    // ("au départ il ne m'entend pas", "ne redétecte plus après la
-    // première phrase").
-    let lastRecognizerErrorType = null;
-    // Horodatage de la dernière coupure du moteur vocal, et si on a déjà
-    // mesuré le délai avant le premier résultat de la session suivante —
-    // sert à journaliser précisément combien de temps dure le "trou"
-    // signalé le 2026-10-14 ("on dirait qu'il doit se réinitialiser
-    // pendant quelques secondes"), pour avoir de vrais chiffres au
-    // prochain test plutôt que de deviner.
-    let micStoppedAt = 0;
-    let loggedFirstResultThisSession = true;
-    // Chien de garde du micro — ajouté le 2026-10-14 : un journal a
-    // montré le moteur rester "démarré" selon iOS, sans ERREUR ni fin
-    // déclenchée, mais sans capter la voix pendant ~20-25 secondes alors
-    // que la personne parlait activement (confirmé : "j'ai attendu
-    // genre 5 secondes... ça a pris un bon 20-25 secondes avant de
-    // détecter quand même") — iOS n'a donc pas toujours détecté lui-même
-    // que son moteur était bloqué. Plutôt que d'attendre qu'iOS s'en
-    // aperçoive (ce qui peut prendre 20-30s), on force nous-mêmes un
-    // redémarrage complet si aucun résultat — même intermédiaire — n'est
-    // arrivé depuis MIC_WATCHDOG_MS, bornant le pire cas à cette durée
-    // au lieu de 20-30s.
-    // Il n'existe tout simplement AUCUN événement à écouter pour "le micro
-    // vient de se bloquer" dans ce cas précis — c'est justement ça, le bug
-    // d'iOS : tant qu'il ne s'en est pas rendu compte lui-même (ce qui a
-    // pris 20-25s dans le test), il ne déclenche ni erreur ni fin, donc
-    // rien à écouter directement. Seul un délai d'inactivité peut le
-    // détecter — raccourci ici à 3,5s (vérifié chaque seconde) demandé
-    // le 2026-10-14 ("tu peux pas forcer directement quand il se ferme").
-    // Un redémarrage déclenché par erreur pendant un VRAI silence (la
-    // personne ne parle juste pas encore) ne coûte presque rien, puisque
-    // rien n'a été dit pendant ce silence de toute façon — 1,5s semblait
-    // trop court (risque de redémarrer en pleine respiration entre deux
-    // mots), 7s trop long pour "ne jamais perdre un mot".
-    // Encore corrigé le 2026-10-14 ("ça marche pour la 1re phrase mais
-    // après, plus jamais rien, ça boucle") : 3,5s était en fait PLUS COURT
-    // que le temps normal de "réchauffement" du moteur après un
-    // redémarrage (mesuré à ~2,4-3s dans un journal précédent, variable).
-    // Le chien de garde tuait donc des sessions parfaitement valides juste
-    // avant qu'elles aient fini de démarrer — créant une boucle qui ne se
-    // laissait jamais la chance de fonctionner. Remonté à 6s pour laisser
-    // une vraie marge au-dessus du pire temps de réchauffement mesuré.
-    const MIC_WATCHDOG_MS = 6000;
-    let lastMicActivityAt = 0;
-    // Nombre de redémarrages forcés d'affilée sans le moindre résultat
-    // entre-temps — remis à zéro dès qu'un résultat arrive (onresult).
-    // Si ça s'accumule, on espace de plus en plus les tentatives (iOS
-    // peut avoir besoin de plus de temps pour se remettre d'un cycle
-    // démarrage/arrêt trop rapide et répété) plutôt que de continuer à
-    // réessayer au même rythme sans jamais réussir.
-    let consecutiveWatchdogRestarts = 0;
-    // Retrait de la rotation proactive (10s) ajoutée plus tôt aujourd'hui :
-    // les journaux reçus ont montré DEUX problèmes avec elle. (1) Elle
-    // n'empêchait pas le blocage - un moteur tout neuf créé par la
-    // rotation restait aussi sourd qu'un vieux. (2) Pire : chaque
-    // relance (même celle de la rotation, qui ne prouve AUCUNE vraie
-    // détection) remettait à zéro "lastMicActivityAt" dans startMic(),
-    // ce qui retardait le chien de garde - le micro pouvait donc rester
-    // bloqué plus longtemps qu'avant, puisque son horloge de silence se
-    // faisait relancer toutes les 10s par la rotation elle-même.
-    //
-    // Nouvelle conclusion après plusieurs tests réels aujourd'hui :
-    // AUCUN redémarrage en place (nouveau moteur, continuous=false,
-    // relâchement des vidéos, flux séparé) n'a jamais rétabli une vraie
-    // détection une fois le moteur devenu sourd - seul un vrai
-    // rechargement de la page y arrive (c'est la seule chose qui
-    // réinitialise tout côté iOS). Donc on ne perd plus de temps à
-    // réessayer plusieurs fois en place : dès le 1er silence anormal
-    // détecté, on relâche les vidéos puis on recharge directement.
-    setInterval(() => {
-      if (!micOn || paused || !lastMicActivityAt) return;
-      const silentFor = Date.now() - lastMicActivityAt;
-      if (silentFor > MIC_WATCHDOG_MS) {
-        consecutiveWatchdogRestarts += 1;
-        dbg("⚠️ chien de garde micro (#" + consecutiveWatchdogRestarts + ") : aucune activité depuis " + silentFor + "ms -> rechargement automatique de la page (aucun geste requis)");
-        releaseVideoElementsForMicRecovery();
-        try {
-          sessionStorage.setItem("sensorielleSonASigneAutoReopen", "1");
-          location.reload();
-          return;
-        } catch (e) {
-          dbg("rechargement automatique impossible (" + (e && e.message ? e.message : e) + ") -> filet de secours manuel affiché");
-          if (micStuckBtn) micStuckBtn.hidden = false;
-          lastMicActivityAt = Date.now();
-          lastRecognizerErrorType = "watchdog";
-          if (recognizer) {
-            recognizer.onresult = null;
-            recognizer.onerror = null;
-            recognizer.onend = null;
-            try { recognizer.stop(); } catch (e2) {}
-            recognizer = null;
-          }
-          setTimeout(() => { if (micOn && !paused) startMic(); }, 500);
-        }
+      // iOS suspend parfois le contexte audio quand l'onglet revient au
+      // premier plan après un passage en arrière-plan — le relancer ne
+      // coûte rien même s'il n'était pas suspendu.
+      if (document.visibilityState === "visible" && audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
       }
-    }, 1000);
+    });
 
-    function releaseVideoElementsForMicRecovery() {
-      videos.forEach((v) => {
-        v.pause();
-        v.oncanplay = null;
-        v.onended = null;
-        v.onerror = null;
-        v.classList.remove("showing");
-        v.removeAttribute("src");
-        v.load();
-      });
-      stopExpressionLoop();
-      showIdle(true);
-      currentlyShowingKey = null;
-      dbg("vidéos relâchées (simulation fermeture/réouverture) avant redémarrage micro");
+    async function fetchSttToken() {
+      const resp = await fetch(STT_TOKEN_URL);
+      if (!resp.ok) throw new Error("jeton HTTP " + resp.status);
+      const data = await resp.json();
+      if (!data || !data.token) throw new Error("jeton manquant dans la réponse du relais");
+      return data.token;
     }
 
-    function startMic() {
-      if (!SpeechRecognitionCtor) {
+    // AssemblyAI attend du PCM 16 bits mono à 16 000 Hz — le navigateur
+    // capture presque toujours à 44 100 ou 48 000 Hz (Safari ignore une
+    // demande de taux différent sur l'AudioContext), donc chaque bloc est
+    // réduit nous-mêmes par interpolation linéaire avant l'envoi.
+    function downsampleTo16k(float32, inRate) {
+      if (inRate === 16000) return float32;
+      const ratio = inRate / 16000;
+      const outLength = Math.max(1, Math.round(float32.length / ratio));
+      const out = new Float32Array(outLength);
+      for (let i = 0; i < outLength; i++) {
+        const srcIdx = i * ratio;
+        const i0 = Math.floor(srcIdx);
+        const i1 = Math.min(i0 + 1, float32.length - 1);
+        const frac = srcIdx - i0;
+        out[i] = float32[i0] + (float32[i1] - float32[i0]) * frac;
+      }
+      return out;
+    }
+
+    function floatTo16BitPCM(float32) {
+      const out = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      return out;
+    }
+
+    // Capture le micro UNE SEULE FOIS (reste ouvert tant que le mode reste
+    // ouvert) — contrairement à l'ancien moteur, rien n'est recréé à
+    // chaque bout de phrase.
+    async function ensureMicCapture() {
+      if (micStream) return true;
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        });
+      } catch (e) {
+        dbg("micro: accès refusé (" + (e && e.message ? e.message : e) + ")");
         transcriptBox.hidden = false;
-        captionEl.textContent = "La reconnaissance vocale n'est pas proposée par ce navigateur.";
+        captionEl.textContent = "Accès au micro refusé.";
+        return false;
+      }
+      micStream.getAudioTracks().forEach((track) => {
+        track.addEventListener("ended", () => {
+          dbg("micro: piste audio terminée de façon inattendue -> nouvelle capture");
+          teardownMicCapture();
+          if (micOn && !paused) {
+            ensureMicCapture().then((ok) => {
+              if (ok && !sttSocketOpen) openSttSocket();
+            });
+          }
+        });
+      });
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContextCtor();
+      if (audioCtx.state === "suspended") {
+        try { await audioCtx.resume(); } catch (e) {}
+      }
+      micSourceNode = audioCtx.createMediaStreamSource(micStream);
+      // ScriptProcessorNode est déprécié mais reste la façon la plus
+      // simple (un seul fichier, pas de module séparé à charger) d'obtenir
+      // les échantillons bruts sur Safari iOS — amplement suffisant ici.
+      micProcessorNode = audioCtx.createScriptProcessor(4096, 1, 1);
+      micProcessorNode.onaudioprocess = (ev) => {
+        if (!micOn || paused || !sttSocketOpen || !sttSocket) return;
+        const input = ev.inputBuffer.getChannelData(0);
+        const resampled = downsampleTo16k(input, audioCtx.sampleRate);
+        const pcm16 = floatTo16BitPCM(resampled);
+        try { sttSocket.send(pcm16.buffer); } catch (e) {}
+      };
+      micSourceNode.connect(micProcessorNode);
+      // Un ScriptProcessorNode doit être relié jusqu'à la destination pour
+      // que Safari continue d'appeler onaudioprocess — un gain à 0 le
+      // relie sans jamais produire le moindre son audible.
+      silentGainNode = audioCtx.createGain();
+      silentGainNode.gain.value = 0;
+      micProcessorNode.connect(silentGainNode);
+      silentGainNode.connect(audioCtx.destination);
+      return true;
+    }
+
+    function teardownMicCapture() {
+      if (micProcessorNode) {
+        try { micProcessorNode.disconnect(); } catch (e) {}
+        micProcessorNode.onaudioprocess = null;
+        micProcessorNode = null;
+      }
+      if (silentGainNode) { try { silentGainNode.disconnect(); } catch (e) {} silentGainNode = null; }
+      if (micSourceNode) { try { micSourceNode.disconnect(); } catch (e) {} micSourceNode = null; }
+      if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
+      if (micStream) {
+        micStream.getTracks().forEach((t) => { try { t.stop(); } catch (e) {} });
+        micStream = null;
+      }
+    }
+
+    function scheduleSttReconnect() {
+      if (!micOn || paused) return;
+      sttReconnectAttempts += 1;
+      dbg("STT: reconnexion automatique prévue (tentative #" + sttReconnectAttempts + ")");
+      // Après plusieurs échecs d'affilée, le bouton de secours redevient
+      // visible — pas pour forcer la personne à s'en servir (on continue
+      // de réessayer seul en arrière-plan), juste au cas où c'est la
+      // connexion réseau elle-même qui est coupée pour un bon moment.
+      if (sttReconnectAttempts >= 6 && micStuckBtn) micStuckBtn.hidden = false;
+      const delay = Math.min(1000 * sttReconnectAttempts, 8000);
+      if (sttReconnectTimer) clearTimeout(sttReconnectTimer);
+      sttReconnectTimer = setTimeout(() => {
+        if (micOn && !paused) openSttSocket();
+      }, delay);
+    }
+
+    async function openSttSocket() {
+      let token;
+      try {
+        token = await fetchSttToken();
+      } catch (e) {
+        dbg("STT: jeton impossible à obtenir (" + (e && e.message ? e.message : e) + ")");
+        scheduleSttReconnect();
         return;
       }
-      // Corrigé le 2026-10-14 : l'ancien objet de reconnaissance (s'il en
-      // reste un) gardait ses gestionnaires d'événements attachés — si
-      // iOS lui envoyait encore un événement tardif après qu'on soit déjà
-      // reparti avec un nouvel objet, ça pouvait déclencher une relance en
-      // double (deux reconnaissances actives en même temps, qui se
-      // disputent le micro) et expliquer les échecs de détection après la
-      // première phrase. On coupe maintenant explicitement ses
-      // gestionnaires avant de le remplacer.
-      if (recognizer) {
-        recognizer.onresult = null;
-        recognizer.onerror = null;
-        recognizer.onend = null;
-        try { recognizer.stop(); } catch (e) {}
-      }
-      recognizer = new SpeechRecognitionCtor();
-      recognizer.lang = "fr-FR";
-      // Changé à "false" le 2026-10-16 (était "true" depuis le début) :
-      // nouvelle approche après l'échec de cinq correctifs réactifs
-      // différents aujourd'hui (qui attendaient tous que le moteur soit
-      // déjà bloqué avant d'essayer de le relancer). En mode continu,
-      // une seule session audio reste ouverte indéfiniment - c'est
-      // exactement ce long maintien qui semble, dans tous les journaux
-      // reçus, finir par atteindre l'état bloqué. En mode non-continu,
-      // Safari termine lui-même chaque énoncé bien plus tôt, et on
-      // relance tout de suite dans onend (déjà en place) - des sessions
-      // courtes et fréquentes plutôt qu'une seule longue, pour ne
-      // jamais laisser un objet vivre assez longtemps pour se bloquer.
-      recognizer.continuous = false;
-      recognizer.interimResults = true;
-      recognizer.onresult = (e) => {
-        lastMicActivityAt = Date.now();
-        consecutiveWatchdogRestarts = 0;
-        if (micStuckBtn && !micStuckBtn.hidden) micStuckBtn.hidden = true;
-        if (!loggedFirstResultThisSession) {
-          loggedFirstResultThisSession = true;
-          if (micStoppedAt) dbg("⏱️ premier résultat reçu " + (Date.now() - micStoppedAt) + "ms après la coupure précédente");
-        }
-        for (let k = e.resultIndex; k < e.results.length; k++) {
-          dbg("onresult[" + k + "] isFinal=" + e.results[k].isFinal + " -> \"" + e.results[k][0].transcript + "\"");
-          if (e.results[k].isFinal) {
-            // Résultat finalisé : plus rien "en suspens" à récupérer pour
-            // ce bout de phrase, il vient d'être traité normalement.
-            pendingInterimText = "";
-            handleFinalTranscript(e.results[k][0].transcript);
-          } else {
-            // Pas encore final — on garde une copie à jour, au cas où le
-            // moteur s'arrête (onend) avant de finaliser ce morceau.
-            pendingInterimText = e.results[k][0].transcript;
-          }
-        }
-      };
-      recognizer.onerror = (e) => {
-        dbg("recognizer.onerror: " + e.error);
-        lastRecognizerErrorType = e.error;
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          transcriptBox.hidden = false;
-          captionEl.textContent = "Accès au micro refusé.";
-          stopMic();
-        }
-        // Les autres erreurs ("no-speech", "network", "aborted",
-        // "audio-capture"...) sont volontairement ignorées ICI : elles
-        // déclenchent presque toujours "onend" juste après, qui se charge
-        // de relancer l'écoute (avec un délai plus long pour
-        // "audio-capture", voir plus bas — c'est le signe qu'iOS n'a pas
-        // encore fini de libérer le micro).
-      };
-      // Bug corrigé le 2026-09-14 : le navigateur arrête la reconnaissance
-      // après chaque silence, même en mode continu (normal), mais rappeler
-      // .start() sur CE MÊME objet, une fois arrêté, échoue silencieusement
-      // dans certains navigateurs (erreur avalée par le try/catch) — résultat
-      // observé : ça reconnaissait un mot (ou une phrase), puis plus rien du
-      // tout. On recrée maintenant un objet de reconnaissance neuf à chaque
-      // relance (via startMic()), avec un tout petit délai pour laisser le
-      // moteur vocal du navigateur se libérer.
-      recognizer.onend = () => {
-        // Après "audio-capture" (ou "network"), iOS n'a souvent pas
-        // encore fini de libérer le micro — relancer tout de suite dans
-        // ce cas précis échouait silencieusement plus souvent (signalé le
-        // 2026-10-14 : mic qui ne redétecte plus après la 1re phrase).
-        // On attend alors plus longtemps avant de relancer ; sinon le
-        // délai court habituel reste.
-        micStoppedAt = Date.now();
-        const restartDelay = lastRecognizerErrorType === "audio-capture" || lastRecognizerErrorType === "network" ? 700 : 200;
-        dbg("recognizer.onend (micOn=" + micOn + ", paused=" + paused + ", dernière erreur=" + lastRecognizerErrorType + ") -> relance dans " + restartDelay + "ms");
-        lastRecognizerErrorType = null;
-        // Le moteur vient de s'arrêter (fin naturelle OU coupure en plein
-        // milieu d'un mot, fréquent sur iPhone). S'il restait un bout de
-        // phrase "en suspens" (jamais finalisé), on le traite maintenant
-        // comme final plutôt que de le perdre silencieusement — c'est la
-        // seule façon de "capturer le mot en cours au redémarrage" sans
-        // changer de moteur de reconnaissance vocale.
-        if (pendingInterimText.trim()) {
-          const rescued = pendingInterimText;
-          pendingInterimText = "";
-          dbg("onend: récupération du texte en suspens -> \"" + rescued + "\"");
-          handleFinalTranscript(rescued);
-        }
-        if (micOn && !paused) {
-          setTimeout(() => { if (micOn && !paused) startMic(); }, restartDelay);
-        }
-      };
-      loggedFirstResultThisSession = false;
+      if (!micOn || paused) return;
+      const url =
+        STT_WS_BASE +
+        "?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-streaming-multilingual" +
+        "&format_turns=true&inactivity_timeout=3600&token=" +
+        encodeURIComponent(token);
+      let ws;
       try {
-        recognizer.start();
-        micOn = true;
-        lastMicActivityAt = Date.now();
-        dbg("startMic: recognizer.start() OK");
+        ws = new WebSocket(url);
       } catch (e) {
-        // Échec SILENCIEUX historiquement (voir plus haut, bug du
-        // 2026-09-14) : ça pouvait laisser le micro mort pour de bon sans
-        // aucun indice. On journalise maintenant l'erreur ET on réessaie
-        // une fois après un court délai au lieu d'abandonner — signalé le
-        // 2026-10-13 ("quand j'arrête de parler et reparle, ça ne
-        // continue pas").
-        dbg("startMic: ÉCHEC de recognizer.start() -> " + (e && e.message ? e.message : e) + " — nouvel essai dans 400ms");
-        setTimeout(() => {
-          // micOn reste déjà "true" depuis le tout premier démarrage
-          // réussi (ce n'est pas un indicateur de connexion en direct) :
-          // seul `paused` doit bloquer ce deuxième essai.
-          if (!paused) {
-            try {
-              recognizer.start();
-              micOn = true;
-              dbg("startMic: 2e essai OK");
-            } catch (e2) {
-              dbg("startMic: 2e essai ÉCHEC aussi -> " + (e2 && e2.message ? e2.message : e2));
-            }
-          }
-        }, 400);
+        dbg("STT: échec de connexion WebSocket (" + (e && e.message ? e.message : e) + ")");
+        scheduleSttReconnect();
+        return;
       }
+      ws.binaryType = "arraybuffer";
+      sttSocket = ws;
+      ws.onopen = () => {
+        dbg("STT: connexion ouverte");
+        sttSocketOpen = true;
+        sttReconnectAttempts = 0;
+        if (micStuckBtn && !micStuckBtn.hidden) micStuckBtn.hidden = true;
+      };
+      ws.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        if (msg.type === "Turn") {
+          if (!msg.transcript) return;
+          if (msg.end_of_turn) {
+            dbg("STT Turn (final) -> \"" + msg.transcript + "\"");
+            handleFinalTranscript(msg.transcript);
+          } else {
+            // Affichage en direct pendant que la personne parle encore
+            // (pas encore finalisé) — purement visuel, rien n'est encore
+            // envoyé à la file des signes pour ce bout de phrase.
+            transcriptBox.hidden = false;
+            captionEl.textContent = msg.transcript;
+          }
+        } else if (msg.type === "Begin") {
+          dbg("STT: session démarrée (id=" + msg.id + ")");
+        } else if (msg.type === "Termination") {
+          dbg("STT: session terminée par le serveur");
+        }
+      };
+      ws.onerror = () => {
+        dbg("STT: erreur de connexion WebSocket");
+      };
+      ws.onclose = (ev) => {
+        sttSocketOpen = false;
+        if (sttSocket === ws) sttSocket = null;
+        if (micOn && !paused) {
+          dbg("STT: connexion fermée (code=" + ev.code + ") -> reconnexion");
+          scheduleSttReconnect();
+        }
+      };
+    }
+
+    async function startMic() {
+      micOn = true;
+      sttReconnectAttempts = 0;
+      const ok = await ensureMicCapture();
+      if (!ok) { micOn = false; return; }
+      if (!sttSocketOpen) openSttSocket();
     }
 
     function stopMic() {
       micOn = false;
-      lastMicActivityAt = 0;
-      if (recognizer) { try { recognizer.stop(); } catch (e) {} recognizer = null; }
+      if (sttReconnectTimer) { clearTimeout(sttReconnectTimer); sttReconnectTimer = null; }
+      if (sttSocket) {
+        try { sttSocket.send(JSON.stringify({ type: "Terminate" })); } catch (e) {}
+        try { sttSocket.close(); } catch (e) {}
+        sttSocket = null;
+      }
+      sttSocketOpen = false;
+      teardownMicCapture();
     }
 
-
-    const MIC_REOPEN_STORAGE_KEY = "sensorielleSonASigneAutoReopen";
     if (micStuckBtn) {
       micStuckBtn.addEventListener("click", () => {
-        dbg("bouton de secours touché -> rechargement complet de la page (seule façon fiable de tout réinitialiser côté iOS)");
-        try { sessionStorage.setItem(MIC_REOPEN_STORAGE_KEY, "1"); } catch (e) {}
-        location.reload();
+        dbg("bouton de secours touché -> redémarrage complet du micro et de la connexion");
+        micStuckBtn.hidden = true;
+        sttReconnectAttempts = 0;
+        if (sttReconnectTimer) { clearTimeout(sttReconnectTimer); sttReconnectTimer = null; }
+        if (sttSocket) { try { sttSocket.close(); } catch (e) {} sttSocket = null; }
+        sttSocketOpen = false;
+        teardownMicCapture();
+        if (micOn && !paused) startMic();
       });
     }
-
-    // Au chargement de la page : si on vient d'un rechargement demandé par
-    // le bouton de secours ci-dessus, rouvrir automatiquement le mode
-    // "Son à signe" (sans que la personne ait à re-cliquer) dès que tout
-    // est prêt.
-    try {
-      if (sessionStorage.getItem(MIC_REOPEN_STORAGE_KEY) === "1") {
-        sessionStorage.removeItem(MIC_REOPEN_STORAGE_KEY);
-        dbg("=== RECHARGEMENT DE SECOURS : la page vient de se recharger automatiquement après un blocage du micro, reprise du journal ci-dessous ===");
-        setTimeout(() => { openBtn.click(); }, 50);
-      }
-    } catch (e) {}
 
     openBtn.addEventListener("click", () => {
       if (emptyState) emptyState.style.display = "none";
@@ -5345,7 +5313,7 @@ if (typeof document !== "undefined") {
       lastUtteranceSigns = [];
       shownKeysThisUtterance = [];
       if (micStuckBtn) micStuckBtn.hidden = true;
-      consecutiveWatchdogRestarts = 0;
+      sttReconnectAttempts = 0;
       pauseBtn.classList.remove("is-paused");
       transcriptBox.classList.remove("is-paused");
       pauseLabel.textContent = "Mettre en pause";

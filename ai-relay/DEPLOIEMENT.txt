@@ -78,3 +78,48 @@ s'ajouter à la suite. Si rien ne se passe au-delà de ce qui matchait
 déjà avant, vérifie dans l'ordre : la clé API Anthropic a-t-elle du
 crédit, le secret ANTHROPIC_API_KEY est-il bien orthographié sur
 Cloudflare, et l'URL dans index.html est-elle la bonne.
+
+========================================================================
+ AJOUT 2026-10-16 — Reconnaissance vocale AssemblyAI (remplace Safari)
+========================================================================
+
+Le moteur vocal intégré de Safari (iPhone) avait un bug irréparable
+(confirmé après une journée complète de tests réels : il arrêtait de
+détecter la voix après quelques secondes, même en rechargeant la page).
+Le site utilise maintenant un vrai service de reconnaissance vocale en
+ligne, AssemblyAI, qui n'a pas ce problème.
+
+Tu as déjà créé ton compte AssemblyAI et ta clé API ("okay j'ai ma clé
+api"). Il reste UNE seule étape, exactement comme pour la clé Anthropic :
+
+------------------------------------------------------------------------
+ÉTAPE — Ajouter ta clé AssemblyAI comme secret sur ton Worker existant
+------------------------------------------------------------------------
+1. Va sur https://dash.cloudflare.com -> "Workers & Pages" -> ton Worker
+   (celui déjà utilisé pour l'IA de reformulation, ex. "sensorielle-ai").
+2. Onglet "Settings" -> "Variables and Secrets" -> "Add".
+3. Type : "Secret" -> Nom EXACT : ASSEMBLYAI_API_KEY
+   -> Valeur : colle ta clé AssemblyAI.
+4. Sauvegarde / "Deploy" à nouveau si demandé.
+
+------------------------------------------------------------------------
+ÉTAPE — Remettre à jour le code du Worker (fichier modifié)
+------------------------------------------------------------------------
+Le fichier "worker.js" de ce dossier a été modifié (il gère maintenant
+deux choses au lieu d'une : la reformulation IA ET les jetons
+AssemblyAI). Sur la page de ton Worker Cloudflare :
+1. "Edit code" (ou "Quick edit").
+2. EFFACE tout le code actuel, COLLE le contenu à jour de "worker.js".
+3. "Save and deploy".
+
+C'est tout — le site (index.html) est déjà prêt côté code, il appelle
+automatiquement ton Worker à l'adresse .../stt-token pour obtenir un
+jeton temporaire avant de se connecter au micro. Comme pour
+ANTHROPIC_API_KEY, ta clé AssemblyAI ne sera jamais visible dans le
+code du site, jamais vue par moi.
+
+Pour tester : ouvre "Son à signe" sur ton iPhone, parle normalement —
+l'écoute doit maintenant rester active en continu, sans jamais se
+couper après quelques secondes comme avant. Regarde le journal (bouton
+"Copier" dans le panneau de débogage) : tu devrais voir "STT: connexion
+ouverte" puis des lignes "STT Turn (final) -> ..." à chaque phrase.

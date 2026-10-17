@@ -22,6 +22,15 @@
 const ALLOWED_ORIGIN = "https://sensorielle.ca";
 const TOOL_NAME = "choisir_signes";
 
+// 2026-10-16 : ce même Worker sert maintenant aussi de "guichet de
+// jetons" pour AssemblyAI (reconnaissance vocale en ligne, qui
+// remplace le moteur buggé de Safari). Le navigateur ne reçoit
+// JAMAIS la vraie clé ASSEMBLYAI_API_KEY : il demande ici un jeton
+// temporaire (valide 60 secondes, juste pour se connecter), que ce
+// Worker seul est capable de générer puisque lui seul connaît la
+// vraie clé (gardée dans ses secrets, comme ANTHROPIC_API_KEY).
+const ASSEMBLYAI_TOKEN_URL = "https://streaming.assemblyai.com/v3/token";
+
 const SYSTEM_PROMPT = `Tu aides à traduire une phrase française vers la langue des signes québécoise (LSQ), mais le vocabulaire de signes disponible est limité à une liste fixe.
 On te donne une phrase et la liste EXACTE des mots qui ont un signe disponible. Utilise l'outil fourni pour répondre — tu ne peux de toute façon choisir que des mots qui apparaissent dans la liste, l'outil ne te laisse pas en sortir.
 Choisis les mots dans un ordre logique pour les signer, et reformule/paraphrase la phrase avec ces mots pour garder le sens le mieux possible — sois créatif, cherche des synonymes et des mots reliés au sens général plutôt que d'abandonner trop vite. Exemple : pour une salutation comme "comment vas-tu aujourd'hui", s'il y a dans la liste un mot comme "comment", "content", "bien" ou "aller", utilise-les même si ce n'est pas une traduction mot à mot parfaite — transmettre l'intention générale de la phrase vaut mieux que rien du tout.
@@ -31,7 +40,7 @@ function corsHeaders(extra) {
   return Object.assign(
     {
       "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     },
     extra || {}
@@ -45,11 +54,59 @@ function json(body, status) {
   });
 }
 
+// Jeton temporaire AssemblyAI (GET /stt-token) : le site l'appelle à
+// chaque fois qu'il doit (re)connecter le micro, jamais la clé elle-
+// même. "expires_in_seconds" court exprès : même intercepté, ce jeton
+// ne resterait valide qu'une minute et ne sert qu'à ouvrir une
+// connexion, jamais à en ouvrir d'autres après coup.
+async function handleSttTokenRequest(request, env) {
+  if (request.method !== "GET") {
+    return json({ error: "method not allowed" }, 405);
+  }
+  if (!env.ASSEMBLYAI_API_KEY) {
+    return json({ error: "ASSEMBLYAI_API_KEY non configurée sur ce Worker" }, 500);
+  }
+
+  let resp;
+  try {
+    resp = await fetch(ASSEMBLYAI_TOKEN_URL + "?expires_in_seconds=60", {
+      method: "GET",
+      headers: { Authorization: env.ASSEMBLYAI_API_KEY },
+    });
+  } catch (e) {
+    return json({ error: "appel AssemblyAI impossible: " + e.message }, 502);
+  }
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    return json({ error: "AssemblyAI a répondu " + resp.status + " : " + errText.slice(0, 300) }, 502);
+  }
+
+  let data;
+  try {
+    data = await resp.json();
+  } catch (e) {
+    return json({ error: "réponse AssemblyAI illisible" }, 502);
+  }
+
+  if (!data || typeof data.token !== "string") {
+    return json({ error: "AssemblyAI n'a pas renvoyé de jeton" }, 502);
+  }
+
+  return json({ token: data.token });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders() });
     }
+
+    const path = new URL(request.url).pathname;
+    if (path === "/stt-token" || path === "/stt-token/") {
+      return handleSttTokenRequest(request, env);
+    }
+
     if (request.method !== "POST") {
       return json({ error: "method not allowed" }, 405);
     }
