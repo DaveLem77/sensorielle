@@ -5089,57 +5089,49 @@ if (typeof document !== "undefined") {
     // démarrage/arrêt trop rapide et répété) plutôt que de continuer à
     // réessayer au même rythme sans jamais réussir.
     let consecutiveWatchdogRestarts = 0;
-    // Rotation proactive : recrée un moteur neuf toutes les 10s, même si
-    // tout va bien, plutôt que d'attendre un silence suspect pour agir
-    // (le chien de garde plus bas reste un filet en plus, pas remplacé).
-    const PROACTIVE_ROTATE_MS = 10000;
-    let lastProactiveRotateAt = Date.now();
-    setInterval(() => {
-      if (!micOn || paused) { lastProactiveRotateAt = Date.now(); return; }
-      if (Date.now() - lastProactiveRotateAt < PROACTIVE_ROTATE_MS) return;
-      lastProactiveRotateAt = Date.now();
-      dbg("rotation proactive du micro (10s) : nouveau moteur avant qu'il ait une chance de se bloquer");
-      if (recognizer) {
-        recognizer.onresult = null;
-        recognizer.onerror = null;
-        recognizer.onend = null;
-        try { recognizer.stop(); } catch (e) {}
-        recognizer = null;
-      }
-      // Petit délai avant de relancer, comme pour les autres relances
-      // (laisse le moteur vocal du navigateur se libérer) plutôt qu'un
-      // nouvel objet immédiatement après le stop() du précédent.
-      setTimeout(() => { if (micOn && !paused) startMic(); }, 250);
-    }, 1000);
+    // Retrait de la rotation proactive (10s) ajoutée plus tôt aujourd'hui :
+    // les journaux reçus ont montré DEUX problèmes avec elle. (1) Elle
+    // n'empêchait pas le blocage - un moteur tout neuf créé par la
+    // rotation restait aussi sourd qu'un vieux. (2) Pire : chaque
+    // relance (même celle de la rotation, qui ne prouve AUCUNE vraie
+    // détection) remettait à zéro "lastMicActivityAt" dans startMic(),
+    // ce qui retardait le chien de garde - le micro pouvait donc rester
+    // bloqué plus longtemps qu'avant, puisque son horloge de silence se
+    // faisait relancer toutes les 10s par la rotation elle-même.
+    //
+    // Nouvelle conclusion après plusieurs tests réels aujourd'hui :
+    // AUCUN redémarrage en place (nouveau moteur, continuous=false,
+    // relâchement des vidéos, flux séparé) n'a jamais rétabli une vraie
+    // détection une fois le moteur devenu sourd - seul un vrai
+    // rechargement de la page y arrive (c'est la seule chose qui
+    // réinitialise tout côté iOS). Donc on ne perd plus de temps à
+    // réessayer plusieurs fois en place : dès le 1er silence anormal
+    // détecté, on relâche les vidéos puis on recharge directement.
     setInterval(() => {
       if (!micOn || paused || !lastMicActivityAt) return;
       const silentFor = Date.now() - lastMicActivityAt;
       if (silentFor > MIC_WATCHDOG_MS) {
         consecutiveWatchdogRestarts += 1;
-        const restartDelay = Math.min(500 * consecutiveWatchdogRestarts, 2500);
-        dbg("⚠️ chien de garde micro (#" + consecutiveWatchdogRestarts + ") : aucune activité depuis " + silentFor + "ms -> coupure immédiate, redémarrage dans " + restartDelay + "ms");
-        if (consecutiveWatchdogRestarts >= 3) {
-          dbg("micro probablement bloqué (3+ redémarrages sans détection) -> rechargement automatique de la page (aucun geste requis)");
-          try {
-            sessionStorage.setItem("sensorielleSonASigneAutoReopen", "1");
-            location.reload();
-            return;
-          } catch (e) {
-            dbg("rechargement automatique impossible (" + (e && e.message ? e.message : e) + ") -> filet de secours manuel affiché");
-            if (micStuckBtn) micStuckBtn.hidden = false;
+        dbg("⚠️ chien de garde micro (#" + consecutiveWatchdogRestarts + ") : aucune activité depuis " + silentFor + "ms -> rechargement automatique de la page (aucun geste requis)");
+        releaseVideoElementsForMicRecovery();
+        try {
+          sessionStorage.setItem("sensorielleSonASigneAutoReopen", "1");
+          location.reload();
+          return;
+        } catch (e) {
+          dbg("rechargement automatique impossible (" + (e && e.message ? e.message : e) + ") -> filet de secours manuel affiché");
+          if (micStuckBtn) micStuckBtn.hidden = false;
+          lastMicActivityAt = Date.now();
+          lastRecognizerErrorType = "watchdog";
+          if (recognizer) {
+            recognizer.onresult = null;
+            recognizer.onerror = null;
+            recognizer.onend = null;
+            try { recognizer.stop(); } catch (e2) {}
+            recognizer = null;
           }
+          setTimeout(() => { if (micOn && !paused) startMic(); }, 500);
         }
-        lastMicActivityAt = Date.now();
-        lastRecognizerErrorType = "watchdog";
-        if (consecutiveWatchdogRestarts >= 2) releaseVideoElementsForMicRecovery();
-        if (recognizer) {
-          recognizer.onresult = null;
-          recognizer.onerror = null;
-          recognizer.onend = null;
-          try { recognizer.stop(); } catch (e) {}
-          recognizer = null;
-        }
-        setTimeout(() => { if (micOn && !paused) startMic(); }, restartDelay);
       }
     }, 1000);
 
