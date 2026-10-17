@@ -4825,6 +4825,25 @@ if (typeof document !== "undefined") {
     const AI_FALLBACK_DEBOUNCE_MS = 1200;
     let aiFallbackDebounceTimer = null;
 
+    // Un morceau "final" qui n'ajoute AUCUN mot de contenu (mots de
+    // remplissage comme "oui", "en fait"...) ne doit JAMAIS redéclencher
+    // un appel IA — signalé le 2026-10-17 ("ça marche mais pas fluide") :
+    // après "Did you have... la planète.", les mots de remplissage
+    // "Oui." puis "En fait." redemandaient chaque fois à l'IA de
+    // reformuler TOUTE la phrase, qui changeait parfois d'avis sur des
+    // mots déjà en file (pas encore montrés) — des signes déjà chargés
+    // disparaissaient pour être remplacés par d'autres, donnant une
+    // impression saccadée. On ne redemande maintenant à l'IA que si LE
+    // NOUVEAU morceau reconnu contient lui-même au moins un mot qui
+    // n'est pas purement grammatical.
+    function textHasContentWord(text) {
+      const rawWords = text.split(/\s+/).filter(Boolean);
+      return rawWords.some((raw) => {
+        const norm = normalize(raw);
+        return norm && !STOPWORDS.has(norm);
+      });
+    }
+
     function handleFinalTranscript(text) {
       const hadWords = /\S/.test(text);
       if (!hadWords) return;
@@ -4840,13 +4859,17 @@ if (typeof document !== "undefined") {
         lastUtteranceText = text;
         renderUtterance(text);
       }
-      if (aiFallbackDebounceTimer) clearTimeout(aiFallbackDebounceTimer);
-      const textAtSchedule = lastUtteranceText;
-      const tokenAtSchedule = playToken;
-      aiFallbackDebounceTimer = setTimeout(() => {
-        aiFallbackDebounceTimer = null;
-        maybeTryAiFallback(textAtSchedule, tokenAtSchedule);
-      }, AI_FALLBACK_DEBOUNCE_MS);
+      if (textHasContentWord(text)) {
+        if (aiFallbackDebounceTimer) clearTimeout(aiFallbackDebounceTimer);
+        const textAtSchedule = lastUtteranceText;
+        const tokenAtSchedule = playToken;
+        aiFallbackDebounceTimer = setTimeout(() => {
+          aiFallbackDebounceTimer = null;
+          maybeTryAiFallback(textAtSchedule, tokenAtSchedule);
+        }, AI_FALLBACK_DEBOUNCE_MS);
+      } else {
+        dbg("IA: morceau \"" + text + "\" ignoré (aucun mot de contenu) -> pas de nouvel appel");
+      }
     }
 
     // ---- Repli IA (reformulation avec le vocabulaire disponible) ----------
@@ -4884,6 +4907,7 @@ if (typeof document !== "undefined") {
     ]);
 
     let aiFallbackAbort = null;
+    let aiFallbackAbortToken = null;
 
     async function maybeTryAiFallback(text, token) {
       if (!AI_FALLBACK_URL) return;
@@ -4895,17 +4919,24 @@ if (typeof document !== "undefined") {
       // au moins un mot qui n'est pas purement grammatical), et vient
       // affiner/remplacer ce qui joue déjà, sans jamais retarder le tout
       // premier mot affiché (la correspondance directe reste immédiate).
-      const rawWords = text.split(/\s+/).filter(Boolean);
-      const hasContentWord = rawWords.some((raw) => {
-        const norm = normalize(raw);
-        return norm && !STOPWORDS.has(norm);
-      });
-      if (!hasContentWord) { dbg("IA: pas déclenchée (aucun mot de contenu)"); return; }
+      if (!textHasContentWord(text)) { dbg("IA: pas déclenchée (aucun mot de contenu)"); return; }
       dbg("IA: appel en cours pour \"" + text + "\"...");
 
-      if (aiFallbackAbort) aiFallbackAbort.abort();
+      // Ne jamais annuler un appel encore en vol pour une AUTRE phrase
+      // (token différent) — corrigé le 2026-10-17 : une phrase complète
+      // ("Nos merci, c'est ça.") pouvait voir sa réponse IA annulée
+      // simplement parce qu'une phrase SUIVANTE, sans aucun rapport
+      // ("Allô."), venait de déclencher son propre appel 1,2s plus tard.
+      // L'ancien appel se termine alors tranquillement en arrière-plan ;
+      // s'il n'est plus pertinent, la vérification "token !== playToken"
+      // plus bas l'ignorera sans dégât. Seul un appel pour LA MÊME
+      // phrase (même token, ex. un ajout "SUITE" arrivé entre-temps) doit
+      // annuler le précédent, pour ne garder que la réponse la plus à
+      // jour de cette phrase précise.
+      if (aiFallbackAbort && aiFallbackAbortToken === token) aiFallbackAbort.abort();
       const controller = new AbortController();
       aiFallbackAbort = controller;
+      aiFallbackAbortToken = token;
       const timer = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
       try {
         const resp = await fetch(AI_FALLBACK_URL, {
@@ -4959,7 +4990,7 @@ if (typeof document !== "undefined") {
         dbg("IA: ÉCHEC (" + (e && e.name) + ": " + (e && e.message) + ")");
       } finally {
         clearTimeout(timer);
-        if (aiFallbackAbort === controller) aiFallbackAbort = null;
+        if (aiFallbackAbort === controller) { aiFallbackAbort = null; aiFallbackAbortToken = null; }
       }
     }
 
