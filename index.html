@@ -1280,6 +1280,16 @@
         
       </div>
       <div class="nav-right">
+        <div class="nav-account" id="navAccount">
+          <button class="nav-account-btn" id="navAccountBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Compte">
+            <span class="nav-account-avatar" id="navAccountAvatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.7"></circle><path d="M4.8 19.2c1.4-3.1 4-4.7 7.2-4.7s5.8 1.6 7.2 4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg></span>
+            <span class="nav-account-label" id="navAccountLabel">Se connecter</span>
+          </button>
+          <div class="nav-account-menu" id="navAccountMenu" role="menu" hidden>
+            <div class="nav-account-email" id="navAccountEmail"></div>
+            <button type="button" class="nav-account-signout" id="navAccountSignOut" role="menuitem">Déconnexion</button>
+          </div>
+        </div>
         <a class="nav-cta js-live-cta" href="#essayer" data-scroll>Essayer</a>
         <button class="nav-burger" id="navBurger" aria-label="Menu" aria-expanded="false" aria-controls="mobileMenu">
           <span></span><span></span><span></span>
@@ -5582,6 +5592,21 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
 .soon-badge{display:inline-block;vertical-align:middle;margin-left:10px;padding:4px 10px;border-radius:99px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8b6f14;background:#fdf1cf;border:1px solid #f1dfa0}
 .mode-card.camera-card{opacity:.82}
 
+.nav-account{position:relative}
+.nav-account-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px 0 10px;border-radius:999px;border:1px solid #15182b1c;background:#ffffffb3;color:#151a31;font:600 11.5px var(--s-display,'Inter',sans-serif);cursor:pointer;transition:background .15s,border-color .15s,transform .15s}
+.nav-account-btn:hover{background:#fff;border-color:#15182b33;transform:translateY(-1px)}
+.nav-account-avatar{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#efedf8;color:#5B34D6;flex:none}
+.nav-account-avatar svg{width:15px;height:15px;display:block}
+.nav-account.is-authed .nav-account-avatar{background:#5B34D6;color:#fff;font:700 11px var(--s-display,inherit)}
+.nav-account.is-authed .nav-account-avatar svg{display:none}
+.nav-account-label{white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis}
+.nav-account-menu{position:absolute;top:calc(100% + 10px);right:0;min-width:210px;background:#fff;border-radius:12px;box-shadow:0 20px 45px -15px rgba(11,15,34,.3);border:1px solid #15182b14;padding:10px;z-index:120}
+.nav-account-menu[hidden]{display:none}
+.nav-account-email{font-size:11.5px;color:#62677A;padding:4px 8px 10px;border-bottom:1px solid #15182b12;margin-bottom:6px;word-break:break-all}
+.nav-account-signout{width:100%;text-align:left;background:none;border:none;padding:8px;border-radius:7px;font:600 12.5px var(--s-display,inherit);color:#a4302a;cursor:pointer}
+.nav-account-signout:hover{background:#fdeeee}
+@media(max-width:700px){.nav-account-label{display:none}.nav-account-btn{padding:0;width:38px;height:38px;justify-content:center;border-radius:50%}}
+
 #sensoAuthOverlay{position:fixed;inset:0;z-index:999990;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,13,37,.55);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .18s ease}
 #sensoAuthOverlay.open{opacity:1;pointer-events:auto}
 #sensoAuthOverlay .senso-modal{position:relative;width:100%;max-width:380px;background:#fff;border-radius:18px;box-shadow:0 30px 70px -20px rgba(11,15,34,.35);padding:30px 28px 26px;transform:translateY(8px) scale(.98);transition:transform .18s ease;font-family:var(--s-display,'Inter',sans-serif)}
@@ -5683,6 +5708,13 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
   const googleBtn = document.getElementById("sensoGoogleBtn");
   const toggleWrap = document.getElementById("sensoAuthToggleWrap");
   const titleEl = document.getElementById("sensoAuthTitle");
+  const navAccount = document.getElementById("navAccount");
+  const navAccountBtn = document.getElementById("navAccountBtn");
+  const navAccountMenu = document.getElementById("navAccountMenu");
+  const navAccountAvatar = document.getElementById("navAccountAvatar");
+  const navAccountLabel = document.getElementById("navAccountLabel");
+  const navAccountEmail = document.getElementById("navAccountEmail");
+  const navAccountSignOut = document.getElementById("navAccountSignOut");
   if (!speechBtn || !overlay || !form) return;
 
   const DEFAULT_SPEECH_NOTE = speechNote ? speechNote.textContent : "";
@@ -5781,6 +5813,52 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
     }
   });
 
+  function closeNavMenu() {
+    if (navAccountMenu) navAccountMenu.hidden = true;
+    if (navAccountBtn) navAccountBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function updateNavAccount() {
+    if (!navAccount || !navAccountBtn) return;
+    if (currentUser) {
+      const email = currentUser.email || "";
+      navAccount.classList.add("is-authed");
+      navAccountLabel.textContent = email ? email.split("@")[0] : "Mon compte";
+      navAccountAvatar.textContent = email ? email[0].toUpperCase() : "";
+      if (navAccountEmail) navAccountEmail.textContent = email;
+    } else {
+      navAccount.classList.remove("is-authed");
+      navAccountLabel.textContent = "Se connecter";
+      navAccountAvatar.textContent = "";
+      closeNavMenu();
+    }
+  }
+
+  if (navAccountBtn) {
+    navAccountBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (currentUser) {
+        const willOpen = navAccountMenu.hidden;
+        navAccountMenu.hidden = !willOpen;
+        navAccountBtn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      } else {
+        openModal(null);
+      }
+    });
+  }
+  if (navAccountSignOut) {
+    navAccountSignOut.addEventListener("click", async () => {
+      closeNavMenu();
+      await sb.auth.signOut();
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (navAccount && !navAccount.contains(e.target)) closeNavMenu();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeNavMenu();
+  });
+
   function updateSpeechNote() {
     if (!speechNote) return;
     if (currentUser) {
@@ -5811,6 +5889,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
   sb.auth.onAuthStateChange((event, session) => {
     currentUser = (session && session.user) || null;
     updateSpeechNote();
+    updateNavAccount();
     if (currentUser && overlay.classList.contains("open")) {
       const action = pendingAction;
       closeModal();
@@ -5821,6 +5900,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
   sb.auth.getSession().then(({ data }) => {
     currentUser = (data && data.session && data.session.user) || null;
     updateSpeechNote();
+    updateNavAccount();
   });
 })();
 </script>
