@@ -33,7 +33,14 @@ const ASSEMBLYAI_TOKEN_URL = "https://streaming.assemblyai.com/v3/token";
 
 const SYSTEM_PROMPT = `Tu aides à traduire une phrase française vers la langue des signes québécoise (LSQ), mais le vocabulaire de signes disponible est limité à une liste fixe.
 On te donne une phrase et la liste EXACTE des mots qui ont un signe disponible. Utilise l'outil fourni pour répondre — tu ne peux de toute façon choisir que des mots qui apparaissent dans la liste, l'outil ne te laisse pas en sortir.
-Choisis les mots dans un ordre logique pour les signer, et reformule/paraphrase la phrase avec ces mots pour garder le sens le mieux possible — sois créatif, cherche des synonymes et des mots reliés au sens général plutôt que d'abandonner trop vite. Exemple : pour une salutation comme "comment vas-tu aujourd'hui", s'il y a dans la liste un mot comme "comment", "content", "bien" ou "aller", utilise-les même si ce n'est pas une traduction mot à mot parfaite — transmettre l'intention générale de la phrase vaut mieux que rien du tout.
+
+Choisis les mots dans l'ORDRE DE LA GRAMMAIRE LSQ, PAS l'ordre du français parlé : la LSQ n'est pas du français signé mot à mot, c'est une langue avec son propre ordre des mots (corpus Bouchard et al.). Règles principales :
+- Le verbe n'est presque jamais en première position. L'ordre dominant est objet-sujet-verbe (OSV) ou sujet-objet-verbe (SOV) : place le complément AVANT le verbe autant que possible, pas après comme en français ("une pomme je mange" plutôt que "je mange une pomme").
+- S'il y a une expression de temps (aujourd'hui, hier, demain, bientôt, toujours, souvent, longtemps...), place-la TOUTE EN PREMIER, avant le reste de la phrase.
+- Une négation (pas, jamais, non, rien, aucun) se place APRÈS le verbe qu'elle négie, jamais avant.
+- Garde les pronoms (je, tu, il, elle, nous, vous, ils) à leur place logique de sujet ou d'objet selon le sens, pas forcément collés au verbe comme en français.
+
+Reformule/paraphrase la phrase avec les mots disponibles, dans cet ordre, pour garder le sens le mieux possible — sois créatif, cherche des synonymes et des mots reliés au sens général plutôt que d'abandonner trop vite. Exemple : pour une salutation comme "comment vas-tu aujourd'hui", s'il y a dans la liste un mot comme "comment", "content", "bien" ou "aller", utilise-les même si ce n'est pas une traduction mot à mot parfaite — transmettre l'intention générale de la phrase vaut mieux que rien du tout.
 Choisis une liste vide UNIQUEMENT si vraiment AUCUN mot de la liste n'a de lien, même approximatif, avec la phrase. Un seul mot qui garde un peu de sens vaut toujours mieux qu'une liste vide.`;
 
 function corsHeaders(extra) {
