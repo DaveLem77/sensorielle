@@ -6,10 +6,11 @@ signe, telle qu'elle s'affiche normalement, puis telle qu'elle
 s'affiche quand ce mot tombe dans la phrase reconnue au moment ou
 le marqueur grammatical est actif (question, exclamation, negation).
 
-Sur le vrai site l'effet est anime (le cadre penche en douceur, la
-bande des sourcils s'allume/se fonce en transition) - ici ce sont
-des images fixes qui montrent l'etat final de cette transition,
-pour comparer rapidement sans devoir lancer le site.
+Sur le vrai site l'effet est anime et discret : une petite bande au
+niveau du front/sourcils est etiree ou compressee en douceur (image
+reelle redecoupee en deux bandes, pas de calque de couleur), ce qui
+donne un sourcil qui se leve ou se fronce legerement. Ici ce sont des
+images fixes qui montrent l'etat final de cette transition.
 
 - demander (Question)
   Contexte : "Tu veux demander ?"

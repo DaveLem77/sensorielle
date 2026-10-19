@@ -1087,8 +1087,10 @@
      (calque colore + mix-blend-mode juste au-dessus) a ete jugee par
      David comme ne changeant "litteralement rien" a l'expression du
      visage - retiree entierement. Celle-ci deplace reellement des
-     pixels : une fenetre fixe du front (voir WIN_TOP_FRAC/WIN_BOTTOM_FRAC
-     plus bas dans le JS) est coupee en deux bandes horizontales (front /
+     pixels : une fenetre du front (voir WARP_WINDOWS plus bas dans le JS - une
+     fenetre PAR MOT, mesuree une fois hors-ligne avec OpenCV pour ne
+     jamais mordre sur les yeux, voir le commentaire a cote de
+     WARP_WINDOWS) est coupee en deux bandes horizontales (front /
      sourcils) et chaque bande est redessinee a une taille differente sur
      un <canvas> colle exactement par-dessus la video (meme calcul de
      cover/object-position que .speech-video). Deplacer la frontiere vers
@@ -4573,26 +4575,44 @@ if (typeof document !== "undefined") {
 
     // Warp front/sourcils v2 (2026-10-19, remplace le calque colore juge
     // par David comme ne changeant "litteralement rien" a l'expression).
-    // Fenetre fixe (fractions calibrees a la main sur de vraies captures,
-    // "bonjour"/"bravo"/"jamais" - 720x1094, cadrage identique d'un clip a
-    // l'autre) coupee en deux bandes au niveau SRC_SPLIT_FRAC ; chaque
-    // bande est redessinee avec drawImage a une hauteur differente,
+    // Chaque fenetre est coupee en deux bandes au niveau SRC_SPLIT_FRAC ;
+    // chaque bande est redessinee avec drawImage a une hauteur differente,
     // deplacant la frontiere vers DEST_SPLIT_FRAC (haut = sourcils qui
     // montent, bas = sourcils qui se froncent). Les deux bandes de sortie
     // couvrent TOUJOURS exactement toute la hauteur du canvas (aucun trou,
     // aucun chevauchement), donc aucune copie superposee a une position
     // decalee - c'est precisement ce qui causait l'ancien bug de "visage
-    // dedouble". Aucune detection de visage en direct : si un oeil reel
-    // montre un decalage sur certains clips, ce sont CES fractions qu'il
-    // faut corriger, rien d'autre.
-    const WIN_TOP_FRAC = 0.205;
-    const WIN_BOTTOM_FRAC = 0.315;
-    const SRC_SPLIT_FRAC = 0.59;
+    // dedouble".
+    //
+    // IMPORTANT (correction du 2026-10-19, apres retour de David : "ca
+    // deforme les yeux") : la toute premiere version utilisait UNE SEULE
+    // fenetre fixe (memes fractions pour les 227 mots), calibree a la main
+    // sur seulement 3-5 captures. En testant en vrai, elle mordait sur les
+    // yeux sur un paquet d'autres mots - le cadrage de la camera varie
+    // assez d'un clip a l'autre (inclinaison de tete pendant le signe)
+    // pour que ça ne soit pas fiable. Plutot que de deviner une seule
+    // fenetre "moyenne", chaque mot a maintenant SA PROPRE fenetre,
+    // mesuree une fois hors-ligne (jamais au chargement de la page, donc
+    // toujours aucune detection en direct - c'est juste une table de
+    // donnees statique comme VIDEOS plus haut) : position des yeux
+    // detectee avec OpenCV (Haar cascade) sur plusieurs images extraites
+    // de la vraie plage jouee de chacun des 227 clips, puis fenetre
+    // placee avec au moins 0.025 de marge AU-DESSUS du pire cas mesure
+    // pour ce mot - verifie par un script qui echoue si un seul mot ne
+    // respecte pas cette marge. WARP_WINDOW_FALLBACK est utilise pour un
+    // mot absent de la table (fichier local ajoute par un visiteur, par
+    // exemple) : fenetre la plus haute/prudente de tous les mots mesures.
+    const WARP_WINDOWS = {"10":{top:0.1997,bottom:0.2547},"100":{top:0.1951,bottom:0.2501},"1000":{top:0.197,bottom:0.252},"12":{top:0.1988,bottom:0.2538},"17":{top:0.1951,bottom:0.2501},"18":{top:0.1979,bottom:0.2529},"19":{top:0.1961,bottom:0.2511},"2":{top:0.1961,bottom:0.2511},"200":{top:0.2006,bottom:0.2556},"2000":{top:0.1961,bottom:0.2511},"5":{top:0.2006,bottom:0.2556},"50":{top:0.1988,bottom:0.2538},"8":{top:0.1997,bottom:0.2547},"Côté":{top:0.1951,bottom:0.2501},"Déjà":{top:0.1924,bottom:0.2474},"avec":{top:0.1933,bottom:0.2483},"avoir":{top:0.1997,bottom:0.2547},"avril":{top:0.1915,bottom:0.2465},"b":{top:0.1942,bottom:0.2492},"banane":{top:0.1942,bottom:0.2492},"bas":{top:0.1961,bottom:0.2511},"baseball":{top:0.1842,bottom:0.2392},"beau":{top:0.1961,bottom:0.2511},"beaucoup":{top:0.197,bottom:0.252},"bibliotheque":{top:0.1933,bottom:0.2483},"blanc":{top:0.1988,bottom:0.2538},"bleu":{top:0.1942,bottom:0.2492},"boire":{top:0.1979,bottom:0.2529},"bois":{top:0.197,bottom:0.252},"bon":{top:0.1851,bottom:0.2401},"bonbon":{top:0.1979,bottom:0.2529},"bonjour":{top:0.1951,bottom:0.2501},"bouche":{top:0.1979,bottom:0.2529},"bout":{top:0.1906,bottom:0.2456},"bras":{top:0.1942,bottom:0.2492},"bravo":{top:0.1933,bottom:0.2483},"brebis":{top:0.1961,bottom:0.2511},"bruit":{top:0.1933,bottom:0.2483},"brun":{top:0.1951,bottom:0.2501},"bébé":{top:0.1979,bottom:0.2529},"c":{top:0.1961,bottom:0.2511},"café":{top:0.1988,bottom:0.2538},"campagne":{top:0.1924,bottom:0.2474},"canard":{top:0.1933,bottom:0.2483},"capable":{top:0.2024,bottom:0.2574},"carotte":{top:0.1988,bottom:0.2538},"carte":{top:0.1942,bottom:0.2492},"castor":{top:0.1805,bottom:0.2355},"celui":{top:0.1942,bottom:0.2492},"certains":{top:0.1924,bottom:0.2474},"chaise":{top:0.1878,bottom:0.2428},"chanson":{top:0.1951,bottom:0.2501},"chanter":{top:0.197,bottom:0.252},"chapeau":{top:0.197,bottom:0.252},"chaque":{top:0.1961,bottom:0.2511},"chat":{top:0.1878,bottom:0.2428},"chaud":{top:0.1961,bottom:0.2511},"chemin":{top:0.1979,bottom:0.2529},"chercher":{top:0.1979,bottom:0.2529},"cheval":{top:0.1951,bottom:0.2501},"cheveux":{top:0.1979,bottom:0.2529},"chez":{top:0.197,bottom:0.252},"chien":{top:0.1933,bottom:0.2483},"chose":{top:0.197,bottom:0.252},"ciel":{top:0.1851,bottom:0.2401},"classe":{top:0.1988,bottom:0.2538},"cochon":{top:0.1961,bottom:0.2511},"coeur":{top:0.2006,bottom:0.2556},"comme":{top:0.1924,bottom:0.2474},"comment":{top:0.1988,bottom:0.2538},"communiquer":{top:0.1915,bottom:0.2465},"connaitre":{top:0.1988,bottom:0.2538},"content":{top:0.197,bottom:0.252},"coq":{top:0.1988,bottom:0.2538},"cou":{top:0.1997,bottom:0.2547},"coup":{top:0.1979,bottom:0.2529},"cour":{top:0.1979,bottom:0.2529},"cousin":{top:0.1979,bottom:0.2529},"crapaud":{top:0.1823,bottom:0.2373},"d":{top:0.1933,bottom:0.2483},"dans":{top:0.1942,bottom:0.2492},"debout":{top:0.2024,bottom:0.2574},"demain":{top:0.1979,bottom:0.2529},"demander":{top:0.1924,bottom:0.2474},"dent":{top:0.1997,bottom:0.2547},"depuis":{top:0.1979,bottom:0.2529},"dernier":{top:0.2015,bottom:0.2565},"derriere":{top:0.1997,bottom:0.2547},"deuxieme":{top:0.1933,bottom:0.2483},"devant":{top:0.1933,bottom:0.2483},"devenir":{top:0.1951,bottom:0.2501},"devoir":{top:0.1942,bottom:0.2492},"dimanche":{top:0.1988,bottom:0.2538},"dire":{top:0.197,bottom:0.252},"donc":{top:0.1924,bottom:0.2474},"donner":{top:0.1878,bottom:0.2428},"doux":{top:0.1997,bottom:0.2547},"décembre":{top:0.1933,bottom:0.2483},"e":{top:0.1951,bottom:0.2501},"eau":{top:0.1951,bottom:0.2501},"encore":{top:0.1979,bottom:0.2529},"enfant":{top:0.2015,bottom:0.2565},"enfin":{top:0.1961,bottom:0.2511},"enseignant":{top:0.1979,bottom:0.2529},"ensuite":{top:0.1887,bottom:0.2437},"entendant":{top:0.197,bottom:0.252},"entendre":{top:0.1961,bottom:0.2511},"entre":{top:0.1988,bottom:0.2538},"et":{top:0.1942,bottom:0.2492},"f":{top:0.2006,bottom:0.2556},"face":{top:0.1869,bottom:0.2419},"faire":{top:0.1951,bottom:0.2501},"famille":{top:0.2006,bottom:0.2556},"fantome":{top:0.1961,bottom:0.2511},"faux":{top:0.197,bottom:0.252},"femme":{top:0.1942,bottom:0.2492},"fenetre":{top:0.1933,bottom:0.2483},"feu":{top:0.1933,bottom:0.2483},"feuille":{top:0.1897,bottom:0.2447},"figure":{top:0.1906,bottom:0.2456},"fille":{top:0.1961,bottom:0.2511},"fils":{top:0.1924,bottom:0.2474},"findesemaine":{top:0.1933,bottom:0.2483},"finir":{top:0.1933,bottom:0.2483},"fleur":{top:0.1942,bottom:0.2492},"fort":{top:0.1897,bottom:0.2447},"forêt":{top:0.1878,bottom:0.2428},"froid":{top:0.1878,bottom:0.2428},"fruit":{top:0.1997,bottom:0.2547},"frère":{top:0.1942,bottom:0.2492},"février":{top:0.197,bottom:0.252},"fête":{top:0.1915,bottom:0.2465},"g":{top:0.1897,bottom:0.2447},"garcon":{top:0.1997,bottom:0.2547},"girafe":{top:0.186,bottom:0.241},"gorille":{top:0.1842,bottom:0.2392},"grand":{top:0.1924,bottom:0.2474},"grand-mère":{top:0.1906,bottom:0.2456},"grand-parents":{top:0.1906,bottom:0.2456},"grand-père":{top:0.2015,bottom:0.2565},"grenouille":{top:0.1933,bottom:0.2483},"gris":{top:0.1988,bottom:0.2538},"gros":{top:0.2006,bottom:0.2556},"h":{top:0.1988,bottom:0.2538},"haut":{top:0.1869,bottom:0.2419},"heureux":{top:0.197,bottom:0.252},"hier":{top:0.1961,bottom:0.2511},"histoire":{top:0.1961,bottom:0.2511},"hiver":{top:0.1915,bottom:0.2465},"homme":{top:0.1942,bottom:0.2492},"i":{top:0.2015,bottom:0.2565},"ici":{top:0.1979,bottom:0.2529},"idée":{top:0.1915,bottom:0.2465},"ils-elles":{top:0.1951,bottom:0.2501},"image":{top:0.1933,bottom:0.2483},"insecte":{top:0.1887,bottom:0.2437},"j":{top:0.1924,bottom:0.2474},"jamais":{top:0.197,bottom:0.252},"janvier":{top:0.1961,bottom:0.2511},"jardin":{top:0.1887,bottom:0.2437},"jaune":{top:0.197,bottom:0.252},"je":{top:0.1988,bottom:0.2538},"jeu":{top:0.1933,bottom:0.2483},"jeudi":{top:0.1979,bottom:0.2529},"joie":{top:0.1851,bottom:0.2401},"joli":{top:0.2006,bottom:0.2556},"jouer":{top:0.1924,bottom:0.2474},"jour":{top:0.1869,bottom:0.2419},"journée":{top:0.1897,bottom:0.2447},"joyeux":{top:0.1915,bottom:0.2465},"juillet":{top:0.1787,bottom:0.2337},"juin":{top:0.1961,bottom:0.2511},"jument":{top:0.1906,bottom:0.2456},"k":{top:0.1988,bottom:0.2538},"l":{top:0.1961,bottom:0.2511},"laid":{top:0.1942,bottom:0.2492},"lapin":{top:0.1906,bottom:0.2456},"large":{top:0.1842,bottom:0.2392},"lecture":{top:0.2006,bottom:0.2556},"lettre":{top:0.2034,bottom:0.2584},"leur":{top:0.1997,bottom:0.2547},"lever":{top:0.2034,bottom:0.2584},"leçon":{top:0.1933,bottom:0.2483},"lion":{top:0.197,bottom:0.252},"lire":{top:0.1897,bottom:0.2447},"lit":{top:0.1924,bottom:0.2474},"livre":{top:0.1951,bottom:0.2501},"loin":{top:0.1906,bottom:0.2456},"long":{top:0.1979,bottom:0.2529},"lorsque":{top:0.197,bottom:0.252},"loup":{top:0.1997,bottom:0.2547},"lundi":{top:0.1933,bottom:0.2483},"lune":{top:0.1951,bottom:0.2501},"là":{top:0.1878,bottom:0.2428},"légume":{top:0.1906,bottom:0.2456},"m":{top:0.1915,bottom:0.2465},"madame":{top:0.1924,bottom:0.2474},"mai":{top:0.1924,bottom:0.2474},"main":{top:0.1933,bottom:0.2483},"maintenant":{top:0.1951,bottom:0.2501},"mais":{top:0.1979,bottom:0.2529},"maison":{top:0.1897,bottom:0.2447},"mal":{top:0.1961,bottom:0.2511},"malade":{top:0.1915,bottom:0.2465},"malentendant":{top:0.1915,bottom:0.2465},"maman":{top:0.1951,bottom:0.2501},"manger":{top:0.1933,bottom:0.2483},"marche":{top:0.197,bottom:0.252},"marcher":{top:0.186,bottom:0.241},"mardi":{top:0.1997,bottom:0.2547},"marier":{top:0.1906,bottom:0.2456},"mars":{top:0.1869,bottom:0.2419},"matin":{top:0.186,bottom:0.241},"me":{top:0.1778,bottom:0.2328},"moment":{top:0.1833,bottom:0.2383},"mon":{top:0.1887,bottom:0.2437},"monsieur":{top:0.1851,bottom:0.2401},"montagne":{top:0.1833,bottom:0.2383},"monter":{top:0.1951,bottom:0.2501},"même":{top:0.1897,bottom:0.2447},"seul":{top:0.1988,bottom:0.2538},"école":{top:0.1979,bottom:0.2529},"écrire":{top:0.1979,bottom:0.2529},"élève":{top:0.1988,bottom:0.2538},"éléphant":{top:0.1897,bottom:0.2447}};
+    const WARP_WINDOW_FALLBACK = {top:0.1778,bottom:0.2328};
+    function getWarpWindow(key) {
+      return (key && WARP_WINDOWS[key]) || WARP_WINDOW_FALLBACK;
+    }
+    const SRC_SPLIT_FRAC = 0.60;
     const WARP_TARGETS = {
       "question-yn": 0.40,
-      "question-wh": 0.74,
-      exclamation: 0.32,
-      negation: 0.70,
+      "question-wh": 0.82,
+      exclamation: 0.28,
+      negation: 0.78,
     };
     const WARP_EASE_MS = 260;
 
@@ -4637,8 +4657,9 @@ if (typeof document !== "undefined") {
       const scale = Math.max(cw / vw, ch / vh);
       const offsetX = (cw - vw * scale) * 0.5;
       const offsetY = (ch - vh * scale) * 0.12;
-      const winTopVid = WIN_TOP_FRAC * vh;
-      const winBottomVid = WIN_BOTTOM_FRAC * vh;
+      const win = getWarpWindow(currentlyShowingKey);
+      const winTopVid = win.top * vh;
+      const winBottomVid = win.bottom * vh;
       const winHVid = winBottomVid - winTopVid;
       const srcSplitVid = winTopVid + winHVid * SRC_SPLIT_FRAC;
 
