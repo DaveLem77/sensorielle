@@ -1305,8 +1305,8 @@
 <span class="demo-direction" aria-hidden="true">FR <span>→</span> LSQ</span>
 </div></section>
 <section class="translation-section wrap" id="essayer"><div class="section-heading translator-heading"><h2>Essayez pour vrai.</h2><p>Choisissez votre façon de vous exprimer.</p></div>
-<div class="mode-grid"><article class="mode-card camera-card"><div class="mode-top"><span class="mode-icon">↗</span><span>SIGNES → FRANÇAIS</span><span>01</span></div><h3>Je signe.</h3><p>Vos signes reconnus, affichés et lus en français.</p><div class="mode-actions"><button class="new-button" id="mainBtn" disabled><span id="mainBtnLabel">Chargement…</span><span aria-hidden="true">↗</span></button><span id="loadStatusText" class="mode-note" role="status">Préparation de la caméra</span></div></article>
-<article class="mode-card voice-card"><div class="mode-top"><span class="mode-icon">≋</span><span>FRANÇAIS → SIGNES</span><span>02</span></div><h3>Je parle.</h3><p>Votre voix, les signes disponibles à l’écran.</p><div class="mode-actions"><button class="new-button secondary" id="speechModeBtn" type="button">Activer le microphone <span aria-hidden="true">↗</span></button><span class="mode-note">Autorisez le micro lorsque le navigateur le demande.</span></div></article></div>
+<div class="mode-grid"><article class="mode-card camera-card"><div class="mode-top"><span class="mode-icon">↗</span><span>SIGNES → FRANÇAIS</span><span>01</span></div><h3>Je signe. <span class="soon-badge">À venir</span></h3><p>Vos signes reconnus, affichés et lus en français.</p><div class="mode-actions"><button class="new-button" id="mainBtn" disabled aria-disabled="true"><span id="mainBtnLabel">À venir</span><span aria-hidden="true">↗</span></button><span id="loadStatusText" class="mode-note" role="status">Cette fonctionnalité arrive bientôt.</span></div></article>
+<article class="mode-card voice-card"><div class="mode-top"><span class="mode-icon">≋</span><span>FRANÇAIS → SIGNES</span><span>02</span></div><h3>Je parle.</h3><p>Votre voix, les signes disponibles à l’écran.</p><div class="mode-actions"><button class="new-button secondary" id="speechModeBtn" type="button">Activer le microphone <span aria-hidden="true">↗</span></button><span class="mode-note" id="speechAuthNote">Autorisez le micro lorsque le navigateur le demande.</span></div></article></div>
 <p class="prototype-note">Prototype · Signes disponibles uniquement, vidéos jouées mot à mot.</p></section>
 
 <section class="wrap how-section" id="comment"><div data-reveal><p class="eyebrow">03 / COMMENT ÇA MARCHE</p><h2>Pas juste des mots mis bout à bout.</h2><p class="how-intro">Sensorielle n’affiche pas un signe par mot prononcé. La phrase est comprise, reformulée si besoin, puis signée — avec une expression qui suit le ton.</p><div class="step-list"><article><span>01</span><div><h3>On vous écoute en direct</h3><p>La parole est transcrite au fur et à mesure, mot par mot, sans attendre la fin de la phrase.</p></div></article><article><span>02</span><div><h3>Une IA choisit les mots</h3><p>Si la phrase ne se traduit pas mot à mot en signes, une IA la reformule pour trouver ce qui se rapproche le plus d’une vraie formulation en LSQ.</p></div></article><article><span>03</span><div><h3>Le visage s’ajuste au ton</h3><p>Une question, une négation, une exclamation : l’expression du signeur s’ajuste légèrement pour porter l’intention, pas seulement les mains.</p></div></article></div></div><div class="face-diagram" data-reveal><div class="face-stage"><video class="face-video" id="howDemoVideo" muted autoplay playsinline></video><span class="face-tag">VRAIE VIDÉO</span></div><p class="face-caption">Le signe « bonjour », filmé normalement — aucune retouche ici. En direct, l’expression suit aussi le ton de la phrase.</p></div></section>
@@ -5570,5 +5570,257 @@ if (typeof document !== "undefined") {
 function playback(){if(hero.classList.contains('art-paused')||motion.matches)svg.pauseAnimations();else svg.unpauseAnimations();}
 new MutationObserver(playback).observe(hero,{attributes:true,attributeFilter:['class']});motion.addEventListener('change',playback);playback();
 if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListener('pointermove',e=>{if(motion.matches)return;const r=hero.getBoundingClientRect();hero.style.setProperty('--ribbon-x',((e.clientX-r.left)/r.width-.5)*20+'px');hero.style.setProperty('--ribbon-y',((e.clientY-r.top)/r.height-.5)*16+'px');},{passive:true});hero.addEventListener('pointerleave',()=>{hero.style.setProperty('--ribbon-x','0px');hero.style.setProperty('--ribbon-y','0px');});}
+})();
+</script>
+<!-- ============================================================
+     MODULE : Compte obligatoire (Supabase) — accès réservé au mode
+     "Je parle" (voix → signe). Ajouté le 2026-10-19 à la demande de
+     la personne. Le mode "Je signe" (signe → voix) reste verrouillé
+     ("À venir"), indépendamment de ce qui précède dans la page.
+     ============================================================ -->
+<style>
+.soon-badge{display:inline-block;vertical-align:middle;margin-left:10px;padding:4px 10px;border-radius:99px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8b6f14;background:#fdf1cf;border:1px solid #f1dfa0}
+.mode-card.camera-card{opacity:.82}
+
+#sensoAuthOverlay{position:fixed;inset:0;z-index:999990;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,13,37,.55);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .18s ease}
+#sensoAuthOverlay.open{opacity:1;pointer-events:auto}
+#sensoAuthOverlay .senso-modal{position:relative;width:100%;max-width:380px;background:#fff;border-radius:18px;box-shadow:0 30px 70px -20px rgba(11,15,34,.35);padding:30px 28px 26px;transform:translateY(8px) scale(.98);transition:transform .18s ease;font-family:var(--s-display,'Inter',sans-serif)}
+#sensoAuthOverlay.open .senso-modal{transform:translateY(0) scale(1)}
+.senso-modal h3{margin:0 0 6px;font-size:21px;letter-spacing:-.02em;color:#080D25}
+.senso-modal p.senso-sub{margin:0 0 22px;font-size:13px;line-height:1.6;color:#62677A}
+.senso-modal .senso-field{margin-bottom:12px}
+.senso-modal label{display:block;font-size:11px;font-weight:600;letter-spacing:.03em;color:#62677A;margin-bottom:6px;text-transform:uppercase}
+.senso-modal input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:9px;border:1px solid #e2e1ec;background:#faf9fd;font-size:14px;color:#080D25;font-family:inherit}
+.senso-modal input:focus{outline:2px solid #7C4DFF55;border-color:#7C4DFF}
+.senso-submit{width:100%;margin-top:6px;padding:13px 16px;border:none;border-radius:9px;background:#5B34D6;color:#fff;font:600 13px var(--s-display,inherit);cursor:pointer;transition:background .15s,transform .15s}
+.senso-submit:hover{background:#4a28b8}
+.senso-submit:disabled{opacity:.55;cursor:wait}
+.senso-google{width:100%;margin-top:10px;padding:12px 16px;border:1px solid #e2e1ec;border-radius:9px;background:#fff;color:#080D25;font:600 13px var(--s-display,inherit);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .15s}
+.senso-google:hover{background:#f6f5fa}
+.senso-google svg{width:17px;height:17px}
+.senso-divider{display:flex;align-items:center;gap:12px;margin:18px 0;color:#9b9eac;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.senso-divider::before,.senso-divider::after{content:'';flex:1;height:1px;background:#e9e8f1}
+.senso-toggle{margin-top:18px;text-align:center;font-size:12.5px;color:#62677A}
+.senso-toggle button{background:none;border:none;color:#5B34D6;font:600 12.5px inherit;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+.senso-close{position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:50%;border:none;background:#f3f2f8;color:#62677A;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.senso-close:hover{background:#e9e8f1}
+.senso-msg{margin-top:12px;font-size:12.5px;line-height:1.6;border-radius:8px;padding:10px 12px}
+.senso-msg.err{background:#fdeeee;color:#a4302a}
+.senso-msg.ok{background:#eafaf0;color:#1c7a45}
+.senso-msg[hidden]{display:none}
+</style>
+
+<div id="sensoAuthOverlay" role="dialog" aria-modal="true" aria-labelledby="sensoAuthTitle">
+  <div class="senso-modal">
+    <button class="senso-close" id="sensoAuthClose" type="button" aria-label="Fermer">×</button>
+    <h3 id="sensoAuthTitle">Créez votre compte</h3>
+    <p class="senso-sub">Un compte gratuit est requis pour essayer « Je parle ». Ça prend dix secondes.</p>
+    <form id="sensoAuthForm">
+      <div class="senso-field">
+        <label for="sensoAuthEmail">Courriel</label>
+        <input id="sensoAuthEmail" type="email" autocomplete="email" required>
+      </div>
+      <div class="senso-field">
+        <label for="sensoAuthPassword">Mot de passe</label>
+        <input id="sensoAuthPassword" type="password" autocomplete="current-password" required minlength="6">
+      </div>
+      <button type="submit" class="senso-submit" id="sensoAuthSubmit">Continuer</button>
+      <p class="senso-msg" id="sensoAuthMsg" hidden></p>
+    </form>
+    <div class="senso-divider">ou</div>
+    <button class="senso-google" id="sensoGoogleBtn" type="button">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.8 1.1 8 3l5.7-5.7C34.6 6 29.6 4 24 4c-7.5 0-14 4.2-17.7 10.7z"/><path fill="#4CAF50" d="M24 44c5.5 0 10.4-1.9 14.1-5.1l-6.5-5.5C29.6 35.2 26.9 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.6 5.1C9.9 39.6 16.4 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4.1 5.6l6.5 5.5C41.3 36 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+      Continuer avec Google
+    </button>
+    <p class="senso-toggle" id="sensoAuthToggleWrap">Déjà un compte ? <button type="button" id="sensoAuthToggle">Se connecter</button></p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function sensoAuthGate() {
+  if (typeof document === "undefined") return;
+
+  // ---- Verrouillage permanent du mode "Je signe" (signe -> voix) -------
+  // Ce bouton ne doit jamais être cliquable et doit toujours afficher
+  // "À venir", peu importe ce que fait par ailleurs le code caméra/
+  // MediaPipe plus haut dans la page.
+  (function lockMainBtn() {
+    const btn = document.getElementById("mainBtn");
+    const label = document.getElementById("mainBtnLabel");
+    const status = document.getElementById("loadStatusText");
+    if (!btn) return;
+    function enforce() {
+      if (!btn.disabled) btn.disabled = true;
+      btn.setAttribute("aria-disabled", "true");
+      if (label && label.textContent !== "À venir") label.textContent = "À venir";
+      if (status && status.textContent !== "Cette fonctionnalité arrive bientôt.") {
+        status.textContent = "Cette fonctionnalité arrive bientôt.";
+      }
+    }
+    enforce();
+    const mo = new MutationObserver(enforce);
+    mo.observe(btn, { attributes: true, attributeFilter: ["disabled"] });
+    if (label) mo.observe(label, { childList: true, characterData: true, subtree: true });
+    if (status) mo.observe(status, { childList: true, characterData: true, subtree: true });
+  })();
+
+  // ---- Compte obligatoire pour "Je parle" (voix -> signe) ---------------
+  if (!window.supabase || !window.supabase.createClient) return;
+  const SUPABASE_URL = "https://frinlluqjbwgctkzqoea.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_HQ1zoBcHrmetRRIopwKxgA_t4DAaNJZ";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const speechBtn = document.getElementById("speechModeBtn");
+  const speechNote = document.getElementById("speechAuthNote");
+  const overlay = document.getElementById("sensoAuthOverlay");
+  const closeBtn = document.getElementById("sensoAuthClose");
+  const form = document.getElementById("sensoAuthForm");
+  const emailInput = document.getElementById("sensoAuthEmail");
+  const passInput = document.getElementById("sensoAuthPassword");
+  const submitBtn = document.getElementById("sensoAuthSubmit");
+  const msgEl = document.getElementById("sensoAuthMsg");
+  const googleBtn = document.getElementById("sensoGoogleBtn");
+  const toggleWrap = document.getElementById("sensoAuthToggleWrap");
+  const titleEl = document.getElementById("sensoAuthTitle");
+  if (!speechBtn || !overlay || !form) return;
+
+  const DEFAULT_SPEECH_NOTE = speechNote ? speechNote.textContent : "";
+  let mode = "signup";
+  let pendingAction = null;
+  let currentUser = null;
+
+  function showMsg(text, kind) {
+    msgEl.textContent = text;
+    msgEl.className = "senso-msg " + (kind || "err");
+    msgEl.hidden = false;
+  }
+  function clearMsg() { msgEl.hidden = true; msgEl.textContent = ""; }
+
+  function bindToggle() {
+    const t = document.getElementById("sensoAuthToggle");
+    if (t) t.addEventListener("click", () => setMode(mode === "signin" ? "signup" : "signin"));
+  }
+
+  function setMode(next) {
+    mode = next;
+    if (mode === "signin") {
+      titleEl.textContent = "Connectez-vous";
+      submitBtn.textContent = "Se connecter";
+      toggleWrap.innerHTML = 'Pas encore de compte ? <button type="button" id="sensoAuthToggle">Créer un compte</button>';
+    } else {
+      titleEl.textContent = "Créez votre compte";
+      submitBtn.textContent = "Continuer";
+      toggleWrap.innerHTML = 'Déjà un compte ? <button type="button" id="sensoAuthToggle">Se connecter</button>';
+    }
+    bindToggle();
+  }
+
+  function openModal(action) {
+    pendingAction = action || null;
+    clearMsg();
+    emailInput.value = "";
+    passInput.value = "";
+    submitBtn.disabled = false;
+    setMode("signup");
+    overlay.classList.add("open");
+    setTimeout(() => emailInput.focus(), 50);
+  }
+  function closeModal() {
+    overlay.classList.remove("open");
+    pendingAction = null;
+  }
+
+  closeBtn.addEventListener("click", closeModal);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.classList.contains("open")) closeModal(); });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearMsg();
+    const email = emailInput.value.trim();
+    const password = passInput.value;
+    if (!email || password.length < 6) {
+      showMsg("Entrez un courriel valide et un mot de passe d'au moins 6 caractères.");
+      return;
+    }
+    submitBtn.disabled = true;
+    const prevLabel = submitBtn.textContent;
+    submitBtn.textContent = "...";
+    try {
+      if (mode === "signin") {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { data, error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+        if (data && data.user && !data.session) {
+          showMsg("Compte créé ! Vérifiez vos courriels pour confirmer, puis connectez-vous.", "ok");
+          submitBtn.disabled = false;
+          submitBtn.textContent = prevLabel;
+          return;
+        }
+      }
+      // onAuthStateChange gère la fermeture de la fenêtre et l'action en attente.
+    } catch (err) {
+      showMsg((err && err.message) || "Une erreur est survenue. Réessayez.");
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel;
+    }
+  });
+
+  googleBtn.addEventListener("click", async () => {
+    clearMsg();
+    try {
+      await sb.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.href.split("#")[0] }
+      });
+    } catch (err) {
+      showMsg((err && err.message) || "Connexion Google impossible pour le moment.");
+    }
+  });
+
+  function updateSpeechNote() {
+    if (!speechNote) return;
+    if (currentUser) {
+      const email = (currentUser.email || "").replace(/</g, "&lt;");
+      speechNote.innerHTML = 'Connecté' + (email ? ' comme ' + email : '') +
+        ' · <button type="button" id="sensoSignOutBtn" style="background:none;border:none;color:#5B34D6;font:600 10px inherit;cursor:pointer;padding:0;text-decoration:underline">Déconnexion</button>';
+      const so = document.getElementById("sensoSignOutBtn");
+      if (so) so.addEventListener("click", async () => { await sb.auth.signOut(); });
+    } else {
+      speechNote.textContent = DEFAULT_SPEECH_NOTE;
+    }
+  }
+
+  // Intercepte le clic AVANT le gestionnaire existant (écouteur en phase de
+  // capture posé sur un ancêtre), afin de pouvoir l'annuler si la personne
+  // n'est pas connectée, sans toucher au code existant de reconnaissance
+  // vocale (qui, lui, écoute le clic en phase de bouillonnement sur le
+  // bouton directement).
+  document.addEventListener("click", function (e) {
+    if (e.target !== speechBtn && !speechBtn.contains(e.target)) return;
+    if (currentUser) return; // déjà connecté : laisser passer normalement
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    openModal(() => speechBtn.click());
+  }, true);
+
+  sb.auth.onAuthStateChange((event, session) => {
+    currentUser = (session && session.user) || null;
+    updateSpeechNote();
+    if (currentUser && overlay.classList.contains("open")) {
+      const action = pendingAction;
+      closeModal();
+      if (action) setTimeout(action, 80);
+    }
+  });
+
+  sb.auth.getSession().then(({ data }) => {
+    currentUser = (data && data.session && data.session.user) || null;
+    updateSpeechNote();
+  });
 })();
 </script>
