@@ -4708,7 +4708,20 @@ if (typeof document !== "undefined") {
       warpRafId = requestAnimationFrame(warpLoopTick);
     }
 
+    // DESACTIVE TEMPORAIREMENT (2026-10-19) : David a teste en vrai et
+    // vu que l'effet ne faisait bouger que les cheveux (pas une vraie
+    // impression de sourcils qui bougent) sur la plupart des mots -
+    // mesure confirmee : en moyenne ~80% de la fenetre est dans les
+    // cheveux, ~20% seulement de la peau du front est visible a cet
+    // endroit avec sa coiffure. Le moteur de warp reste ici intact
+    // (WARP_WINDOWS, drawWarpFrame, etc.) le temps de batir une
+    // nouvelle approche qui concentre la deformation sur la peau
+    // mesuree au lieu de l'etaler sur toute la fenetre. En attendant,
+    // seule l'animation d'ensemble du cadre (inclinaison/echelle par
+    // sentiment) reste active.
+    const WARP_ENABLED = false;
     function setWarpTarget(frac, kind) {
+      if (!WARP_ENABLED) return;
       warpActiveKind = kind;
       warpEaseFrom = warpCurrentFrac;
       warpTargetFrac = frac;
