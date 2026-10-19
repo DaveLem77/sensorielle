@@ -1074,6 +1074,71 @@
   .speech-sentiment-badge[data-kind="question-wh"] .speech-sentiment-dot { background: #6E8BFF; }
   .speech-sentiment-badge[data-kind="exclamation"] .speech-sentiment-dot { background: #FFB454; }
   .speech-sentiment-badge[data-kind="negation"] .speech-sentiment-dot { background: #FF6B6B; }
+  /* Vrai filtre localisé sur les sourcils (ajoute le 2026-10-19, demande
+     explicite de David : l'effet pleine-image ci-dessus ne "fait pas une
+     assez grosse difference" a son gout). Pas d'IA, pas de detection de
+     visage : la position/largeur/hauteur de la bande est calculee en JS
+     (voir layoutBrowFx) a partir d'un calibrage VISUEL fait une fois sur
+     de vraies captures de 3 videos de signes differentes (720x1094,
+     sourcils a ~25-30% de la hauteur sur les 3) et de la meme formule
+     exacte que object-fit:cover/object-position:50% 12% deja utilisee
+     pour .speech-video -> la bande reste collee aux sourcils quelle que
+     soit la taille d'ecran, sans jamais dependre d'un modele qui peut ne
+     pas charger. Un calque colore (pas une deformation de pixels) melange
+     par-dessus la vraie image (mix-blend-mode) : assez fort pour bien se
+     voir, jamais sur la bouche (bande fixee loin au-dessus, verifie sur
+     les 3 captures), jamais sur les mains (reste en haut du cadre). Si la
+     position ne tombe pas pile sur tes sourcils une fois vu en vrai,
+     les deux constantes BROW_TOP_FRAC/BROW_HEIGHT_FRAC plus bas dans le
+     JS sont le seul endroit a corriger. */
+  .speech-brow-fx {
+    position: absolute; left: 0; top: 0; width: 0; height: 0;
+    pointer-events: none; z-index: 3; border-radius: 999px;
+    opacity: 0; transition: opacity 0.22s ease;
+  }
+  .speech-brow-fx.is-active { opacity: 1; }
+  .speech-brow-fx[data-kind="question-yn"] {
+    background: radial-gradient(ellipse at center, rgba(130,170,255,0.95) 0%, rgba(130,170,255,0.6) 55%, rgba(130,170,255,0) 100%);
+    mix-blend-mode: screen;
+    animation: browRaise 0.5s cubic-bezier(.2,.8,.3,1.3) forwards;
+  }
+  .speech-brow-fx[data-kind="question-wh"] {
+    background: radial-gradient(ellipse at center, rgba(60,70,120,0.85) 0%, rgba(60,70,120,0.55) 55%, rgba(60,70,120,0) 100%);
+    mix-blend-mode: multiply;
+    animation: browFurrow 0.5s cubic-bezier(.2,.8,.3,1.3) forwards;
+  }
+  .speech-brow-fx[data-kind="exclamation"] {
+    background: radial-gradient(ellipse at center, rgba(255,196,110,0.98) 0%, rgba(255,196,110,0.65) 55%, rgba(255,196,110,0) 100%);
+    mix-blend-mode: screen;
+    animation: browRaiseStrong 0.4s cubic-bezier(.2,.8,.3,1.4) forwards;
+  }
+  .speech-brow-fx[data-kind="negation"] {
+    background: radial-gradient(ellipse at center, rgba(130,40,50,0.8) 0%, rgba(130,40,50,0.5) 55%, rgba(130,40,50,0) 100%);
+    mix-blend-mode: multiply;
+    animation: browPress 0.85s ease-in-out infinite;
+  }
+  @keyframes browRaise {
+    from { transform: translateY(0) scaleY(1); }
+    to { transform: translateY(-46%) scaleY(1.3); }
+  }
+  @keyframes browRaiseStrong {
+    from { transform: translateY(0) scaleY(1); }
+    to { transform: translateY(-58%) scaleY(1.45); }
+  }
+  @keyframes browFurrow {
+    from { transform: translateY(0) scaleY(1) scaleX(1); }
+    to { transform: translateY(22%) scaleY(0.68) scaleX(0.8); }
+  }
+  @keyframes browPress {
+    0%, 100% { transform: translateY(12%) scaleY(0.82); }
+    50% { transform: translateY(18%) scaleY(0.74); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .speech-brow-fx[data-kind="question-yn"] { animation: none; transform: translateY(-46%) scaleY(1.3); }
+    .speech-brow-fx[data-kind="question-wh"] { animation: none; transform: translateY(22%) scaleY(0.68) scaleX(0.8); }
+    .speech-brow-fx[data-kind="exclamation"] { animation: none; transform: translateY(-58%) scaleY(1.45); }
+    .speech-brow-fx[data-kind="negation"] { animation: none; transform: translateY(14%) scaleY(0.8); }
+  }
   .speech-idle {
     position: relative; z-index: 1; max-width: 26ch; text-align: center;
     font-size: 15px; line-height: 1.5;
@@ -1503,6 +1568,7 @@
   <div class="speech-video-wrap">
     <video id="speechVideoA" class="speech-video" muted playsinline></video>
     <video id="speechVideoB" class="speech-video" muted playsinline></video>
+    <div class="speech-brow-fx" id="speechBrowFx" aria-hidden="true"></div>
     <div class="speech-sentiment-badge" id="speechSentimentBadge" hidden aria-hidden="true"><span class="speech-sentiment-dot"></span><span id="speechSentimentLabel"></span></div>
     <p class="speech-idle" id="speechIdle">Parle — les signes correspondants s'enchaînent ici, en direct.</p>
   </div>
@@ -4530,11 +4596,50 @@ if (typeof document !== "undefined") {
     const speechVideoWrap = document.querySelector(".speech-video-wrap");
     const sentimentBadge = document.getElementById("speechSentimentBadge");
     const sentimentLabelEl = document.getElementById("speechSentimentLabel");
+    const browFx = document.getElementById("speechBrowFx");
     let sentimentResetTimer = null;
+
+    // Bande des sourcils (ajoutee le 2026-10-19) : fractions calibrees a la
+    // main sur de vraies captures ("bonjour", "demander", "content" -
+    // 720x1094, sourcils entre ~25% et ~30% de la hauteur sur les trois,
+    // cadrage identique d'une video a l'autre). AUCUNE detection en
+    // direct : la position exacte a l'ecran est recalculee avec la MEME
+    // formule que le CSS object-fit:cover/object-position:50% 12% deja
+    // utilise pour .speech-video (voir layoutBrowFx), donc la bande reste
+    // collee aux sourcils peu importe la taille d'ecran. Si un oeil reel
+    // montre un decalage sur certains clips, CE SONT ces deux nombres
+    // (et au besoin BROW_WIDTH_FRAC un peu plus bas) qu'il faut corriger
+    // - rien d'autre a toucher.
+    const BROW_TOP_FRAC = 0.256;
+    const BROW_HEIGHT_FRAC = 0.042;
+    const BROW_WIDTH_FRAC = 0.32;
+
+    function layoutBrowFx() {
+      if (!browFx || !speechVideoWrap) return;
+      const video = videos[curIdx];
+      if (!video || !video.videoWidth || !video.videoHeight) return;
+      const cw = speechVideoWrap.clientWidth, ch = speechVideoWrap.clientHeight;
+      if (!cw || !ch) return;
+      const vw = video.videoWidth, vh = video.videoHeight;
+      // Meme calcul que object-fit:cover + object-position:50% 12%.
+      const scale = Math.max(cw / vw, ch / vh);
+      const offsetX = (cw - vw * scale) * 0.5;
+      const offsetY = (ch - vh * scale) * 0.12;
+      const bandWidthVid = vw * BROW_WIDTH_FRAC;
+      const bandLeftVid = (vw - bandWidthVid) / 2;
+      const bandTopVid = BROW_TOP_FRAC * vh;
+      const bandHeightVid = BROW_HEIGHT_FRAC * vh;
+      browFx.style.left = (offsetX + bandLeftVid * scale) + "px";
+      browFx.style.top = (offsetY + bandTopVid * scale) + "px";
+      browFx.style.width = (bandWidthVid * scale) + "px";
+      browFx.style.height = (bandHeightVid * scale) + "px";
+    }
+    window.addEventListener("resize", layoutBrowFx);
 
     function applySentimentVisual(sentiment) {
       if (sentimentResetTimer) { clearTimeout(sentimentResetTimer); sentimentResetTimer = null; }
       if (speechVideoWrap) speechVideoWrap.classList.remove.apply(speechVideoWrap.classList, SENT_CLASSES);
+      if (browFx) { browFx.classList.remove("is-active"); browFx.removeAttribute("data-kind"); }
       const label = SENTIMENT_LABELS[sentiment] || "";
       if (!label) {
         if (sentimentBadge) sentimentBadge.hidden = true;
@@ -4546,6 +4651,12 @@ if (typeof document !== "undefined") {
         sentimentBadge.dataset.kind = sentiment;
         sentimentBadge.hidden = false;
       }
+      if (browFx) {
+        layoutBrowFx();
+        browFx.dataset.kind = sentiment;
+        void browFx.offsetWidth; // force le navigateur a relire la position avant d'activer, pour que l'animation reparte bien du debut meme si le meme type revient juste apres
+        browFx.classList.add("is-active");
+      }
       // L'exclamation est un marqueur ponctuel (une seule pulsation) :
       // contrairement a question/negation, qui restent affiches pour
       // toute la duree de l'enonce (leur vraie portee grammaticale), on
@@ -4554,6 +4665,7 @@ if (typeof document !== "undefined") {
         sentimentResetTimer = setTimeout(() => {
           if (speechVideoWrap) speechVideoWrap.classList.remove("sent-exclamation");
           if (sentimentBadge) sentimentBadge.hidden = true;
+          if (browFx) { browFx.classList.remove("is-active"); browFx.removeAttribute("data-kind"); }
         }, 950);
       }
     }
@@ -4562,6 +4674,7 @@ if (typeof document !== "undefined") {
       if (sentimentResetTimer) { clearTimeout(sentimentResetTimer); sentimentResetTimer = null; }
       if (speechVideoWrap) speechVideoWrap.classList.remove.apply(speechVideoWrap.classList, SENT_CLASSES);
       if (sentimentBadge) sentimentBadge.hidden = true;
+      if (browFx) { browFx.classList.remove("is-active"); browFx.removeAttribute("data-kind"); }
       currentSentiment = "neutral";
       currentAspect = "none";
       habitualRepeatedForUtterance = false;
@@ -4706,6 +4819,7 @@ if (typeof document !== "undefined") {
         curIdx = nextIdx;
         currentlyShowingKey = item.key;
         shownKeysThisUtterance.push(item.key);
+        if (browFx && browFx.classList.contains("is-active")) layoutBrowFx();
         dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
         prefetchUpcoming();
