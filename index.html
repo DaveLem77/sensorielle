@@ -5748,8 +5748,42 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
     bindToggle();
   }
 
+  // Pour "Je parle" (voix -> signe), on veut qu'une fois connectée, la
+  // personne retombe directement DANS la traduction en direct, pas juste
+  // sur la page d'accueil connectée. Le souci : la connexion Google fait
+  // quitter complètement la page (redirection vers Google puis retour),
+  // ce qui efface toute variable JS en mémoire (dont "pendingAction" ci-
+  // dessous). sessionStorage, lui, survit à cet aller-retour tant qu'on
+  // reste dans le même onglet -- on s'en sert comme pense-bête pour
+  // reprendre l'action après le retour. Pour "Se connecter" depuis la
+  // barre de navigation (pendingAction = null), on ne veut PAS ce
+  // comportement : rester simplement connecté sur la page actuelle.
+  let resumedSpeechOnce = false;
+  function setResumeSpeechFlag(on) {
+    try {
+      if (on) sessionStorage.setItem("sensoResumeSpeech", "1");
+      else sessionStorage.removeItem("sensoResumeSpeech");
+    } catch (e) {}
+  }
+  function resumeSpeechIfFlagged() {
+    // On ignore ce chemin si la fenêtre de connexion est encore ouverte :
+    // ça veut dire qu'aucun rechargement de page n'a eu lieu (ex. courriel/
+    // mot de passe), donc l'ancien mécanisme (pendingAction, juste en bas)
+    // s'en charge déjà -- éviter de déclencher le clic deux fois.
+    if (resumedSpeechOnce || !currentUser || overlay.classList.contains("open")) return;
+    let flagged = false;
+    try { flagged = sessionStorage.getItem("sensoResumeSpeech") === "1"; } catch (e) {}
+    if (!flagged) return;
+    resumedSpeechOnce = true;
+    setResumeSpeechFlag(false);
+    const essayer = document.getElementById("essayer");
+    if (essayer && essayer.scrollIntoView) essayer.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => { speechBtn.click(); }, essayer ? 500 : 0);
+  }
+
   function openModal(action) {
     pendingAction = action || null;
+    setResumeSpeechFlag(!!action);
     clearMsg();
     emailInput.value = "";
     passInput.value = "";
@@ -5761,6 +5795,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
   function closeModal() {
     overlay.classList.remove("open");
     pendingAction = null;
+    setResumeSpeechFlag(false);
   }
 
   closeBtn.addEventListener("click", closeModal);
@@ -5890,6 +5925,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
     currentUser = (session && session.user) || null;
     updateSpeechNote();
     updateNavAccount();
+    resumeSpeechIfFlagged();
     if (currentUser && overlay.classList.contains("open")) {
       const action = pendingAction;
       closeModal();
@@ -5901,6 +5937,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
     currentUser = (data && data.session && data.session.user) || null;
     updateSpeechNote();
     updateNavAccount();
+    resumeSpeechIfFlagged();
   });
 })();
 </script>
