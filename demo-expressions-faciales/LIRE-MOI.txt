@@ -1,4 +1,4 @@
-Demo avant/apres - marqueurs grammaticaux non manuels (2026-10-19)
+Demo avant/apres - marqueurs grammaticaux non manuels (2026-10-19, v3)
 ======================================================================
 
 Chaque paire _1_avant / _2_apres montre la MEME image reelle d'un
@@ -6,11 +6,19 @@ signe, telle qu'elle s'affiche normalement, puis telle qu'elle
 s'affiche quand ce mot tombe dans la phrase reconnue au moment ou
 le marqueur grammatical est actif (question, exclamation, negation).
 
-Sur le vrai site l'effet est anime et discret : une petite bande au
-niveau du front/sourcils est etiree ou compressee en douceur (image
-reelle redecoupee en deux bandes, pas de calque de couleur), ce qui
-donne un sourcil qui se leve ou se fronce legerement. Ici ce sont des
+Sur le vrai site l'effet est anime et discret : une petite bande
+ancree sur les SOURCILS EUX-MEMES (positionnee par rapport a la boite
+de l'oeil detectee une fois hors-ligne avec OpenCV, pas par rapport a
+une fraction fixe de l'image) est etiree ou compressee en douceur
+(image reelle redecoupee en deux bandes, pas de calque de couleur),
+ce qui donne un sourcil qui se leve ou se fronce. Ici ce sont des
 images fixes qui montrent l'etat final de cette transition.
+
+Deux versions precedentes de cette demo existaient : la toute
+premiere (calque colore) ne changeait rien de visible; la deuxieme
+(bande fixe au-dessus des sourcils) mordait sur les yeux pour
+beaucoup de mots - les deux ont ete corrigees, voir les commentaires
+dans index.html pour le detail de chaque correction.
 
 - demander (Question)
   Contexte : "Tu veux demander ?"
