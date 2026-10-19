@@ -1,0 +1,32 @@
+Demo avant/apres - marqueurs grammaticaux non manuels (2026-10-19)
+======================================================================
+
+Chaque paire _1_avant / _2_apres montre la MEME image reelle d'un
+signe, telle qu'elle s'affiche normalement, puis telle qu'elle
+s'affiche quand ce mot tombe dans la phrase reconnue au moment ou
+le marqueur grammatical est actif (question, exclamation, negation).
+
+Sur le vrai site l'effet est anime (le cadre penche en douceur, la
+bande des sourcils s'allume/se fonce en transition) - ici ce sont
+des images fixes qui montrent l'etat final de cette transition,
+pour comparer rapidement sans devoir lancer le site.
+
+- demander (Question)
+  Contexte : "Tu veux demander ?"
+  avant : demander_1_avant.png
+  apres : demander_2_apres.png
+
+- comment (Question)
+  Contexte : "Comment ça va ?"
+  avant : comment_1_avant.png
+  apres : comment_2_apres.png
+
+- bravo (Exclamation)
+  Contexte : "Bravo !"
+  avant : bravo_1_avant.png
+  apres : bravo_2_apres.png
+
+- jamais (Négation)
+  Contexte : "Je ne mange jamais ça"
+  avant : jamais_1_avant.png
+  apres : jamais_2_apres.png

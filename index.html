@@ -1026,20 +1026,26 @@
      badge texte discret mais bien visible vient renforcer la meme
      information en toutes lettres, redondant avec le mouvement pour que
      l'effet soit lisible meme si la rotation passe inapercue. */
-  .speech-video-wrap .speech-video { transform-origin: 50% 38%; }
-  .speech-video-wrap.sent-question-yn .speech-video.showing {
+  .speech-video-wrap .speech-video,
+  .speech-video-wrap .speech-warp-canvas { transform-origin: 50% 38%; }
+  .speech-video-wrap.sent-question-yn .speech-video.showing,
+  .speech-video-wrap.sent-question-yn .speech-warp-canvas.is-active {
     transform: scale(1.05) rotate(-2.6deg) translateY(1.4%);
   }
-  .speech-video-wrap.sent-question-wh .speech-video.showing {
+  .speech-video-wrap.sent-question-wh .speech-video.showing,
+  .speech-video-wrap.sent-question-wh .speech-warp-canvas.is-active {
     transform: scale(1.05) rotate(2.6deg) translateY(-1.4%);
   }
-  .speech-video-wrap.sent-exclamation .speech-video.showing {
+  .speech-video-wrap.sent-exclamation .speech-video.showing,
+  .speech-video-wrap.sent-exclamation .speech-warp-canvas.is-active {
     animation: sentExclaimPulse 0.6s ease-out 1;
   }
-  .speech-video-wrap.sent-negation .speech-video.showing {
+  .speech-video-wrap.sent-negation .speech-video.showing,
+  .speech-video-wrap.sent-negation .speech-warp-canvas.is-active {
     animation: sentNegationShake 0.85s ease-in-out infinite;
   }
-  .speech-video-wrap.is-paused .speech-video.showing { animation-play-state: paused; }
+  .speech-video-wrap.is-paused .speech-video.showing,
+  .speech-video-wrap.is-paused .speech-warp-canvas.is-active { animation-play-state: paused; }
   @keyframes sentExclaimPulse {
     0% { transform: scale(1); }
     40% { transform: scale(1.07); }
@@ -1052,8 +1058,11 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .speech-video-wrap.sent-exclamation .speech-video.showing,
-    .speech-video-wrap.sent-negation .speech-video.showing { animation: none; }
-    .speech-video-wrap.sent-negation .speech-video.showing { transform: scale(1.05) rotate(-3deg); }
+    .speech-video-wrap.sent-exclamation .speech-warp-canvas.is-active,
+    .speech-video-wrap.sent-negation .speech-video.showing,
+    .speech-video-wrap.sent-negation .speech-warp-canvas.is-active { animation: none; }
+    .speech-video-wrap.sent-negation .speech-video.showing,
+    .speech-video-wrap.sent-negation .speech-warp-canvas.is-active { transform: scale(1.05) rotate(-3deg); }
   }
   .speech-sentiment-badge {
     position: absolute; left: 50%; top: max(66px, calc(env(safe-area-inset-top) + 56px));
@@ -1074,71 +1083,35 @@
   .speech-sentiment-badge[data-kind="question-wh"] .speech-sentiment-dot { background: #6E8BFF; }
   .speech-sentiment-badge[data-kind="exclamation"] .speech-sentiment-dot { background: #FFB454; }
   .speech-sentiment-badge[data-kind="negation"] .speech-sentiment-dot { background: #FF6B6B; }
-  /* Vrai filtre localisé sur les sourcils (ajoute le 2026-10-19, demande
-     explicite de David : l'effet pleine-image ci-dessus ne "fait pas une
-     assez grosse difference" a son gout). Pas d'IA, pas de detection de
-     visage : la position/largeur/hauteur de la bande est calculee en JS
-     (voir layoutBrowFx) a partir d'un calibrage VISUEL fait une fois sur
-     de vraies captures de 3 videos de signes differentes (720x1094,
-     sourcils a ~25-30% de la hauteur sur les 3) et de la meme formule
-     exacte que object-fit:cover/object-position:50% 12% deja utilisee
-     pour .speech-video -> la bande reste collee aux sourcils quelle que
-     soit la taille d'ecran, sans jamais dependre d'un modele qui peut ne
-     pas charger. Un calque colore (pas une deformation de pixels) melange
-     par-dessus la vraie image (mix-blend-mode) : assez fort pour bien se
-     voir, jamais sur la bouche (bande fixee loin au-dessus, verifie sur
-     les 3 captures), jamais sur les mains (reste en haut du cadre). Si la
-     position ne tombe pas pile sur tes sourcils une fois vu en vrai,
-     les deux constantes BROW_TOP_FRAC/BROW_HEIGHT_FRAC plus bas dans le
-     JS sont le seul endroit a corriger. */
-  .speech-brow-fx {
-    position: absolute; left: 0; top: 0; width: 0; height: 0;
-    pointer-events: none; z-index: 3; border-radius: 999px;
-    opacity: 0; transition: opacity 0.22s ease;
+  /* Vrai filtre localisé sur les sourcils, v2 (2026-10-19) : la v1
+     (calque colore + mix-blend-mode juste au-dessus) a ete jugee par
+     David comme ne changeant "litteralement rien" a l'expression du
+     visage - retiree entierement. Celle-ci deplace reellement des
+     pixels : une fenetre fixe du front (voir WIN_TOP_FRAC/WIN_BOTTOM_FRAC
+     plus bas dans le JS) est coupee en deux bandes horizontales (front /
+     sourcils) et chaque bande est redessinee a une taille differente sur
+     un <canvas> colle exactement par-dessus la video (meme calcul de
+     cover/object-position que .speech-video). Deplacer la frontiere vers
+     le haut etire la bande des sourcils -> les sourcils montent "pour de
+     vrai", avec meme le plissement de peau du front qui apparait sous
+     l'etirement ; la deplacer vers le bas comprime cette meme bande ->
+     effet de froncement. Chaque pixel de sortie vient d'UN SEUL pixel
+     source (jamais de copie superposee a une position decalee), donc
+     aucun risque du bug de "visage dedouble" deja rencontre avec
+     l'ancien filtre MediaPipe. Pas d'IA, pas de detection de visage :
+     fenetre et frontiere sont des fractions calibrees a la main sur de
+     vraies captures (voir warp_proto.py dans l'historique de travail) et
+     testees sur plusieurs mots differents. Jamais sur la bouche (fenetre
+     tres au-dessus, verifiee), jamais sur les mains (reste en haut du
+     cadre). Le rendu suit le <video> transforme pendant les animations
+     tete/corps ci-dessus grace aux memes regles .sent-* appliquees aussi
+     a .speech-warp-canvas.is-active juste en dessous. */
+  .speech-warp-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 3;
+    opacity: 0; transition: opacity 0.18s ease;
   }
-  .speech-brow-fx.is-active { opacity: 1; }
-  .speech-brow-fx[data-kind="question-yn"] {
-    background: radial-gradient(ellipse at center, rgba(130,170,255,0.95) 0%, rgba(130,170,255,0.6) 55%, rgba(130,170,255,0) 100%);
-    mix-blend-mode: screen;
-    animation: browRaise 0.5s cubic-bezier(.2,.8,.3,1.3) forwards;
-  }
-  .speech-brow-fx[data-kind="question-wh"] {
-    background: radial-gradient(ellipse at center, rgba(60,70,120,0.85) 0%, rgba(60,70,120,0.55) 55%, rgba(60,70,120,0) 100%);
-    mix-blend-mode: multiply;
-    animation: browFurrow 0.5s cubic-bezier(.2,.8,.3,1.3) forwards;
-  }
-  .speech-brow-fx[data-kind="exclamation"] {
-    background: radial-gradient(ellipse at center, rgba(255,196,110,0.98) 0%, rgba(255,196,110,0.65) 55%, rgba(255,196,110,0) 100%);
-    mix-blend-mode: screen;
-    animation: browRaiseStrong 0.4s cubic-bezier(.2,.8,.3,1.4) forwards;
-  }
-  .speech-brow-fx[data-kind="negation"] {
-    background: radial-gradient(ellipse at center, rgba(130,40,50,0.8) 0%, rgba(130,40,50,0.5) 55%, rgba(130,40,50,0) 100%);
-    mix-blend-mode: multiply;
-    animation: browPress 0.85s ease-in-out infinite;
-  }
-  @keyframes browRaise {
-    from { transform: translateY(0) scaleY(1); }
-    to { transform: translateY(-46%) scaleY(1.3); }
-  }
-  @keyframes browRaiseStrong {
-    from { transform: translateY(0) scaleY(1); }
-    to { transform: translateY(-58%) scaleY(1.45); }
-  }
-  @keyframes browFurrow {
-    from { transform: translateY(0) scaleY(1) scaleX(1); }
-    to { transform: translateY(22%) scaleY(0.68) scaleX(0.8); }
-  }
-  @keyframes browPress {
-    0%, 100% { transform: translateY(12%) scaleY(0.82); }
-    50% { transform: translateY(18%) scaleY(0.74); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .speech-brow-fx[data-kind="question-yn"] { animation: none; transform: translateY(-46%) scaleY(1.3); }
-    .speech-brow-fx[data-kind="question-wh"] { animation: none; transform: translateY(22%) scaleY(0.68) scaleX(0.8); }
-    .speech-brow-fx[data-kind="exclamation"] { animation: none; transform: translateY(-58%) scaleY(1.45); }
-    .speech-brow-fx[data-kind="negation"] { animation: none; transform: translateY(14%) scaleY(0.8); }
-  }
+  .speech-warp-canvas.is-active { opacity: 1; }
   .speech-idle {
     position: relative; z-index: 1; max-width: 26ch; text-align: center;
     font-size: 15px; line-height: 1.5;
@@ -1568,7 +1541,7 @@
   <div class="speech-video-wrap">
     <video id="speechVideoA" class="speech-video" muted playsinline></video>
     <video id="speechVideoB" class="speech-video" muted playsinline></video>
-    <div class="speech-brow-fx" id="speechBrowFx" aria-hidden="true"></div>
+    <canvas class="speech-warp-canvas" id="speechWarpCanvas" aria-hidden="true"></canvas>
     <div class="speech-sentiment-badge" id="speechSentimentBadge" hidden aria-hidden="true"><span class="speech-sentiment-dot"></span><span id="speechSentimentLabel"></span></div>
     <p class="speech-idle" id="speechIdle">Parle — les signes correspondants s'enchaînent ici, en direct.</p>
   </div>
@@ -4594,53 +4567,151 @@ if (typeof document !== "undefined") {
     const speechVideoWrap = document.querySelector(".speech-video-wrap");
     const sentimentBadge = document.getElementById("speechSentimentBadge");
     const sentimentLabelEl = document.getElementById("speechSentimentLabel");
-    const browFx = document.getElementById("speechBrowFx");
+    const warpCanvas = document.getElementById("speechWarpCanvas");
+    const warpCtx = warpCanvas ? warpCanvas.getContext("2d") : null;
     let sentimentResetTimer = null;
 
-    // Bande des sourcils (ajoutee le 2026-10-19) : fractions calibrees a la
-    // main sur de vraies captures ("bonjour", "demander", "content" -
-    // 720x1094, sourcils entre ~25% et ~30% de la hauteur sur les trois,
-    // cadrage identique d'une video a l'autre). AUCUNE detection en
-    // direct : la position exacte a l'ecran est recalculee avec la MEME
-    // formule que le CSS object-fit:cover/object-position:50% 12% deja
-    // utilise pour .speech-video (voir layoutBrowFx), donc la bande reste
-    // collee aux sourcils peu importe la taille d'ecran. Si un oeil reel
-    // montre un decalage sur certains clips, CE SONT ces deux nombres
-    // (et au besoin BROW_WIDTH_FRAC un peu plus bas) qu'il faut corriger
-    // - rien d'autre a toucher.
-    const BROW_TOP_FRAC = 0.256;
-    const BROW_HEIGHT_FRAC = 0.042;
-    const BROW_WIDTH_FRAC = 0.32;
+    // Warp front/sourcils v2 (2026-10-19, remplace le calque colore juge
+    // par David comme ne changeant "litteralement rien" a l'expression).
+    // Fenetre fixe (fractions calibrees a la main sur de vraies captures,
+    // "bonjour"/"bravo"/"jamais" - 720x1094, cadrage identique d'un clip a
+    // l'autre) coupee en deux bandes au niveau SRC_SPLIT_FRAC ; chaque
+    // bande est redessinee avec drawImage a une hauteur differente,
+    // deplacant la frontiere vers DEST_SPLIT_FRAC (haut = sourcils qui
+    // montent, bas = sourcils qui se froncent). Les deux bandes de sortie
+    // couvrent TOUJOURS exactement toute la hauteur du canvas (aucun trou,
+    // aucun chevauchement), donc aucune copie superposee a une position
+    // decalee - c'est precisement ce qui causait l'ancien bug de "visage
+    // dedouble". Aucune detection de visage en direct : si un oeil reel
+    // montre un decalage sur certains clips, ce sont CES fractions qu'il
+    // faut corriger, rien d'autre.
+    const WIN_TOP_FRAC = 0.205;
+    const WIN_BOTTOM_FRAC = 0.315;
+    const SRC_SPLIT_FRAC = 0.59;
+    const WARP_TARGETS = {
+      "question-yn": 0.40,
+      "question-wh": 0.74,
+      exclamation: 0.32,
+      negation: 0.70,
+    };
+    const WARP_EASE_MS = 260;
 
-    function layoutBrowFx() {
-      if (!browFx || !speechVideoWrap) return;
+    let warpRafId = null;
+    let warpCurrentFrac = SRC_SPLIT_FRAC;
+    let warpTargetFrac = SRC_SPLIT_FRAC;
+    let warpEaseFrom = SRC_SPLIT_FRAC;
+    let warpEaseStart = 0;
+    let warpActiveKind = null; // null = en train de revenir au neutre (ou deja neutre)
+
+    function layoutWarpCanvas() {
+      if (!warpCanvas || !speechVideoWrap) return null;
       const video = videos[curIdx];
-      if (!video || !video.videoWidth || !video.videoHeight) return;
+      if (!video || !video.videoWidth || !video.videoHeight) return null;
       const cw = speechVideoWrap.clientWidth, ch = speechVideoWrap.clientHeight;
-      if (!cw || !ch) return;
-      const vw = video.videoWidth, vh = video.videoHeight;
-      // Meme calcul que object-fit:cover + object-position:50% 12%.
+      if (!cw || !ch) return null;
+      // Le canvas a EXACTEMENT la meme boite que .speech-video (inset:0,
+      // 100%x100%, voir le CSS) - seule sa resolution interne depend du
+      // DPR pour rester net. C'est ce qui garantit que rotate()/scale()/
+      // translateY(%) ci-dessus (whole-frame tilt) pivotent les deux
+      // elements exactement pareil, sans quoi la fenetre deformee
+      // deriverait hors du vrai visage pendant l'animation.
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const pxW = Math.max(1, Math.round(cw * dpr));
+      const pxH = Math.max(1, Math.round(ch * dpr));
+      if (warpCanvas.width !== pxW) warpCanvas.width = pxW;
+      if (warpCanvas.height !== pxH) warpCanvas.height = pxH;
+      return { video, vw: video.videoWidth, vh: video.videoHeight, cw, ch, dpr };
+    }
+    window.addEventListener("resize", layoutWarpCanvas);
+
+    function drawWarpFrame() {
+      const info = layoutWarpCanvas();
+      if (!info || !warpCtx) return;
+      const { video, vw, vh, cw, ch, dpr } = info;
+      const w = warpCanvas.width, h = warpCanvas.height;
+      if (!w || !h || !vw || !vh) return;
+      // Meme calcul que object-fit:cover + object-position:50% 12% deja
+      // utilise par .speech-video, pour placer la fenetre de deformation
+      // au bon endroit DANS ce canvas (qui couvre maintenant toute la
+      // boite, comme la video).
       const scale = Math.max(cw / vw, ch / vh);
       const offsetX = (cw - vw * scale) * 0.5;
       const offsetY = (ch - vh * scale) * 0.12;
-      const bandWidthVid = vw * BROW_WIDTH_FRAC;
-      const bandLeftVid = (vw - bandWidthVid) / 2;
-      const bandTopVid = BROW_TOP_FRAC * vh;
-      const bandHeightVid = BROW_HEIGHT_FRAC * vh;
-      browFx.style.left = (offsetX + bandLeftVid * scale) + "px";
-      browFx.style.top = (offsetY + bandTopVid * scale) + "px";
-      browFx.style.width = (bandWidthVid * scale) + "px";
-      browFx.style.height = (bandHeightVid * scale) + "px";
+      const winTopVid = WIN_TOP_FRAC * vh;
+      const winBottomVid = WIN_BOTTOM_FRAC * vh;
+      const winHVid = winBottomVid - winTopVid;
+      const srcSplitVid = winTopVid + winHVid * SRC_SPLIT_FRAC;
+
+      const winTopCanvas = (offsetY + winTopVid * scale) * dpr;
+      const winHCanvas = winHVid * scale * dpr;
+      const destSplitCanvas = winTopCanvas + winHCanvas * warpCurrentFrac;
+      const leftCanvas = offsetX * dpr;
+      const widthCanvas = vw * scale * dpr;
+
+      try {
+        warpCtx.clearRect(0, 0, w, h);
+        // Bande du haut (front) puis bande du bas (sourcils/haut des
+        // yeux) : chaque pixel de sortie vient d'UN SEUL pixel source,
+        // les deux rectangles de destination se touchent exactement sans
+        // jamais se chevaucher ni laisser de trou. Le reste du canvas
+        // reste transparent (clearRect) : la vraie video continue de se
+        // voir normalement partout ailleurs.
+        warpCtx.drawImage(video, 0, winTopVid, vw, srcSplitVid - winTopVid, leftCanvas, winTopCanvas, widthCanvas, destSplitCanvas - winTopCanvas);
+        warpCtx.drawImage(video, 0, srcSplitVid, vw, winBottomVid - srcSplitVid, leftCanvas, destSplitCanvas, widthCanvas, (winTopCanvas + winHCanvas) - destSplitCanvas);
+      } catch (e) {
+        // drawImage peut echouer brievement si la video n'a pas encore de
+        // frame decodee (changement de source en cours) - jamais fatal,
+        // la prochaine frame du rAF retente.
+      }
     }
-    window.addEventListener("resize", layoutBrowFx);
+
+    function warpLoopTick(ts) {
+      if (!warpEaseStart) warpEaseStart = ts;
+      const t = Math.min(1, (ts - warpEaseStart) / WARP_EASE_MS);
+      const eased = 1 - Math.pow(1 - t, 3);
+      warpCurrentFrac = warpEaseFrom + (warpTargetFrac - warpEaseFrom) * eased;
+      drawWarpFrame();
+      if (t >= 1 && !warpActiveKind) {
+        // Retour au neutre termine : plus besoin de redessiner a chaque
+        // frame, on cache le canvas (la video normale, non deformee,
+        // redevient seule visible).
+        warpCurrentFrac = SRC_SPLIT_FRAC;
+        if (warpCanvas) warpCanvas.classList.remove("is-active");
+        warpRafId = null;
+        return;
+      }
+      // Tant qu'un marqueur est actif, on continue a redessiner CHAQUE
+      // frame (pas seulement pendant la transition) : la video sous-
+      // jacente continue de jouer, il faut donc re-deformer une image
+      // fraiche a chaque fois pour rester synchronise avec elle.
+      warpRafId = requestAnimationFrame(warpLoopTick);
+    }
+
+    function setWarpTarget(frac, kind) {
+      warpActiveKind = kind;
+      warpEaseFrom = warpCurrentFrac;
+      warpTargetFrac = frac;
+      warpEaseStart = 0;
+      if (warpCanvas) {
+        layoutWarpCanvas();
+        warpCanvas.classList.add("is-active");
+      }
+      drawWarpFrame();
+      if (!warpRafId) warpRafId = requestAnimationFrame(warpLoopTick);
+    }
+
+    function clearWarp() {
+      if (warpActiveKind === null && warpCurrentFrac === SRC_SPLIT_FRAC && !warpRafId) return;
+      setWarpTarget(SRC_SPLIT_FRAC, null);
+    }
 
     function applySentimentVisual(sentiment) {
       if (sentimentResetTimer) { clearTimeout(sentimentResetTimer); sentimentResetTimer = null; }
       if (speechVideoWrap) speechVideoWrap.classList.remove.apply(speechVideoWrap.classList, SENT_CLASSES);
-      if (browFx) { browFx.classList.remove("is-active"); browFx.removeAttribute("data-kind"); }
       const label = SENTIMENT_LABELS[sentiment] || "";
       if (!label) {
         if (sentimentBadge) sentimentBadge.hidden = true;
+        clearWarp();
         return;
       }
       if (speechVideoWrap) speechVideoWrap.classList.add("sent-" + sentiment);
@@ -4649,11 +4720,10 @@ if (typeof document !== "undefined") {
         sentimentBadge.dataset.kind = sentiment;
         sentimentBadge.hidden = false;
       }
-      if (browFx) {
-        layoutBrowFx();
-        browFx.dataset.kind = sentiment;
-        void browFx.offsetWidth; // force le navigateur a relire la position avant d'activer, pour que l'animation reparte bien du debut meme si le meme type revient juste apres
-        browFx.classList.add("is-active");
+      if (WARP_TARGETS[sentiment] !== undefined) {
+        setWarpTarget(WARP_TARGETS[sentiment], sentiment);
+      } else {
+        clearWarp();
       }
       // L'exclamation est un marqueur ponctuel (une seule pulsation) :
       // contrairement a question/negation, qui restent affiches pour
@@ -4663,7 +4733,7 @@ if (typeof document !== "undefined") {
         sentimentResetTimer = setTimeout(() => {
           if (speechVideoWrap) speechVideoWrap.classList.remove("sent-exclamation");
           if (sentimentBadge) sentimentBadge.hidden = true;
-          if (browFx) { browFx.classList.remove("is-active"); browFx.removeAttribute("data-kind"); }
+          clearWarp();
         }, 950);
       }
     }
@@ -4672,7 +4742,7 @@ if (typeof document !== "undefined") {
       if (sentimentResetTimer) { clearTimeout(sentimentResetTimer); sentimentResetTimer = null; }
       if (speechVideoWrap) speechVideoWrap.classList.remove.apply(speechVideoWrap.classList, SENT_CLASSES);
       if (sentimentBadge) sentimentBadge.hidden = true;
-      if (browFx) { browFx.classList.remove("is-active"); browFx.removeAttribute("data-kind"); }
+      clearWarp();
       currentSentiment = "neutral";
       currentAspect = "none";
       habitualRepeatedForUtterance = false;
@@ -4817,7 +4887,7 @@ if (typeof document !== "undefined") {
         curIdx = nextIdx;
         currentlyShowingKey = item.key;
         shownKeysThisUtterance.push(item.key);
-        if (browFx && browFx.classList.contains("is-active")) layoutBrowFx();
+        if (warpActiveKind) layoutWarpCanvas();
         dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
         prefetchUpcoming();
