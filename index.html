@@ -1419,6 +1419,7 @@
     // deja utilise par le hero et par "Je parle" - aucune nouvelle donnee).
     // Recherche insensible aux accents/majuscules ; affiche quelques mots
     // par defaut tant que le champ est vide.
+    function init(){
     var input = document.getElementById('dictInput');
     var resultsEl = document.getElementById('dictResults');
     var hintEl = document.getElementById('dictHint');
@@ -1467,6 +1468,17 @@
 
     input.addEventListener('input', function(){ render(input.value); });
     render('');
+    }
+    // Le bloc <script> qui definit window.SENSORIELLE_SPEECH_VIDEOS est plus
+    // loin dans la page (apres le contenu principal) - sans attendre, "data"
+    // serait encore vide ici (c'etait le bug : aucun mot trouve, donc aucune
+    // video jouable). DOMContentLoaded garantit que ce script plus bas a deja
+    // tourne avant qu'on lise window.SENSORIELLE_SPEECH_VIDEOS.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   })();
 </script>
 <section class="contribute-section wrap" id="contribuer"><div><p class="eyebrow">05 / PARTICIPER</p><h2>Chaque signe<br><em>compte.</em></h2><p>Vous connaissez la LSQ ?<br>Aidez-nous à enrichir Sensorielle.</p><div class="contrib-stat"><b>225</b><span>signes déjà dans<br>le dictionnaire</span></div><ul class="contrib-words" aria-label="Exemples de signes déjà disponibles"><li>Bonjour</li><li>Famille</li><li>Fleur</li><li>Éléphant</li><li>Girafe</li><li>Chanson</li><li>Joyeux</li><li>Maison</li><li>Jouer</li><li>Gorille</li></ul><a class="new-button" href="collector/index.html" target="_blank" rel="noopener">Contribuer un signe <span>↗</span></a></div><div class="word-board" id="signShowcase"><img class="contribution-logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCA2NCIgZmlsbD0ibm9uZSI+PGcgc3Ryb2tlPSIjMTUxODJiIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQzIDE0SDI2QzggMTQgOCAzMiAyNiAzMkgzMkM1MCAzMiA1MCA1MCAzMiA1MEgxNSIvPjxwYXRoIGQ9Ik02NSAxNEg0OEMzMCAxNCAzMCAzMiA0OCAzMkg1NEM3MiAzMiA3MiA1MCA1NCA1MEgzNyIvPjwvZz48L3N2Zz4=" alt=""></div></section>
