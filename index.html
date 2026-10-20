@@ -4923,13 +4923,22 @@ if (typeof document !== "undefined") {
     // début et à la fin — sans jamais retirer plus du tiers de la durée
     // d'un côté, pour ne pas casser les signes les plus courts (ex.
     // "merci", ~1,4s).
-    const PLAYBACK_RATE = 1.5;
+    // Relevé de 1,5x à 1,65x le 2026-10-20 (demande explicite : "tres tres
+    // tres fluide, plus rapide"), avec la correction de l'affichage ci-dessus
+    // (voir cleanupPreReveal/reveal plus bas) pour que le gain de vitesse ne
+    // s'accompagne pas d'un passage encore plus visible sur la pose de repos.
+    const PLAYBACK_RATE = 1.65;
     // Remonté à 0,8s le 2026-10-13 puis redescendu ici à 0,5s le même
     // jour : à 0,8s, un clip court (ex. 2s) ne laissait plus qu'environ
     // 0,4s réelles de marge avant de devoir enchaîner — pas assez pour
     // que le préchargement ait le temps de finir sur un réseau mobile
     // plus lent, d'où des vidéos qui semblaient "couper et recommencer".
-    const EXTRA_TRIM = 0.5;
+    // Baissé de 0,5s à 0,35s le 2026-10-20 : ce filet ne sert plus que pour
+    // un mot absent de clip-bounds.json (très rare, 227 mots y sont déjà
+    // couverts avec un rognage précis par mot) — un rognage générique plus
+    // serré rend ce cas de secours un peu plus rapide lui aussi, toujours
+    // plafonné au tiers de la durée pour ne pas casser un clip très court.
+    const EXTRA_TRIM = 0.35;
 
     // Préchauffe (fetch en arrière-plan, sans l'afficher) le PROCHAIN mot
     // de la file dès que le mot actuel commence à s'afficher, plutôt que
@@ -5016,11 +5025,38 @@ if (typeof document !== "undefined") {
         if (token !== playToken) return;
         playFromQueue(token);
       }
-      nextVideo.oncanplay = () => {
+      // Révèle le mot suivant seulement une fois le DÉPLACEMENT (seek)
+      // vers bounds.in RÉELLEMENT terminé, pas juste à "canplay" — corrigé
+      // le 2026-10-20 (demande : fluidité/rapidité + bug "vidéo affichée
+      // deux fois"). "canplay" peut se déclencher avant que le vrai
+      // déplacement de lecture soit terminé — il atteste seulement
+      // qu'il y a assez de données pour jouer, pas que l'image affichée
+      // correspond déjà à bounds.in. Définir currentTime puis basculer
+      // l'opacité au même instant pouvait donc laisser voir, une fraction
+      // de seconde, la pose de repos du début du clip (avant le vrai
+      // début du signe) — perçu comme "on dirait une nouvelle vidéo qui
+      // charge", voire comme si le signe s'affichait deux fois. On attend
+      // maintenant la fin du vrai déplacement ("seeked") EN PLUS de
+      // "canplay" avant de révéler quoi que ce soit ; un filet de
+      // sécurité (timeout) évite de rester bloqué si "seeked" ne se
+      // déclenche jamais (certains moteurs ne l'émettent pas pour un saut
+      // vers une position déjà atteinte, ex. bounds.in = 0).
+      let seekDone = false;
+      let canplayDone = false;
+      let revealed = false;
+      let seekSafetyTimer = null;
+      function cleanupPreReveal() {
+        nextVideo.onloadedmetadata = null;
+        nextVideo.onseeked = null;
         nextVideo.oncanplay = null;
+        if (seekSafetyTimer) { clearTimeout(seekSafetyTimer); seekSafetyTimer = null; }
+      }
+      function reveal() {
+        if (revealed) return;
+        if (!(seekDone && canplayDone)) return;
+        revealed = true;
+        cleanupPreReveal();
         if (token !== playToken) return;
-        const dur = nextVideo.duration || 0;
-        nextVideo.currentTime = bounds ? bounds.in : Math.min(EXTRA_TRIM, dur / 3);
         nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
         nextVideo.play().catch(() => {});
         nextVideo.classList.add("showing");
@@ -5030,15 +5066,39 @@ if (typeof document !== "undefined") {
         currentlyShowingKey = item.key;
         shownKeysThisUtterance.push(item.key);
         if (warpActiveKind) layoutWarpCanvas();
-        dbg("oncanplay: '" + item.key + "' AFFICHÉ (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
+        dbg("affiché: '" + item.key + "' (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
         nextVideo.addEventListener("timeupdate", onTimeUpdate);
         prefetchUpcoming();
+      }
+      nextVideo.onloadedmetadata = () => {
+        nextVideo.onloadedmetadata = null;
+        if (token !== playToken) return;
+        const dur = nextVideo.duration || 0;
+        const target = bounds ? bounds.in : Math.min(EXTRA_TRIM, dur / 3);
+        if (Math.abs(nextVideo.currentTime - target) < 0.02) {
+          // Déjà à la bonne position (ex. bounds.in = 0) : "seeked" ne se
+          // déclenchera pas forcément, pas besoin d'attendre.
+          seekDone = true;
+          reveal();
+        } else {
+          nextVideo.currentTime = target;
+          seekSafetyTimer = setTimeout(() => { seekDone = true; reveal(); }, 250);
+        }
+      };
+      nextVideo.onseeked = () => {
+        seekDone = true;
+        if (seekSafetyTimer) { clearTimeout(seekSafetyTimer); seekSafetyTimer = null; }
+        reveal();
+      };
+      nextVideo.oncanplay = () => {
+        canplayDone = true;
+        reveal();
       };
       // Un clip qui échoue à décoder (fichier corrompu, format non
       // supporté par ce navigateur précis) ne doit jamais bloquer le reste
       // de la file en silence — on passe simplement au mot suivant.
       nextVideo.onended = advance;
-      nextVideo.onerror = (ev) => { dbg("ERREUR vidéo pour '" + item.key + "': " + (nextVideo.error ? nextVideo.error.code : ev)); nextVideo.oncanplay = null; advance(); };
+      nextVideo.onerror = (ev) => { dbg("ERREUR vidéo pour '" + item.key + "': " + (nextVideo.error ? nextVideo.error.code : ev)); cleanupPreReveal(); advance(); };
       nextVideo.src = src;
       nextVideo.load();
     }
