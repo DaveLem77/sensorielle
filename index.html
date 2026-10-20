@@ -1410,22 +1410,41 @@
 <article class="mode-card voice-card"><div class="mode-top"><span class="mode-icon">≋</span><span>FRANÇAIS → SIGNES</span><span>02</span></div><h3>Je parle.</h3><p>Votre voix, les signes disponibles à l’écran.</p><div class="mode-actions"><button class="new-button secondary" id="speechModeBtn" type="button">Activer le microphone <span aria-hidden="true">↗</span></button><span class="mode-note" id="speechAuthNote">Autorisez le micro lorsque le navigateur le demande.</span></div></article></div>
 <p class="prototype-note">Prototype · Signes disponibles uniquement, vidéos jouées mot à mot.</p></section>
 
-<section class="wrap how-section" id="comment"><div data-reveal><p class="eyebrow">03 / COMMENT ÇA MARCHE</p><h2>Pas juste des mots mis bout à bout.</h2><p class="how-intro">Sensorielle n’affiche pas un signe par mot prononcé. La phrase est comprise, reformulée si besoin, puis signée — avec une expression qui suit le ton.</p><div class="step-list"><article><span>01</span><div><h3>On vous écoute en direct</h3><p>La parole est transcrite au fur et à mesure, mot par mot, sans attendre la fin de la phrase.</p></div></article><article><span>02</span><div><h3>Une IA choisit les mots</h3><p>Si la phrase ne se traduit pas mot à mot en signes, une IA la reformule pour trouver ce qui se rapproche le plus d’une vraie formulation en LSQ.</p></div></article><article><span>03</span><div><h3>Le visage s’ajuste au ton</h3><p>Une question, une négation, une exclamation : l’expression du signeur s’ajuste légèrement pour porter l’intention, pas seulement les mains.</p></div></article></div></div><div class="face-diagram" data-reveal><div class="face-stage"><video class="face-video" id="howDemoVideo" muted autoplay playsinline></video><span class="face-tag">VRAIE VIDÉO</span></div><p class="face-caption">Le signe « bonjour », filmé normalement — aucune retouche ici. En direct, l’expression suit aussi le ton de la phrase.</p></div></section>
+<section class="wrap how-section" id="comment"><div data-reveal><p class="eyebrow">03 / COMMENT ÇA MARCHE</p><h2>Pas juste des mots mis bout à bout.</h2><p class="how-intro">Sensorielle n’affiche pas un signe par mot prononcé. La phrase est comprise, reformulée si besoin, puis signée — avec une expression qui suit le ton.</p><div class="step-list"><article><span>01</span><div><h3>On vous écoute en direct</h3><p>La parole est transcrite au fur et à mesure, mot par mot, sans attendre la fin de la phrase.</p></div></article><article><span>02</span><div><h3>Une IA choisit les mots</h3><p>Si la phrase ne se traduit pas mot à mot en signes, une IA la reformule pour trouver ce qui se rapproche le plus d’une vraie formulation en LSQ.</p></div></article><article><span>03</span><div><h3>Le visage s’ajuste au ton</h3><p>Une question, une négation, une exclamation : l’expression du signeur s’ajuste légèrement pour porter l’intention, pas seulement les mains.</p></div></article></div></div><div class="face-diagram" data-reveal><div class="face-stage"><video class="face-video" id="howDemoVideo" muted autoplay playsinline></video><span class="face-tag">VRAIE VIDÉO</span></div><p class="face-caption">« Bonjour. Content. Famille. » — des signes filmés normalement, enchaînés comme dans une vraie phrase, aucune retouche ici. En direct, l’expression suit aussi le ton de la phrase.</p></div></section>
 
 <section class="contribute-section wrap" id="contribuer"><div><p class="eyebrow">04 / PARTICIPER</p><h2>Chaque signe<br><em>compte.</em></h2><p>Vous connaissez la LSQ ?<br>Aidez-nous à enrichir Sensorielle.</p><div class="contrib-stat"><b>225</b><span>signes déjà dans<br>le dictionnaire</span></div><ul class="contrib-words" aria-label="Exemples de signes déjà disponibles"><li>Bonjour</li><li>Famille</li><li>Fleur</li><li>Éléphant</li><li>Girafe</li><li>Chanson</li><li>Joyeux</li><li>Maison</li><li>Jouer</li><li>Gorille</li></ul><a class="new-button" href="collector/index.html" target="_blank" rel="noopener">Contribuer un signe <span>↗</span></a></div><div class="word-board" id="signShowcase"><img class="contribution-logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCA2NCIgZmlsbD0ibm9uZSI+PGcgc3Ryb2tlPSIjMTUxODJiIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQzIDE0SDI2QzggMTQgOCAzMiAyNiAzMkgzMkM1MCAzMiA1MCA1MCAzMiA1MEgxNSIvPjxwYXRoIGQ9Ik02NSAxNEg0OEMzMCAxNCAzMCAzMiA0OCAzMkg1NEM3MiAzMiA3MiA1MCA1NCA1MEgzNyIvPjwvZz48L3N2Zz4=" alt=""></div></section>
 <script>
   (function(){
+    // 2026-10-20 : David trouvait repetitif de remontrer "bonjour" ici alors
+    // que le mot est deja demontre juste au-dessus (section hero). On
+    // enchaine maintenant 3 signes reels (bonjour / content / famille), avec
+    // les memes points d'entree-sortie mesures que pour "bonjour" (tires de
+    // media/signs/clip-bounds.json), pour montrer concretement ce que veut
+    // dire "des signes qui s'enchainent" - ce que fait deja la vraie
+    // fonctionnalite "Je parle" plus bas sur la page.
     var v = document.getElementById("howDemoVideo");
     if (!v) return;
-    var IN = 1.37, OUT = 3.08;
-    v.src = "media/signs/bonjour.mp4";
+    var seq = [
+      {w:"bonjour", in:1.37, out:3.08},
+      {w:"content", in:1.37, out:2.997},
+      {w:"famille", in:1.537, out:3.58}
+    ];
+    var i = 0;
+    function playCurrent(){
+      v.src = "media/signs/" + seq[i].w + ".mp4";
+      v.load();
+    }
     v.addEventListener("loadedmetadata", function(){
-      v.currentTime = IN;
+      v.currentTime = seq[i].in;
       v.play().catch(function(){});
     });
     v.addEventListener("timeupdate", function(){
-      if (v.currentTime >= OUT) v.currentTime = IN;
+      if (v.currentTime >= seq[i].out) {
+        i = (i + 1) % seq.length;
+        playCurrent();
+      }
     });
+    playCurrent();
   })();
 </script>
 
