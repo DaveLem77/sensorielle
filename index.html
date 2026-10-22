@@ -1410,8 +1410,8 @@
 <article class="mode-card voice-card"><div class="mode-top"><span class="mode-icon">≋</span><span>FRANÇAIS → SIGNES</span><span>02</span></div><h3>Je parle.</h3><p>Votre voix, les signes disponibles à l’écran.</p><div class="mode-actions"><button class="new-button secondary" id="speechModeBtn" type="button">Activer le microphone <span aria-hidden="true">↗</span></button><span class="mode-note" id="speechAuthNote">Autorisez le micro lorsque le navigateur le demande.</span></div></article></div>
 <p class="prototype-note">Prototype · Signes disponibles uniquement, vidéos jouées mot à mot.</p></section>
 
-<section class="wrap how-section" id="comment"><div data-reveal><p class="eyebrow">03 / COMMENT ÇA MARCHE</p><h2>Pas juste des mots mis bout à bout.</h2><p class="how-intro">Sensorielle n’affiche pas un signe par mot prononcé. La phrase est comprise, reformulée si besoin, puis signée — avec une expression qui suit le ton.</p><div class="step-list"><article><span>01</span><div><h3>On vous écoute en direct</h3><p>La parole est transcrite au fur et à mesure, mot par mot, sans attendre la fin de la phrase.</p></div></article><article><span>02</span><div><h3>Une IA choisit les mots</h3><p>Si la phrase ne se traduit pas mot à mot en signes, une IA la reformule pour trouver ce qui se rapproche le plus d’une vraie formulation en LSQ.</p></div></article><article><span>03</span><div><h3>Le visage s’ajuste au ton</h3><p>Une question, une négation, une exclamation : l’expression du signeur s’ajuste légèrement pour porter l’intention, pas seulement les mains.</p></div></article></div></div><div class="face-diagram" data-reveal><div class="face-stage"><video class="face-video" id="howDemoVideo" muted autoplay playsinline></video><span class="face-tag">VRAIE VIDÉO</span></div><p class="face-caption">« Famille. Ici. Content. » — une vraie phrase, signée avec les mots du dictionnaire, aucune retouche. En direct, l’expression suit aussi le ton de la phrase.</p></div></section>
-<section class="wrap how-section dictionary-section" id="dictionnaire"><div data-reveal><p class="eyebrow">04 / DICTIONNAIRE</p><h2>Cherchez un mot.<br>Voyez son signe.</h2><p class="how-intro">225 signes déjà filmés. Tapez un mot pour le trouver — sa vidéo s’affiche tout de suite, juste à côté.</p><label class="visually-hidden" for="dictInput">Chercher un mot dans le dictionnaire</label><div class="dict-search"><svg class="dict-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.7"></circle><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><input type="text" id="dictInput" placeholder="bleu, famille, école…" autocomplete="off"></div><p class="dict-hint" id="dictHint">Quelques mots pour commencer :</p><div class="dict-results" id="dictResults" aria-live="polite"></div></div><div class="face-diagram" data-reveal><div class="face-stage"><video class="face-video" id="dictVideo" muted playsinline loop preload="none"></video><span class="face-tag" id="dictTag" hidden></span></div><p class="face-caption" id="dictCaption">Écrivez un mot à gauche pour voir sa vidéo ici.</p></div></section>
+<section class="wrap how-section" id="comment"><div data-reveal><p class="eyebrow">03 / COMMENT ÇA MARCHE</p><h2>Pas juste des mots mis bout à bout.</h2><p class="how-intro">Sensorielle n’affiche pas un signe par mot prononcé. La phrase est comprise, reformulée si besoin, puis signée — avec une expression qui suit le ton.</p><div class="step-list"><article><span>01</span><div><h3>On vous écoute en direct</h3><p>La parole est transcrite au fur et à mesure, mot par mot, sans attendre la fin de la phrase.</p></div></article><article><span>02</span><div><h3>Une IA choisit les mots</h3><p>Si la phrase ne se traduit pas mot à mot en signes, une IA la reformule pour trouver ce qui se rapproche le plus d’une vraie formulation en LSQ.</p></div></article><article><span>03</span><div><h3>Le visage s’ajuste au ton</h3><p>Une question, une négation, une exclamation : l’expression du signeur s’ajuste légèrement pour porter l’intention, pas seulement les mains.</p></div></article></div></div><div class="face-diagram" data-reveal><div class="face-stage expr-stage" id="exprStage"><img class="face-video expr-photo is-active" id="exprPhoto0" src="media/expressions/normal.jpg" alt="David, visage neutre"><img class="face-video expr-photo" id="exprPhoto1" src="media/expressions/question.jpg" alt="David, expression de question"><img class="face-video expr-photo" id="exprPhoto2" src="media/expressions/peur.jpg" alt="David, expression d’appréhension"><img class="face-video expr-photo" id="exprPhoto3" src="media/expressions/surprise.jpg" alt="David, expression de surprise"><span class="face-tag" id="exprTag">NORMAL</span></div><div class="expr-chips" id="exprChips" role="group" aria-label="Choisir une expression"><button type="button" class="expr-chip is-active" data-expr="0">Normal</button><button type="button" class="expr-chip" data-expr="1">Question</button><button type="button" class="expr-chip" data-expr="2">Peur</button><button type="button" class="expr-chip" data-expr="3">Surprise</button></div><p class="face-caption">4 vraies photos, aucune vidéo truquée — Sensorielle ajuste l’expression du signeur selon le ton de la phrase : neutre, question, appréhension, surprise.</p></div></section>
+<section class="wrap how-section dictionary-section" id="dictionnaire"><div data-reveal><p class="eyebrow">04 / DICTIONNAIRE</p><h2>Cherchez un mot.<br>Voyez son signe.</h2><p class="how-intro">225 signes déjà filmés. Tapez un mot pour le trouver — sa vidéo s’affiche tout de suite, juste à côté.</p><label class="visually-hidden" for="dictInput">Chercher un mot dans le dictionnaire</label><div class="dict-search"><svg class="dict-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.7"></circle><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><input type="text" id="dictInput" placeholder="bleu, famille, école…" autocomplete="off"></div><p class="dict-hint" id="dictHint">Quelques mots pour commencer :</p><div class="dict-results" id="dictResults" aria-live="polite"></div></div><div class="face-diagram" data-reveal><div class="face-stage"><video class="face-video" id="dictVideo" muted playsinline loop preload="none" hidden></video><div class="face-stage-empty" id="dictEmptyState"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.7"></circle><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Un mot à gauche,<br>son signe ici</span></div><span class="face-tag" id="dictTag" hidden></span></div><p class="face-caption" id="dictCaption">Écrivez un mot à gauche pour voir sa vidéo ici.</p></div></section>
 <script>
   (function(){
     // Section "Dictionnaire" (2026-10-20, demande de David) : recherche en
@@ -1424,6 +1424,7 @@
     var resultsEl = document.getElementById('dictResults');
     var hintEl = document.getElementById('dictHint');
     var video = document.getElementById('dictVideo');
+    var emptyState = document.getElementById('dictEmptyState');
     var tag = document.getElementById('dictTag');
     var caption = document.getElementById('dictCaption');
     if (!input || !resultsEl || !video) return;
@@ -1440,6 +1441,8 @@
       video.src = data[key];
       video.load();
       video.play().catch(function(){});
+      video.hidden = false;
+      if (emptyState) emptyState.hidden = true;
       tag.hidden = false;
       tag.textContent = labelFor(key);
       caption.textContent = 'Le signe « ' + labelFor(key).toLowerCase() + ' », filmé normalement — aucune retouche.';
@@ -1484,39 +1487,61 @@
 <section class="contribute-section wrap" id="contribuer"><div><p class="eyebrow">05 / PARTICIPER</p><h2>Chaque signe<br><em>compte.</em></h2><p>Vous connaissez la LSQ ?<br>Aidez-nous à enrichir Sensorielle.</p><div class="contrib-stat"><b>225</b><span>signes déjà dans<br>le dictionnaire</span></div><ul class="contrib-words" aria-label="Exemples de signes déjà disponibles"><li>Bonjour</li><li>Famille</li><li>Fleur</li><li>Éléphant</li><li>Girafe</li><li>Chanson</li><li>Joyeux</li><li>Maison</li><li>Jouer</li><li>Gorille</li></ul><a class="new-button" href="collector/index.html" target="_blank" rel="noopener">Contribuer un signe <span>↗</span></a></div><div class="word-board" id="signShowcase"><img class="contribution-logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCA2NCIgZmlsbD0ibm9uZSI+PGcgc3Ryb2tlPSIjMTUxODJiIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTQzIDE0SDI2QzggMTQgOCAzMiAyNiAzMkgzMkM1MCAzMiA1MCA1MCAzMiA1MEgxNSIvPjxwYXRoIGQ9Ik02NSAxNEg0OEMzMCAxNCAzMCAzMiA0OCAzMkg1NEM3MiAzMiA3MiA1MCA1NCA1MEgzNyIvPjwvZz48L3N2Zz4=" alt=""></div></section>
 <script>
   (function(){
-    // 2026-10-20 : David trouvait repetitif de remontrer "bonjour" ici alors
-    // que le mot est deja demontre juste au-dessus (section hero). Puis il a
-    // demande une vraie phrase plutot que 3 mots independants. Le dictionnaire
-    // actuel ne couvre que les chiffres + a-m + "seul" + 4 mots en e/é, donc
-    // pas de pronoms comme "tu/vous/nous" ni d'articles - on suit plutot
-    // l'ordre topic-commentaire habituel en LSQ : FAMILLE - ICI - CONTENT
-    // ("la famille est ici, je suis content"). Points d'entree-sortie tires
-    // de media/signs/clip-bounds.json (deja utilise par "Je parle" pour le
-    // meme rognage), aucune nouvelle mesure video necessaire.
-    var v = document.getElementById("howDemoVideo");
-    if (!v) return;
-    // Phrase (ordre topic-commentaire, courant en LSQ) : FAMILLE - ICI - CONTENT.
-    var seq = [
-      {w:"famille", in:1.537, out:3.58},
-      {w:"ici", in:0, out:1.967},
-      {w:"content", in:1.37, out:2.997}
+    // 2026-10-21 (demande de David) : remplace la video "Famille Ici
+    // Content" par un diaporama des 4 VRAIES photos qu'il a generees
+    // (normal, questionnant, appeure, surprise) -- illustre directement
+    // l'etape 03 du texte ci-contre ("le visage s'ajuste au ton").
+    // Diaporama automatique + etiquettes cliquables (choix explicite de
+    // David parmi plusieurs options). Un fondu (opacity, voir CSS
+    // .expr-photo) est ici volontairement utilise -- contrairement a la
+    // video "Je parle" ou un fondu est evite (il melangerait deux SIGNES
+    // differents en plein mouvement) : ici ce sont des photos fixes, le
+    // fondu ne fait que comparer deux poses, jamais deux gestes.
+    var stage = document.getElementById("exprStage");
+    var chips = document.getElementById("exprChips");
+    var tag = document.getElementById("exprTag");
+    if (!stage || !chips || !tag) return;
+    var items = [
+      { label: "Normal" },
+      { label: "Question" },
+      { label: "Peur" },
+      { label: "Surprise" }
     ];
-    var i = 0;
-    function playCurrent(){
-      v.src = "media/signs/" + seq[i].w + ".mp4";
-      v.load();
+    var photos = items.map(function(it, i){ return document.getElementById("exprPhoto" + i); });
+    var chipEls = Array.prototype.slice.call(chips.querySelectorAll(".expr-chip"));
+    var cur = 0;
+    var timer = null;
+    var AUTO_MS = 2600;
+    var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function show(idx){
+      cur = idx;
+      photos.forEach(function(p, i){ if (p) p.classList.toggle("is-active", i === idx); });
+      chipEls.forEach(function(c, i){ c.classList.toggle("is-active", i === idx); c.setAttribute("aria-pressed", String(i === idx)); });
+      tag.textContent = items[idx].label.toUpperCase();
     }
-    v.addEventListener("loadedmetadata", function(){
-      v.currentTime = seq[i].in;
-      v.play().catch(function(){});
+
+    function next(){ show((cur + 1) % items.length); }
+
+    function startAuto(){
+      if (reduceMotion) return;
+      stopAuto();
+      timer = setInterval(next, AUTO_MS);
+    }
+    function stopAuto(){
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+
+    chipEls.forEach(function(c){
+      c.addEventListener("click", function(){
+        var idx = parseInt(c.getAttribute("data-expr"), 10);
+        show(idx);
+        startAuto(); // un clic choisit une expression mais le diaporama continue ensuite
+      });
     });
-    v.addEventListener("timeupdate", function(){
-      if (v.currentTime >= seq[i].out) {
-        i = (i + 1) % seq.length;
-        playCurrent();
-      }
-    });
-    playCurrent();
+
+    show(0);
+    startAuto();
   })();
 </script>
 
@@ -6044,6 +6069,19 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
 .demo-choices button.demo-choice-random{flex:none;padding:10px 13px}
 }
 .face-tag::before{background:#b8a9ff;box-shadow:0 0 6px #b8a9ff66;animation:none}
+.face-stage-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:0 22px;background:linear-gradient(165deg,#f3f1fb,#e7e4fb 55%,#ded8fb);color:#9691b3}
+.face-stage-empty svg{width:30px;height:30px;color:#b8a9ff;flex-shrink:0}
+.face-stage-empty span{font-size:12px;line-height:1.5;font-weight:600;color:#716d91}
+.face-stage-empty[hidden]{display:none}
+.expr-stage .expr-photo{opacity:0;transition:opacity .5s ease;will-change:opacity}
+.expr-stage .expr-photo.is-active{opacity:1}
+@media(prefers-reduced-motion:reduce){.expr-stage .expr-photo{transition:none}}
+.expr-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:2px}
+.expr-chips .expr-chip{appearance:none;border:1px solid var(--s-line);background:var(--s-surface);color:#797d8f;font-size:12px;font-weight:700;letter-spacing:.01em;padding:7px 14px;border-radius:999px;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease,transform .15s ease}
+.expr-chips .expr-chip:hover{border-color:#b8a9ff;color:#564fb8}
+.expr-chips .expr-chip:active{transform:scale(.96)}
+.expr-chips .expr-chip.is-active{background:var(--s-gradient);border-color:transparent;color:#fff}
+.expr-chips .expr-chip:focus-visible{outline:2px solid #7c4dff;outline-offset:2px}
 </style>
 
 <div id="sensoAuthOverlay" role="dialog" aria-modal="true" aria-labelledby="sensoAuthTitle">
