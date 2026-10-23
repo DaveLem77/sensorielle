@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribuer un signe — Sensorielle</title>
+<meta name="description" content="Filmez un signe LSQ et envoyez-le pour enrichir le dictionnaire de Sensorielle.">
+<link rel="icon" href="../media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --s-bg:#F8F9FF;--s-surface:#fff;--s-ink:#080D25;--s-ink-dim:#62677A;--s-ink-faint:#9b9eac;
+  --s-line:#080d2514;
+  --s-gradient:linear-gradient(100deg,#7157F5 0%,#B94FE4 38%,#F45E9A 68%,#FF8058 100%);
+  --s-display:'Geist','Inter',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--s-bg);color:var(--s-ink);font:15px/1.6 'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{width:min(640px,92%);margin-inline:auto}
+header{padding:22px 0;border-bottom:1px solid var(--s-line)}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none}
+.brand img{height:30px;width:30px;object-fit:contain}
+.brand span{font-family:var(--s-display);font-weight:600;font-size:19px;letter-spacing:-.5px;color:var(--s-ink)}
+main{padding:50px 0 80px}
+.eyebrow{font-size:10px;letter-spacing:1.5px;color:#8a8ea0;font-weight:600;text-transform:uppercase;margin:0 0 14px}
+h1{font-family:var(--s-display);font-size:clamp(30px,5vw,42px);font-weight:600;letter-spacing:-.04em;line-height:1.1;margin:0 0 14px}
+.lead{font-size:14.5px;color:var(--s-ink-dim);line-height:1.7;margin:0 0 36px;max-width:50ch}
+.lead strong{color:var(--s-ink);font-weight:600}
+form{background:var(--s-surface);border:1px solid var(--s-line);border-radius:18px;padding:30px 28px;box-shadow:0 30px 60px -30px #080d2516}
+.field{margin-bottom:20px}
+.field label{display:block;font-size:11px;font-weight:600;letter-spacing:.03em;color:var(--s-ink-dim);margin-bottom:7px;text-transform:uppercase}
+.field .optional{text-transform:none;font-weight:500;color:var(--s-ink-faint);letter-spacing:0}
+.field input[type=text],.field input[type=email],.field textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #e2e1ec;background:#faf9fd;font:inherit;font-size:14px;color:var(--s-ink);resize:vertical}
+.field input:focus,.field textarea:focus{outline:2px solid #7C4DFF55;border-color:#7C4DFF}
+.field textarea{min-height:72px}
+.video-tabs{display:flex;gap:8px;margin-bottom:14px}
+.video-tabs button{flex:1;padding:10px 12px;border-radius:9px;border:1px solid #e2e1ec;background:#faf9fd;color:var(--s-ink-dim);font:600 12.5px inherit;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.video-tabs button[aria-pressed="true"]{background:var(--s-ink);border-color:var(--s-ink);color:#fff}
+.capture-box{border:1.5px dashed #d8d5ea;border-radius:14px;padding:18px;text-align:center;background:#faf9fd}
+.cam-stage{position:relative;width:min(220px,100%);aspect-ratio:3/4;margin:0 auto 14px;border-radius:12px;overflow:hidden;background:#15182b}
+.cam-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.cam-timer{position:absolute;top:10px;right:10px;background:#0b0f22b3;color:#fff;font:700 11px var(--s-display,inherit);padding:4px 9px;border-radius:100px;display:flex;align-items:center;gap:5px}
+.cam-timer i{width:5px;height:5px;border-radius:50%;background:#ff5f5f;animation:recBlink 1s ease-in-out infinite}
+.cam-timer[hidden]{display:none}
+@keyframes recBlink{0%,100%{opacity:1}50%{opacity:.25}}
+.capture-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:9px;border:1px solid var(--s-ink);background:var(--s-ink);color:#fff;font:600 12.5px inherit;cursor:pointer;transition:background .15s,transform .15s}
+.btn:hover{background:#2a2f4d}
+.btn.ghost{background:#fff;color:var(--s-ink);border-color:#e2e1ec}
+.btn.ghost:hover{background:#f3f2f8}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.file-drop{display:inline-flex}
+.file-drop input{display:none}
+.capture-hint{font-size:11.5px;color:var(--s-ink-faint);margin:10px 0 0}
+.preview-wrap{margin-top:14px}
+.preview-wrap video{width:min(220px,100%);aspect-ratio:3/4;object-fit:cover;border-radius:12px;display:block;margin:0 auto;background:#15182b}
+.submit-row{margin-top:26px}
+.submit-row .btn{width:100%;justify-content:center;padding:14px 16px;font-size:13px}
+.msg{margin-top:16px;font-size:13px;line-height:1.6;border-radius:9px;padding:12px 14px}
+.msg.err{background:#fdeeee;color:#a4302a}
+.msg.ok{background:#eafaf0;color:#1c7a45}
+.msg[hidden]{display:none}
+.fallback{margin-top:14px;padding:14px;border-radius:9px;background:#fff6e9;color:#8a5a12;font-size:12.5px;line-height:1.7}
+.fallback a{color:#8a5a12;font-weight:700;text-decoration:underline}
+.fallback[hidden]{display:none}
+footer{padding:0 0 60px;text-align:center}
+footer a{font-size:12px;color:var(--s-ink-dim);text-decoration:none}
+footer a:hover{color:#7c4dff}
+@media(max-width:480px){form{padding:24px 18px}}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <a class="brand" href="../index.html">
+    <img src="../media/favicon.png" alt="">
+    <span>Sensorielle</span>
+  </a>
+</header>
+<main class="wrap">
+  <p class="eyebrow">Contribuer</p>
+  <h1>Ajoutez un signe au<br>dictionnaire.</h1>
+  <p class="lead">Vous connaissez la LSQ&nbsp;? Filmez-vous en train de signer un mot qui n'est <strong>pas encore</strong> dans notre dictionnaire (ou une meilleure version d'un signe existant), et on l'ajoutera après vérification.</p>
+
+  <form id="contribForm" novalidate>
+    <div class="field">
+      <label for="cWord">Mot ou expression signé·e</label>
+      <input type="text" id="cWord" placeholder="ex. anniversaire" required autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="cNote">Note <span class="optional">(facultatif)</span></label>
+      <textarea id="cNote" placeholder="Région, nuance de sens, variante régionale…"></textarea>
+    </div>
+    <div class="field">
+      <label for="cEmail">Ton courriel <span class="optional">(facultatif)</span></label>
+      <input type="email" id="cEmail" placeholder="pour qu'on puisse te remercier" autocomplete="email">
+    </div>
+
+    <div class="field">
+      <label>Vidéo du signe</label>
+      <div class="video-tabs" role="tablist">
+        <button type="button" id="tabCamera" aria-pressed="true">Utiliser la caméra</button>
+        <button type="button" id="tabFile" aria-pressed="false">Choisir un fichier</button>
+      </div>
+
+      <div class="capture-box" id="cameraPane">
+        <div class="cam-stage">
+          <video id="camPreview" autoplay muted playsinline></video>
+          <span class="cam-timer" id="camTimer" hidden><i></i><span id="camTimerText">8</span></span>
+        </div>
+        <div class="capture-actions" id="cameraActions"></div>
+        <p class="capture-hint">8 secondes maximum, sans micro — seule l'image compte.</p>
+      </div>
+
+      <div class="capture-box" id="filePane" hidden>
+        <label class="file-drop btn ghost" for="cFile">Choisir une vidéo sur mon appareil<input type="file" id="cFile" accept="video/*"></label>
+        <p class="capture-hint">Formats courants (mp4, mov, webm) — quelques secondes suffisent.</p>
+      </div>
+
+      <div class="preview-wrap" id="previewWrap" hidden>
+        <video id="previewVideo" controls playsinline></video>
+        <div class="capture-actions" style="margin-top:12px">
+          <button type="button" class="btn ghost" id="btnRetake">Retirer et recommencer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="submit-row">
+      <button type="submit" class="btn" id="btnSubmit" disabled>Envoyer ma contribution</button>
+      <p class="msg" id="formMsg" hidden aria-live="polite"></p>
+      <div class="fallback" id="fallbackBox" hidden></div>
+    </div>
+  </form>
+</main>
+<footer>
+  <a href="../index.html#dictionnaire">← Retour au dictionnaire</a>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  // ---------------------------------------------------------------------
+  // Page "Contribuer un signe" (2026-10-23, demande de David). Permet de
+  // filmer (ou televerser) une courte video d'un signe, puis l'envoie a
+  // Supabase (stockage + table "contributions") pour validation manuelle
+  // avant ajout au dictionnaire.
+  //
+  // IMPORTANT pour David : pour que l'envoi arrive vraiment dans Supabase,
+  // il faut creer, dans le tableau de bord Supabase (Storage + Table
+  // editor) :
+  //   1. Un bucket de stockage nomme "contributions" (peut rester prive),
+  //      avec une politique qui autorise l'INSERT pour le role "anon".
+  //   2. Une table "contributions" avec les colonnes : word (text),
+  //      note (text, nullable), email (text, nullable),
+  //      video_path (text), created_at (timestamptz, defaut now()),
+  //      status (text, defaut 'pending') -- avec RLS activee et une
+  //      politique qui autorise l'INSERT pour "anon".
+  // Je n'ai pas acces a ce tableau de bord depuis ici. Tant que ce n'est
+  // pas fait, l'envoi echouera proprement et la page proposera un envoi
+  // par courriel a la place (rien n'est perdu).
+  var FALLBACK_EMAIL = "dlemieux730@gmail.com";
+
+  if (!window.supabase || !window.supabase.createClient) return;
+  var SUPABASE_URL = "https://frinlluqjbwgctkzqoea.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_HQ1zoBcHrmetRRIopwKxgA_t4DAaNJZ";
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var form = document.getElementById("contribForm");
+  var wordInput = document.getElementById("cWord");
+  var noteInput = document.getElementById("cNote");
+  var emailInput = document.getElementById("cEmail");
+  var tabCamera = document.getElementById("tabCamera");
+  var tabFile = document.getElementById("tabFile");
+  var cameraPane = document.getElementById("cameraPane");
+  var filePane = document.getElementById("filePane");
+  var camPreview = document.getElementById("camPreview");
+  var camTimer = document.getElementById("camTimer");
+  var camTimerText = document.getElementById("camTimerText");
+  var cameraActions = document.getElementById("cameraActions");
+  var fileInput = document.getElementById("cFile");
+  var previewWrap = document.getElementById("previewWrap");
+  var previewVideo = document.getElementById("previewVideo");
+  var btnRetake = document.getElementById("btnRetake");
+  var btnSubmit = document.getElementById("btnSubmit");
+  var formMsg = document.getElementById("formMsg");
+  var fallbackBox = document.getElementById("fallbackBox");
+  if (!form || !wordInput || !cameraActions) return;
+
+  var MAX_RECORD_MS = 8000;
+  var stream = null;
+  var mediaRecorder = null;
+  var chunks = [];
+  var recordTimeout = null;
+  var tickInterval = null;
+  var videoBlob = null;      // enregistre via la camera
+  var videoFile = null;      // choisi via le selecteur de fichier
+  var previewUrl = null;
+
+  function showMsg(text, kind) {
+    formMsg.textContent = text;
+    formMsg.className = "msg " + (kind || "err");
+    formMsg.hidden = false;
+  }
+  function clearMsg() { formMsg.hidden = true; formMsg.textContent = ""; }
+
+  function updateSubmitState() {
+    var hasVideo = !!(videoBlob || videoFile);
+    btnSubmit.disabled = !(wordInput.value.trim() && hasVideo);
+  }
+  wordInput.addEventListener("input", updateSubmitState);
+
+  function setTab(which) {
+    var isCam = which === "camera";
+    tabCamera.setAttribute("aria-pressed", String(isCam));
+    tabFile.setAttribute("aria-pressed", String(!isCam));
+    cameraPane.hidden = !isCam;
+    filePane.hidden = isCam;
+    if (!isCam) stopCamera();
+  }
+  tabCamera.addEventListener("click", function(){ setTab("camera"); });
+  tabFile.addEventListener("click", function(){ setTab("file"); });
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(function(t){ t.stop(); });
+      stream = null;
+    }
+  }
+  window.addEventListener("pagehide", stopCamera);
+
+  function renderIdleCameraActions() {
+    cameraActions.innerHTML = "";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn ghost";
+    btn.textContent = "Activer la caméra";
+    btn.addEventListener("click", onStartCamClick);
+    cameraActions.appendChild(btn);
+  }
+
+  function renderRecordingActions() {
+    cameraActions.innerHTML = "";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn";
+    btn.textContent = "Arrêter l'enregistrement";
+    btn.addEventListener("click", stopRecording);
+    cameraActions.appendChild(btn);
+  }
+
+  function renderReadyToRecordActions() {
+    cameraActions.innerHTML = "";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn";
+    btn.textContent = "Enregistrer (8 s max)";
+    btn.addEventListener("click", startRecording);
+    cameraActions.appendChild(btn);
+  }
+
+  function clearPreview() {
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+    previewVideo.removeAttribute("src");
+    previewVideo.load();
+    previewWrap.hidden = true;
+    videoBlob = null;
+    videoFile = null;
+    fileInput.value = "";
+    updateSubmitState();
+  }
+
+  function showPreview(blobOrFile) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(blobOrFile);
+    // La vignette de revision n'est PAS mise en miroir (contrairement a
+    // l'apercu en direct plus haut) : c'est volontaire, pour que la
+    // personne voie exactement ce qui sera envoye -- la main utilisee
+    // compte en LSQ, on ne veut surtout pas une image inversee ici.
+    previewVideo.src = previewUrl;
+    previewWrap.hidden = false;
+    cameraActions.hidden = true;
+    camTimer.hidden = true;
+    updateSubmitState();
+  }
+
+  btnRetake.addEventListener("click", function(){
+    clearPreview();
+    renderIdleCameraActions();
+    cameraActions.hidden = false;
+  });
+
+  function pickMimeType() {
+    var candidates = ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm","video/mp4"];
+    for (var i = 0; i < candidates.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidates[i])) {
+        return candidates[i];
+      }
+    }
+    return "";
+  }
+
+  function startRecording() {
+    if (!stream || !window.MediaRecorder) return;
+    chunks = [];
+    var mimeType = pickMimeType();
+    try {
+      mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+    } catch (e) {
+      showMsg("L'enregistrement vidéo n'est pas pris en charge par ce navigateur. Essayez « Choisir un fichier ».");
+      return;
+    }
+    mediaRecorder.addEventListener("dataavailable", function(e){
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    });
+    mediaRecorder.addEventListener("stop", function(){
+      var blob = new Blob(chunks, { type: mediaRecorder.mimeType || "video/webm" });
+      videoBlob = blob;
+      stopCamera();
+      showPreview(blob);
+    });
+    mediaRecorder.start();
+    camTimer.hidden = false;
+    var remaining = Math.ceil(MAX_RECORD_MS / 1000);
+    camTimerText.textContent = String(remaining);
+    tickInterval = setInterval(function(){
+      remaining -= 1;
+      if (remaining >= 0) camTimerText.textContent = String(remaining);
+    }, 1000);
+    recordTimeout = setTimeout(function(){ stopRecording(); }, MAX_RECORD_MS);
+    renderRecordingActions();
+  }
+
+  function stopRecording() {
+    if (recordTimeout) { clearTimeout(recordTimeout); recordTimeout = null; }
+    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+  }
+
+  function onStartCamClick() {
+    clearMsg();
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false }).then(function(s){
+      stream = s;
+      camPreview.srcObject = s;
+      renderReadyToRecordActions();
+    }).catch(function(){
+      showMsg("Impossible d'accéder à la caméra. Vous pouvez plutôt choisir un fichier vidéo.");
+    });
+  }
+
+  fileInput.addEventListener("change", function(){
+    var f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    if (f.type && f.type.indexOf("video/") !== 0) {
+      showMsg("Choisissez un fichier vidéo.");
+      return;
+    }
+    videoFile = f;
+    showPreview(f);
+  });
+
+  function slugify(s) {
+    return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "mot";
+  }
+
+  function buildFallback(word, note) {
+    var subject = "Contribution LSQ : " + word;
+    var bodyLines = [
+      "Mot : " + word,
+      "Note : " + (note || "(aucune)"),
+      "",
+      "(La video n'a pas pu etre envoyee automatiquement -- merci de la joindre a ce courriel.)"
+    ];
+    var mailto = "mailto:" + FALLBACK_EMAIL +
+      "?subject=" + encodeURIComponent(subject) +
+      "&body=" + encodeURIComponent(bodyLines.join("\n"));
+    fallbackBox.innerHTML = "L'envoi automatique n'a pas fonctionné pour l'instant. " +
+      "<a href=\"" + mailto + "\">Cliquez ici pour nous envoyer votre vidéo par courriel</a> à la place — rien n'est perdu.";
+    fallbackBox.hidden = false;
+  }
+
+  form.addEventListener("submit", function(e){
+    e.preventDefault();
+    clearMsg();
+    fallbackBox.hidden = true;
+    var word = wordInput.value.trim();
+    var note = noteInput.value.trim();
+    var email = emailInput.value.trim();
+    var media = videoBlob || videoFile;
+    if (!word || !media) { updateSubmitState(); return; }
+
+    btnSubmit.disabled = true;
+    var prevLabel = btnSubmit.textContent;
+    btnSubmit.textContent = "Envoi en cours…";
+
+    var ext = videoFile ? ("." + (videoFile.name.split(".").pop() || "mp4")) : ".webm";
+    var contentType = media.type || "video/webm";
+    var path = slugify(word) + "-" + Date.now() + ext;
+
+    sb.storage.from("contributions").upload(path, media, { contentType: contentType, upsert: false })
+      .then(function(res){
+        if (res.error) throw res.error;
+        return sb.from("contributions").insert({
+          word: word,
+          note: note || null,
+          email: email || null,
+          video_path: path
+        });
+      })
+      .then(function(res){
+        if (res && res.error) throw res.error;
+        showMsg("Merci ! Votre signe a été envoyé pour vérification avant d'être ajouté au dictionnaire.", "ok");
+        form.reset();
+        clearPreview();
+        renderIdleCameraActions();
+        cameraActions.hidden = false;
+        btnSubmit.textContent = prevLabel;
+      })
+      .catch(function(err){
+        console.warn("Contribution : envoi Supabase impossible.", err);
+        buildFallback(word, note);
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = prevLabel;
+      });
+  });
+
+  renderIdleCameraActions();
+  updateSubmitState();
+})();
+</script>
+</body>
+</html>
