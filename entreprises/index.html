@@ -93,6 +93,14 @@ form#demoForm{background:var(--s-surface);border:1px solid var(--s-line);border-
 .fallback[hidden]{display:none}
 
 .pilot-note{text-align:center;font-size:12px;color:var(--s-ink-faint);max-width:50ch;margin:14px auto 0;line-height:1.7}
+.embed-box{background:#10152b;border-radius:14px;padding:22px 20px;color:#f6f3ff;max-width:600px;margin:0 auto 26px}
+.embed-box p{color:#b0afc3;font-size:13px;margin:0 0 12px}
+.embed-code{position:relative;background:#080b1a;border-radius:10px;padding:16px 46px 16px 16px;overflow-x:auto}
+.embed-code code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:#d9d4ef;white-space:pre}
+.embed-copy{position:absolute;top:10px;right:10px;background:#1a2040;border:1px solid #2a3058;color:#d9d4ef;font:600 10.5px inherit;padding:6px 10px;border-radius:7px;cursor:pointer}
+.embed-copy:hover{background:#242b52}
+.embed-live{max-width:520px;margin:0 auto}
+.embed-live-label{text-align:center;font-size:11px;color:var(--s-ink-faint);margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em}
 
 footer{padding:40px 0 60px;text-align:center}
 footer a{font-size:12px;color:var(--s-ink-dim);text-decoration:none}
@@ -164,6 +172,24 @@ footer a:hover{color:#7c4dff}
         <h3>« Je parle », pour vos comptoirs</h3>
         <p>La personne parle, Sensorielle reconnaît les mots et enchaîne les signes correspondants à l'écran — utile à un comptoir d'accueil, une borne libre-service ou une ligne d'assistance en personne.</p>
       </div>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="section-head">
+      <h2>Comment ça s'intègre</h2>
+      <p>Une seule balise à coller dans votre page — pas de serveur à gérer, pas de compte développeur requis pour commencer.</p>
+    </div>
+    <div class="embed-box">
+      <p>Collez ceci à l'endroit où le dictionnaire doit apparaître :</p>
+      <div class="embed-code">
+        <code id="embedSnippet">&lt;script src="https://sensorielle.ca/widget/embed.js"&gt;&lt;/script&gt;</code>
+        <button type="button" class="embed-copy" id="embedCopyBtn">Copier</button>
+      </div>
+    </div>
+    <p class="embed-live-label">En voici un exemple, en direct, juste ici</p>
+    <div class="embed-live">
+      <script src="../widget/embed.js"></script>
     </div>
   </section>
 
@@ -280,6 +306,22 @@ footer a:hover{color:#7c4dff}
   // Tant que ce n'est pas fait, l'envoi echoue proprement et la page
   // propose un envoi par courriel a la place.
   var FALLBACK_EMAIL = "dlemieux730@gmail.com";
+
+  var copyBtn = document.getElementById("embedCopyBtn");
+  var snippetEl = document.getElementById("embedSnippet");
+  if (copyBtn && snippetEl) {
+    copyBtn.addEventListener("click", function(){
+      var text = snippetEl.textContent;
+      var done = function(){
+        var prev = copyBtn.textContent;
+        copyBtn.textContent = "Copié !";
+        setTimeout(function(){ copyBtn.textContent = prev; }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function(){});
+      }
+    });
+  }
 
   if (!window.supabase || !window.supabase.createClient) return;
   var SUPABASE_URL = "https://frinlluqjbwgctkzqoea.supabase.co";
