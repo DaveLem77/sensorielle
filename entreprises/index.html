@@ -111,6 +111,22 @@ footer a:hover{color:#7c4dff}
   .two-col{grid-template-columns:1fr}
   form#demoForm{padding:24px 18px}
 }
+
+.hero-stats{display:flex;justify-content:center;gap:40px;margin-top:36px;flex-wrap:wrap}
+.hero-stats div{text-align:center}
+.hero-stats b{display:block;font-family:var(--s-display);font-size:26px;font-weight:700;letter-spacing:-.02em;background:var(--s-gradient);background-clip:text;-webkit-background-clip:text;color:transparent}
+.hero-stats span{display:block;margin-top:4px;font-size:11.5px;color:var(--s-ink-faint);max-width:15ch;line-height:1.4}
+
+.plan{position:relative}
+.plan-badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--s-gradient);color:#fff;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:6px 14px;border-radius:100px;white-space:nowrap;box-shadow:0 6px 16px -6px #7c4dff66}
+.plan .price{font-family:var(--s-display);font-size:30px;font-weight:700;letter-spacing:-.025em;margin:0 0 16px}
+.plan .price span{font-size:12.5px;font-weight:500;color:var(--s-ink-faint)}
+.plan.is-highlight .price span{color:#b0afc3}
+.pricing-note{text-align:center;font-size:11.5px;color:var(--s-ink-faint);max-width:52ch;margin:22px auto 0;line-height:1.7}
+
+@media(max-width:760px){
+  .hero-stats{gap:22px;margin-top:28px}
+}
 </style>
 </head>
 <body>
@@ -132,6 +148,11 @@ footer a:hover{color:#7c4dff}
     <div class="hero-ctas">
       <a class="btn" href="#demo-form">Demander une démo</a>
       <a class="btn ghost" href="../index.html#demo">Voir le produit en direct ↗</a>
+    </div>
+    <div class="hero-stats">
+      <div><b>225+</b><span>signes déjà filmés</span></div>
+      <div><b>100%</b><span>interprétation humaine filmée, aucune animation générique</span></div>
+      <div><b>1 balise</b><span>pour intégrer le dictionnaire à votre site</span></div>
     </div>
   </section>
 
@@ -209,32 +230,36 @@ footer a:hover{color:#7c4dff}
   <section class="wrap">
     <div class="section-head">
       <h2>Trois façons de commencer</h2>
-      <p>Pas de tarif générique affiché ici à l'aveugle — on discute de votre volume d'usagers et de ce que vous voulez intégrer, puis on propose un prix qui a du sens.</p>
+      <p>Des tarifs de référence pour démarrer la discussion, ajustés ensuite selon votre volume d'usagers et ce que vous voulez intégrer.</p>
     </div>
     <div class="pricing">
       <div class="plan">
         <h3>Essentiel</h3>
         <p class="plan-for">Un seul point de contact (site web ou borne)</p>
+        <p class="price">149 $<span> / mois</span></p>
         <ul>
           <li>Widget dictionnaire LSQ intégrable</li>
           <li>Mise à jour continue du vocabulaire</li>
           <li>Support par courriel</li>
         </ul>
-        <a class="btn ghost" href="#demo-form">Demander un prix</a>
+        <a class="btn ghost" href="#demo-form">Commencer</a>
       </div>
       <div class="plan is-highlight">
+        <span class="plan-badge">Le plus populaire</span>
         <h3>Professionnel</h3>
         <p class="plan-for">Plusieurs points de contact, usage régulier</p>
+        <p class="price">399 $<span> / mois</span></p>
         <ul>
           <li>Dictionnaire + traduction voix → signe</li>
           <li>Accompagnement à l'intégration</li>
           <li>Rapport d'usage périodique</li>
         </ul>
-        <a class="btn" href="#demo-form">Demander un prix</a>
+        <a class="btn" href="#demo-form">Commencer</a>
       </div>
       <div class="plan">
         <h3>Sur mesure</h3>
         <p class="plan-for">Grand réseau, besoins spécifiques</p>
+        <p class="price">Sur mesure</p>
         <ul>
           <li>Vocabulaire dédié à votre secteur</li>
           <li>Intégration technique avec votre équipe</li>
@@ -243,6 +268,7 @@ footer a:hover{color:#7c4dff}
         <a class="btn ghost" href="#demo-form">En discuter</a>
       </div>
     </div>
+    <p class="pricing-note">Tarifs indicatifs pour une organisation avec un seul point d'intégration — ils sont ajustés selon votre volume d'usagers et le nombre de points de contact. Rien n'est facturé avant qu'on se soit parlé.</p>
   </section>
 
   <section class="wrap" id="demo-form">
