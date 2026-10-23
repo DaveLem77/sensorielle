@@ -1410,7 +1410,7 @@
 <article class="mode-card voice-card"><div class="mode-top"><span class="mode-icon">≋</span><span>FRANÇAIS → SIGNES</span><span>02</span></div><h3>Je parle.</h3><p>Votre voix, les signes disponibles à l’écran.</p><div class="mode-actions"><button class="new-button secondary" id="speechModeBtn" type="button">Activer le microphone <span aria-hidden="true">↗</span></button><span class="mode-note" id="speechAuthNote">Autorisez le micro lorsque le navigateur le demande.</span></div></article></div>
 <p class="prototype-note">Prototype · Signes disponibles uniquement, vidéos jouées mot à mot.</p></section>
 
-<section class="wrap how-section" id="comment"><div data-reveal><p class="eyebrow">03 / COMMENT ÇA MARCHE</p><h2>Pas juste des mots mis bout à bout.</h2><p class="how-intro">Sensorielle n’affiche pas un signe par mot prononcé. La phrase est comprise, reformulée si besoin, puis signée — avec une expression qui suit le ton.</p><div class="step-list"><article><span>01</span><div><h3>On vous écoute en direct</h3><p>La parole est transcrite au fur et à mesure, mot par mot, sans attendre la fin de la phrase.</p></div></article><article><span>02</span><div><h3>Une IA choisit les mots</h3><p>Si la phrase ne se traduit pas mot à mot en signes, une IA la reformule pour trouver ce qui se rapproche le plus d’une vraie formulation en LSQ.</p></div></article><article><span>03</span><div><h3>Le visage s’ajuste au ton</h3><p>Une question, une négation, une exclamation : l’expression du signeur s’ajuste légèrement pour porter l’intention, pas seulement les mains.</p></div></article></div></div><div class="face-diagram" data-reveal><div class="face-stage expr-stage" id="exprStage"><img class="face-video expr-photo is-active" id="exprPhoto0" src="media/expressions/normal.jpg" alt="David, visage neutre"><img class="face-video expr-photo" id="exprPhoto1" src="media/expressions/question.jpg" alt="David, expression de question"><img class="face-video expr-photo" id="exprPhoto2" src="media/expressions/peur.jpg" alt="David, expression d’appréhension"><img class="face-video expr-photo" id="exprPhoto3" src="media/expressions/surprise.jpg" alt="David, expression de surprise"><span class="face-tag" id="exprTag">NORMAL</span></div><div class="expr-chips" id="exprChips" role="group" aria-label="Choisir une expression"><button type="button" class="expr-chip is-active" data-expr="0">Normal</button><button type="button" class="expr-chip" data-expr="1">Question</button><button type="button" class="expr-chip" data-expr="2">Peur</button><button type="button" class="expr-chip" data-expr="3">Surprise</button></div><p class="face-caption">4 vraies photos, aucune vidéo truquée — Sensorielle ajuste l’expression du signeur selon le ton de la phrase : neutre, question, appréhension, surprise.</p></div></section>
+<section class="wrap how-section" id="comment"><div data-reveal><p class="eyebrow">03 / COMMENT ÇA MARCHE</p><h2>Pas juste des mots mis bout à bout.</h2><p class="how-intro">Sensorielle n’affiche pas un signe par mot prononcé. La phrase est comprise, reformulée si besoin, puis signée — avec une expression qui suit le ton.</p><div class="step-list"><article><span>01</span><div><h3>On vous écoute en direct</h3><p>La parole est transcrite au fur et à mesure, mot par mot, sans attendre la fin de la phrase.</p></div></article><article><span>02</span><div><h3>Une IA choisit les mots</h3><p>Si la phrase ne se traduit pas mot à mot en signes, une IA la reformule pour trouver ce qui se rapproche le plus d’une vraie formulation en LSQ.</p></div></article><article><span>03</span><div><h3>Le visage s’ajuste au ton</h3><p>Une question, une négation, une exclamation : l’expression du signeur s’ajuste légèrement pour porter l’intention, pas seulement les mains.</p></div></article></div></div><div class="face-diagram" data-reveal><div class="face-stage expr-stage" id="exprStage"><img class="face-video expr-photo is-active" id="exprPhoto0" src="media/expressions/normal.jpg" alt="David, visage neutre"><img class="face-video expr-photo" id="exprPhoto1" src="media/expressions/question.jpg" alt="David, expression de question"><img class="face-video expr-photo" id="exprPhoto2" src="media/expressions/peur.jpg" alt="David, expression d’appréhension"><img class="face-video expr-photo" id="exprPhoto3" src="media/expressions/surprise.jpg" alt="David, expression de surprise"><span class="face-tag" id="exprTag">NORMAL</span></div><p class="face-caption">4 vraies photos, aucune vidéo truquée — Sensorielle ajuste l’expression du signeur selon le ton de la phrase : neutre, question, appréhension, surprise.</p></div></section>
 <section class="wrap how-section dictionary-section" id="dictionnaire"><div data-reveal><p class="eyebrow">04 / DICTIONNAIRE</p><h2>Cherchez un mot.<br>Voyez son signe.</h2><p class="how-intro">225 signes déjà filmés. Tapez un mot pour le trouver — sa vidéo s’affiche tout de suite, juste à côté.</p><label class="visually-hidden" for="dictInput">Chercher un mot dans le dictionnaire</label><div class="dict-search"><svg class="dict-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.7"></circle><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><input type="text" id="dictInput" placeholder="bleu, famille, école…" autocomplete="off"></div><p class="dict-hint" id="dictHint">Quelques mots pour commencer :</p><div class="dict-results" id="dictResults" aria-live="polite"></div></div><div class="face-diagram" data-reveal><div class="face-stage"><video class="face-video" id="dictVideo" muted playsinline loop preload="none" hidden></video><div class="face-stage-empty" id="dictEmptyState"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="1.7"></circle><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Un mot à gauche,<br>son signe ici</span></div><span class="face-tag" id="dictTag" hidden></span></div><p class="face-caption" id="dictCaption">Écrivez un mot à gauche pour voir sa vidéo ici.</p></div></section>
 <script>
   (function(){
@@ -1488,19 +1488,22 @@
 <script>
   (function(){
     // 2026-10-21 (demande de David) : remplace la video "Famille Ici
-    // Content" par un diaporama des 4 VRAIES photos qu'il a generees
+    // Content" par une animation des 4 VRAIES photos qu'il a generees
     // (normal, questionnant, appeure, surprise) -- illustre directement
-    // l'etape 03 du texte ci-contre ("le visage s'ajuste au ton").
-    // Diaporama automatique + etiquettes cliquables (choix explicite de
-    // David parmi plusieurs options). Un fondu (opacity, voir CSS
-    // .expr-photo) est ici volontairement utilise -- contrairement a la
-    // video "Je parle" ou un fondu est evite (il melangerait deux SIGNES
-    // differents en plein mouvement) : ici ce sont des photos fixes, le
-    // fondu ne fait que comparer deux poses, jamais deux gestes.
+    // l'etape 03 du texte ci-contre ("le visage s'ajuste au ton"). Les 4
+    // photos sont pre-alignees (meme position/taille du visage, voir
+    // JOURNAL.md) pour que seule l'expression change visuellement d'une
+    // photo a l'autre.
+    // Version 2 (meme jour) : purement automatique, AUCUNE interaction --
+    // David a explicitement demande de retirer les etiquettes cliquables
+    // et de miser sur l'animation elle-meme ("wow"). Le fondu enchaine
+    // avec un leger zoom (voir .expr-photo/.is-active en CSS) pour un
+    // effet plus vivant qu'un simple fondu plat. Un fondu reste utilise
+    // ici (contrairement a "Je parle") car ce sont des photos fixes : il
+    // ne fait que comparer deux poses, jamais deux signes en mouvement.
     var stage = document.getElementById("exprStage");
-    var chips = document.getElementById("exprChips");
     var tag = document.getElementById("exprTag");
-    if (!stage || !chips || !tag) return;
+    if (!stage || !tag) return;
     var items = [
       { label: "Normal" },
       { label: "Question" },
@@ -1508,40 +1511,20 @@
       { label: "Surprise" }
     ];
     var photos = items.map(function(it, i){ return document.getElementById("exprPhoto" + i); });
-    var chipEls = Array.prototype.slice.call(chips.querySelectorAll(".expr-chip"));
     var cur = 0;
-    var timer = null;
-    var AUTO_MS = 2600;
+    var AUTO_MS = 2800;
     var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     function show(idx){
       cur = idx;
       photos.forEach(function(p, i){ if (p) p.classList.toggle("is-active", i === idx); });
-      chipEls.forEach(function(c, i){ c.classList.toggle("is-active", i === idx); c.setAttribute("aria-pressed", String(i === idx)); });
       tag.textContent = items[idx].label.toUpperCase();
     }
 
     function next(){ show((cur + 1) % items.length); }
 
-    function startAuto(){
-      if (reduceMotion) return;
-      stopAuto();
-      timer = setInterval(next, AUTO_MS);
-    }
-    function stopAuto(){
-      if (timer) { clearInterval(timer); timer = null; }
-    }
-
-    chipEls.forEach(function(c){
-      c.addEventListener("click", function(){
-        var idx = parseInt(c.getAttribute("data-expr"), 10);
-        show(idx);
-        startAuto(); // un clic choisit une expression mais le diaporama continue ensuite
-      });
-    });
-
     show(0);
-    startAuto();
+    if (!reduceMotion) setInterval(next, AUTO_MS);
   })();
 </script>
 
@@ -6073,15 +6056,9 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
 .face-stage-empty svg{width:30px;height:30px;color:#b8a9ff;flex-shrink:0}
 .face-stage-empty span{font-size:12px;line-height:1.5;font-weight:600;color:#716d91}
 .face-stage-empty[hidden]{display:none}
-.expr-stage .expr-photo{opacity:0;transition:opacity .5s ease;will-change:opacity}
-.expr-stage .expr-photo.is-active{opacity:1}
-@media(prefers-reduced-motion:reduce){.expr-stage .expr-photo{transition:none}}
-.expr-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:2px}
-.expr-chips .expr-chip{appearance:none;border:1px solid var(--s-line);background:var(--s-surface);color:#797d8f;font-size:12px;font-weight:700;letter-spacing:.01em;padding:7px 14px;border-radius:999px;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease,transform .15s ease}
-.expr-chips .expr-chip:hover{border-color:#b8a9ff;color:#564fb8}
-.expr-chips .expr-chip:active{transform:scale(.96)}
-.expr-chips .expr-chip.is-active{background:var(--s-gradient);border-color:transparent;color:#fff}
-.expr-chips .expr-chip:focus-visible{outline:2px solid #7c4dff;outline-offset:2px}
+.expr-stage .expr-photo{opacity:0;transform:scale(1.05);transition:opacity 1.1s ease,transform 1.6s cubic-bezier(.19,1,.22,1);will-change:opacity,transform}
+.expr-stage .expr-photo.is-active{opacity:1;transform:scale(1)}
+@media(prefers-reduced-motion:reduce){.expr-stage .expr-photo{transition:opacity .2s linear;transform:none}}
 </style>
 
 <div id="sensoAuthOverlay" role="dialog" aria-modal="true" aria-labelledby="sensoAuthTitle">
