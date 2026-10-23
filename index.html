@@ -6031,6 +6031,26 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
 .senso-msg.err{background:#fdeeee;color:#a4302a}
 .senso-msg.ok{background:#eafaf0;color:#1c7a45}
 .senso-msg[hidden]{display:none}
+.senso-avatar-field{display:flex;flex-direction:column}
+.senso-modal.is-signin .senso-avatar-field{display:none}
+.senso-avatar-picker{display:flex;align-items:center;gap:14px}
+.senso-avatar-btn{flex:none;width:58px;height:58px;border-radius:50%;border:1.5px dashed #c9c5e0;background:#faf9fd;color:#9690b0;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;padding:0;transition:border-color .15s,background .15s}
+.senso-avatar-btn:hover{border-color:#7C4DFF;background:#f6f3ff}
+.senso-avatar-btn-icon{width:23px;height:23px}
+.senso-avatar-btn-photo{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.senso-avatar-btn.has-photo{border-style:solid;border-color:#e2e1ec}
+.senso-avatar-btn.has-photo .senso-avatar-btn-icon{display:none}
+.senso-avatar-picker-text{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
+.senso-avatar-picker-title{font-size:12.5px;color:#62677A}
+.senso-avatar-remove{background:none;border:none;color:#a4302a;font:600 11.5px inherit;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+#sensoCropOverlay{position:fixed;inset:0;z-index:999995;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,13,37,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .18s ease}
+#sensoCropOverlay.open{opacity:1;pointer-events:auto}
+#sensoCropOverlay .senso-modal{transform:translateY(8px) scale(.98);transition:transform .18s ease;text-align:center}
+#sensoCropOverlay.open .senso-modal{transform:translateY(0) scale(1)}
+.senso-crop-stage{display:flex;justify-content:center;margin:4px 0 18px}
+.senso-crop-stage canvas{border-radius:50%;cursor:grab;touch-action:none;box-shadow:0 0 0 1px #e2e1ec}
+.senso-crop-stage canvas:active{cursor:grabbing}
+.senso-crop-zoom{width:100%;margin:0 0 18px;accent-color:#7C4DFF}
 .demo-choices button.demo-choice-random{display:inline-flex;align-items:center;gap:6px;background:transparent;border-color:transparent;color:#8b7aa8}
 .demo-choices button.demo-choice-random:hover{color:#5B34D6;background:rgba(124,77,255,.08);border-color:rgba(124,77,255,.18)}
 .demo-choice-random-icon{width:13px;height:13px;flex:none;transition:transform .35s ease}
@@ -6080,6 +6100,20 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
         <label for="sensoAuthPassword">Mot de passe</label>
         <input id="sensoAuthPassword" type="password" autocomplete="current-password" required minlength="6">
       </div>
+      <div class="senso-field senso-avatar-field" id="sensoAvatarField">
+        <label>Photo de profil (facultatif)</label>
+        <div class="senso-avatar-picker">
+          <button type="button" class="senso-avatar-btn" id="sensoAvatarBtn" aria-label="Choisir une photo de profil">
+            <svg class="senso-avatar-btn-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.7"></circle><path d="M4.8 19.2c1.4-3.1 4-4.7 7.2-4.7s5.8 1.6 7.2 4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+            <img class="senso-avatar-btn-photo" id="sensoAvatarPreview" alt="" hidden>
+          </button>
+          <div class="senso-avatar-picker-text">
+            <span class="senso-avatar-picker-title" id="sensoAvatarPickerTitle">Ajouter une photo</span>
+            <button type="button" class="senso-avatar-remove" id="sensoAvatarRemove" hidden>Retirer</button>
+          </div>
+        </div>
+        <input type="file" id="sensoAvatarInput" accept="image/*" hidden>
+      </div>
       <button type="submit" class="senso-submit" id="sensoAuthSubmit">Continuer</button>
       <p class="senso-msg" id="sensoAuthMsg" hidden></p>
     </form>
@@ -6089,6 +6123,19 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
       Continuer avec Google
     </button>
     <p class="senso-toggle" id="sensoAuthToggleWrap">Déjà un compte ? <button type="button" id="sensoAuthToggle">Se connecter</button></p>
+  </div>
+</div>
+
+<div id="sensoCropOverlay" role="dialog" aria-modal="true" aria-labelledby="sensoCropTitle">
+  <div class="senso-modal senso-crop-modal">
+    <button class="senso-close" id="sensoCropClose" type="button" aria-label="Fermer">×</button>
+    <h3 id="sensoCropTitle">Cadrez votre photo</h3>
+    <p class="senso-sub">Glissez pour repositionner, et ajustez le zoom si besoin.</p>
+    <div class="senso-crop-stage">
+      <canvas id="sensoCropCanvas" width="280" height="280"></canvas>
+    </div>
+    <input type="range" id="sensoCropZoom" class="senso-crop-zoom" min="1" max="3" step="0.01" value="1" aria-label="Zoom">
+    <button type="button" class="senso-submit" id="sensoCropConfirm">Utiliser cette photo</button>
   </div>
 </div>
 
@@ -6148,12 +6195,205 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
   const navAccountLabel = document.getElementById("navAccountLabel");
   const navAccountEmail = document.getElementById("navAccountEmail");
   const navAccountSignOut = document.getElementById("navAccountSignOut");
+  const sensoModal = overlay.querySelector(".senso-modal");
+  const avatarField = document.getElementById("sensoAvatarField");
+  const avatarBtn = document.getElementById("sensoAvatarBtn");
+  const avatarPreviewImg = document.getElementById("sensoAvatarPreview");
+  const avatarPickerTitle = document.getElementById("sensoAvatarPickerTitle");
+  const avatarRemoveBtn = document.getElementById("sensoAvatarRemove");
+  const avatarInput = document.getElementById("sensoAvatarInput");
+  const cropOverlay = document.getElementById("sensoCropOverlay");
+  const cropCloseBtn = document.getElementById("sensoCropClose");
+  const cropCanvas = document.getElementById("sensoCropCanvas");
+  const cropZoomSlider = document.getElementById("sensoCropZoom");
+  const cropConfirmBtn = document.getElementById("sensoCropConfirm");
   if (!speechBtn || !overlay || !form) return;
 
   const DEFAULT_SPEECH_NOTE = speechNote ? speechNote.textContent : "";
   let mode = "signup";
   let pendingAction = null;
   let currentUser = null;
+
+  // ---- Photo de profil optionnelle (cadrage circulaire avant envoi) -----
+  // Demande de David (2026-10-23) : a l'inscription, on peut choisir une
+  // photo (facultatif), la cadrer dans un cercle, et si on n'en met pas,
+  // l'avatar reste l'initiale (maintenant en degrade, voir nav-account-
+  // avatar plus haut dans la page).
+  let pendingAvatarDataUrl = null;
+  const CROP_SIZE = 280;
+  const CROP_OUT_SIZE = 320;
+  let cropImg = null;
+  let cropScale = 1;
+  let cropBaseScale = 1;
+  let cropZoom = 1;
+  let cropOffsetX = 0;
+  let cropOffsetY = 0;
+  let cropDragging = false;
+  let cropDragStartX = 0;
+  let cropDragStartY = 0;
+  let cropDragStartOffX = 0;
+  let cropDragStartOffY = 0;
+  const cropCtx = cropCanvas && cropCanvas.getContext ? cropCanvas.getContext("2d") : null;
+
+  function setAvatarPreview(dataUrl) {
+    pendingAvatarDataUrl = dataUrl;
+    avatarPreviewImg.src = dataUrl;
+    avatarPreviewImg.hidden = false;
+    avatarBtn.classList.add("has-photo");
+    avatarPickerTitle.textContent = "Photo ajoutée";
+    avatarRemoveBtn.hidden = false;
+  }
+  function clearAvatarPreview() {
+    pendingAvatarDataUrl = null;
+    cropImg = null;
+    avatarPreviewImg.hidden = true;
+    avatarPreviewImg.removeAttribute("src");
+    avatarBtn.classList.remove("has-photo");
+    avatarPickerTitle.textContent = "Ajouter une photo";
+    avatarRemoveBtn.hidden = true;
+    if (avatarInput) avatarInput.value = "";
+  }
+
+  function clampCropOffsets() {
+    if (!cropImg) return;
+    const drawW = cropImg.width * cropScale;
+    const drawH = cropImg.height * cropScale;
+    const minX = Math.min(0, CROP_SIZE - drawW);
+    const minY = Math.min(0, CROP_SIZE - drawH);
+    cropOffsetX = Math.max(minX, Math.min(0, cropOffsetX));
+    cropOffsetY = Math.max(minY, Math.min(0, cropOffsetY));
+  }
+
+  function drawCrop() {
+    if (!cropCtx) return;
+    cropCtx.clearRect(0, 0, CROP_SIZE, CROP_SIZE);
+    cropCtx.fillStyle = "#e7e4fb";
+    cropCtx.fillRect(0, 0, CROP_SIZE, CROP_SIZE);
+    if (cropImg) {
+      cropCtx.drawImage(cropImg, cropOffsetX, cropOffsetY, cropImg.width * cropScale, cropImg.height * cropScale);
+    }
+    cropCtx.save();
+    cropCtx.beginPath();
+    cropCtx.rect(0, 0, CROP_SIZE, CROP_SIZE);
+    cropCtx.arc(CROP_SIZE / 2, CROP_SIZE / 2, CROP_SIZE / 2, 0, Math.PI * 2, true);
+    cropCtx.closePath();
+    cropCtx.fillStyle = "rgba(8,13,37,0.5)";
+    cropCtx.fill("evenodd");
+    cropCtx.restore();
+  }
+
+  function applyCropZoom(nextZoom) {
+    if (!cropImg) return;
+    const oldScale = cropScale;
+    const cx = (CROP_SIZE / 2 - cropOffsetX) / oldScale;
+    const cy = (CROP_SIZE / 2 - cropOffsetY) / oldScale;
+    cropZoom = Math.max(1, Math.min(3, nextZoom));
+    cropScale = cropBaseScale * cropZoom;
+    cropOffsetX = CROP_SIZE / 2 - cx * cropScale;
+    cropOffsetY = CROP_SIZE / 2 - cy * cropScale;
+    clampCropOffsets();
+    drawCrop();
+  }
+
+  function openCropOverlay() {
+    if (cropOverlay) cropOverlay.classList.add("open");
+  }
+  function closeCropOverlay() {
+    if (cropOverlay) cropOverlay.classList.remove("open");
+  }
+
+  function openCropFromFile(file) {
+    if (!file || !file.type || file.type.indexOf("image/") !== 0) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        cropImg = img;
+        cropZoom = 1;
+        cropBaseScale = Math.max(CROP_SIZE / img.width, CROP_SIZE / img.height);
+        cropScale = cropBaseScale;
+        cropOffsetX = (CROP_SIZE - img.width * cropScale) / 2;
+        cropOffsetY = (CROP_SIZE - img.height * cropScale) / 2;
+        if (cropZoomSlider) cropZoomSlider.value = "1";
+        drawCrop();
+        openCropOverlay();
+      };
+      img.onerror = () => { showMsg("Impossible de lire cette image. Réessayez avec une autre photo."); };
+      img.src = reader.result;
+    };
+    reader.onerror = () => { showMsg("Impossible de lire cette image. Réessayez avec une autre photo."); };
+    reader.readAsDataURL(file);
+  }
+
+  function exportCrop() {
+    if (!cropImg) return null;
+    const out = document.createElement("canvas");
+    out.width = CROP_OUT_SIZE;
+    out.height = CROP_OUT_SIZE;
+    const octx = out.getContext("2d");
+    const f = CROP_OUT_SIZE / CROP_SIZE;
+    octx.fillStyle = "#e7e4fb";
+    octx.fillRect(0, 0, CROP_OUT_SIZE, CROP_OUT_SIZE);
+    octx.drawImage(cropImg, cropOffsetX * f, cropOffsetY * f, cropImg.width * cropScale * f, cropImg.height * cropScale * f);
+    return out.toDataURL("image/jpeg", 0.85);
+  }
+
+  if (avatarBtn && avatarInput) {
+    avatarBtn.addEventListener("click", () => avatarInput.click());
+    avatarInput.addEventListener("change", () => {
+      const file = avatarInput.files && avatarInput.files[0];
+      if (file) openCropFromFile(file);
+    });
+  }
+  if (avatarRemoveBtn) {
+    avatarRemoveBtn.addEventListener("click", (e) => { e.stopPropagation(); clearAvatarPreview(); });
+  }
+  if (cropCanvas) {
+    cropCanvas.addEventListener("pointerdown", (e) => {
+      if (!cropImg) return;
+      cropDragging = true;
+      cropDragStartX = e.clientX;
+      cropDragStartY = e.clientY;
+      cropDragStartOffX = cropOffsetX;
+      cropDragStartOffY = cropOffsetY;
+      try { cropCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    cropCanvas.addEventListener("pointermove", (e) => {
+      if (!cropDragging) return;
+      cropOffsetX = cropDragStartOffX + (e.clientX - cropDragStartX);
+      cropOffsetY = cropDragStartOffY + (e.clientY - cropDragStartY);
+      clampCropOffsets();
+      drawCrop();
+    });
+    const endCropDrag = () => { cropDragging = false; };
+    cropCanvas.addEventListener("pointerup", endCropDrag);
+    cropCanvas.addEventListener("pointercancel", endCropDrag);
+  }
+  if (cropZoomSlider) {
+    cropZoomSlider.addEventListener("input", () => applyCropZoom(parseFloat(cropZoomSlider.value) || 1));
+  }
+  if (cropConfirmBtn) {
+    cropConfirmBtn.addEventListener("click", () => {
+      const dataUrl = exportCrop();
+      if (dataUrl) setAvatarPreview(dataUrl);
+      closeCropOverlay();
+    });
+  }
+  if (cropCloseBtn) cropCloseBtn.addEventListener("click", closeCropOverlay);
+  if (cropOverlay) {
+    cropOverlay.addEventListener("click", (e) => { if (e.target === cropOverlay) closeCropOverlay(); });
+  }
+
+  function applyPendingAvatarIfAny(user) {
+    if (!user) return;
+    let stored = null;
+    try { stored = sessionStorage.getItem("sensoPendingAvatar"); } catch (e) {}
+    if (!stored) return;
+    try { sessionStorage.removeItem("sensoPendingAvatar"); } catch (e) {}
+    const meta = user.user_metadata || {};
+    if (meta.avatar_data_url) return;
+    sb.auth.updateUser({ data: { avatar_data_url: stored } }).catch(() => {});
+  }
 
   function showMsg(text, kind) {
     msgEl.textContent = text;
@@ -6178,6 +6418,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
       submitBtn.textContent = "Continuer";
       toggleWrap.innerHTML = 'Déjà un compte ? <button type="button" id="sensoAuthToggle">Se connecter</button>';
     }
+    if (sensoModal) sensoModal.classList.toggle("is-signin", mode === "signin");
     bindToggle();
   }
 
@@ -6221,6 +6462,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
     emailInput.value = "";
     passInput.value = "";
     submitBtn.disabled = false;
+    clearAvatarPreview();
     setMode("signup");
     overlay.classList.add("open");
     setTimeout(() => emailInput.focus(), 50);
@@ -6255,10 +6497,16 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
         const { data, error } = await sb.auth.signUp({ email, password });
         if (error) throw error;
         if (data && data.user && !data.session) {
+          if (pendingAvatarDataUrl) {
+            try { sessionStorage.setItem("sensoPendingAvatar", pendingAvatarDataUrl); } catch (e) {}
+          }
           showMsg("Compte créé ! Vérifiez vos courriels pour confirmer, puis connectez-vous.", "ok");
           submitBtn.disabled = false;
           submitBtn.textContent = prevLabel;
           return;
+        }
+        if (pendingAvatarDataUrl) {
+          try { await sb.auth.updateUser({ data: { avatar_data_url: pendingAvatarDataUrl } }); } catch (e) {}
         }
       }
       // onAuthStateChange gère la fermeture de la fenêtre et l'action en attente.
@@ -6381,6 +6629,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
     updateSpeechNote();
     updateNavAccount();
     resumeSpeechIfFlagged();
+    applyPendingAvatarIfAny(currentUser);
     if (currentUser && overlay.classList.contains("open")) {
       const action = pendingAction;
       closeModal();
