@@ -1473,11 +1473,14 @@
     // Corrige le 2026-10-23 (demande de David) : avant, la vignette
     // restait vide (juste l'icone de recherche) jusqu'a ce qu'on clique
     // un mot -- ca donnait une impression de vide au premier coup d'oeil.
-    // On affiche maintenant un signe tout de suite au chargement.
-    if (defaults.length) {
-      selectWord(defaults[0]);
-    } else if (words.length) {
-      selectWord(words[0]);
+    // On affiche maintenant un signe tout de suite au chargement. David a
+    // ensuite demande de ne pas toujours afficher "bonjour" -- on pioche
+    // donc un mot au hasard (parmi les 225, pas juste les 6 suggestions)
+    // a chaque chargement de page.
+    if (words.length) {
+      selectWord(words[Math.floor(Math.random() * words.length)]);
+    } else if (defaults.length) {
+      selectWord(defaults[Math.floor(Math.random() * defaults.length)]);
     } else {
       render('');
     }
