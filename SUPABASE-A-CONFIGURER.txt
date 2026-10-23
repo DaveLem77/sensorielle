@@ -1,0 +1,87 @@
+Sensorielle — ce qu'il reste à configurer dans Supabase
+=========================================================
+
+Ce fichier n'est pas nécessaire sur ton hébergement (comme LIRE-MOI.txt) —
+garde-le juste pour toi, comme liste de choses à faire dans le tableau de
+bord Supabase (https://supabase.com/dashboard). Je n'ai pas accès à ce
+tableau de bord depuis ici, donc tout ce qui suit doit être fait par toi,
+à la main, une seule fois.
+
+Projet concerné : frinlluqjbwgctkzqoea (déjà utilisé pour les comptes).
+
+
+1) Table + bucket pour "Contribuer un signe" (collector/index.html)
+--------------------------------------------------------------------
+
+a. Storage > New bucket
+   - Nom : contributions
+   - Public : non nécessaire (peut rester privé)
+
+b. Storage > contributions > Policies > New policy
+   - Autoriser INSERT pour le rôle "anon" (ou "authenticated" si tu
+     préfères forcer la connexion avant de contribuer — actuellement le
+     formulaire n'exige pas de compte).
+
+c. Table editor > New table
+   - Nom : contributions
+   - Colonnes :
+       id          uuid       clé primaire, défaut gen_random_uuid()
+       word        text       NOT NULL
+       note        text       NULLABLE
+       email       text       NULLABLE
+       video_path  text       NOT NULL   (chemin dans le bucket "contributions")
+       status      text       défaut 'pending'
+       created_at  timestamptz défaut now()
+
+d. Active "Row Level Security" sur cette table, puis ajoute une policy
+   qui autorise INSERT pour "anon" (même principe qu'en b).
+
+   Pour réviser les contributions reçues : Table editor > contributions,
+   et pour écouter/voir la vidéo associée, Storage > contributions >
+   cherche le fichier par son "video_path". Pas besoin d'un panneau
+   d'administration séparé pour l'instant — l'éditeur de tables de
+   Supabase suffit pour approuver ou rejeter à la main.
+
+
+2) Table pour les demandes de démo entreprises (entreprises/index.html)
+--------------------------------------------------------------------------
+
+a. Table editor > New table
+   - Nom : demo_requests
+   - Colonnes :
+       id           uuid        clé primaire, défaut gen_random_uuid()
+       name         text        NOT NULL
+       organization text        NOT NULL
+       email        text        NOT NULL
+       phone        text        NULLABLE
+       message      text        NULLABLE
+       status       text        défaut 'new'
+       created_at   timestamptz défaut now()
+
+b. Active RLS, puis ajoute une policy qui autorise INSERT pour "anon".
+
+   Astuce : active aussi les notifications par courriel de Supabase (ou
+   vérifie régulièrement cette table) pour ne pas manquer une demande.
+
+
+3) Ce qui est DÉJÀ en place (rien à faire)
+---------------------------------------------
+
+- Les comptes (courriel/mot de passe, connexion Google, photo de profil)
+  utilisent déjà Supabase Auth — aucune nouvelle table n'est nécessaire
+  pour ça, c'est géré automatiquement.
+
+
+4) Rappel sécurité, en une phrase
+------------------------------------
+
+Chaque nouvelle table doit avoir RLS activée avec UNIQUEMENT les
+politiques dont tu as besoin (ici : INSERT pour "anon") — jamais une
+politique "allow all" qui permettrait aussi de LIRE ou MODIFIER les
+soumissions des autres personnes.
+
+
+Tant que ces tables/bucket n'existent pas, les deux formulaires
+concernés (Contribuer un signe, Demander une démo) échouent proprement
+et proposent automatiquement un envoi par courriel à la place — rien
+n'est perdu en attendant.
