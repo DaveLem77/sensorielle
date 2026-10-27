@@ -1051,9 +1051,22 @@
   .speech-video-wrap.sent-exclamation .speech-warp-canvas.is-active {
     animation: sentExclaimPulse 0.6s ease-out 1;
   }
+  /* 2026-10-27 : la Negation secouait TOUT le cadre (rotation+translation)
+     EN MEME TEMPS que le warp des sourcils poussait a son maximum
+     (WARP_TARGETS.negation = 0.80, le plus extreme des 4 marqueurs) —
+     deux animations independantes (une transition CSS sur <video>, un
+     redessin JS par requestAnimationFrame sur le <canvas> superpose) qui
+     peuvent demarrer a des instants legerement differents et donc
+     deriver l'une par rapport a l'autre, exactement le symptome decrit
+     plusieurs fois ("bouge de maniere bizarre", "bug de front/cheveux").
+     David demande maintenant une vraie expression de VISAGE plutot
+     qu'un tremblement de toute la video : la Negation n'anime donc plus
+     le cadre entier, seul le warp des sourcils (deja actif, voir plus
+     bas) porte le marqueur, sans rotation concurrente avec laquelle il
+     pourrait deriver. */
   .speech-video-wrap.sent-negation .speech-video.showing,
   .speech-video-wrap.sent-negation .speech-warp-canvas.is-active {
-    animation: sentNegationShake 0.85s ease-in-out infinite;
+    animation: none;
   }
   .speech-video-wrap.is-paused .speech-video.showing,
   .speech-video-wrap.is-paused .speech-warp-canvas.is-active { animation-play-state: paused; }
@@ -1069,11 +1082,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .speech-video-wrap.sent-exclamation .speech-video.showing,
-    .speech-video-wrap.sent-exclamation .speech-warp-canvas.is-active,
-    .speech-video-wrap.sent-negation .speech-video.showing,
-    .speech-video-wrap.sent-negation .speech-warp-canvas.is-active { animation: none; }
-    .speech-video-wrap.sent-negation .speech-video.showing,
-    .speech-video-wrap.sent-negation .speech-warp-canvas.is-active { transform: scale(1.05) rotate(-3deg); }
+    .speech-video-wrap.sent-exclamation .speech-warp-canvas.is-active { animation: none; }
   }
   .speech-sentiment-badge {
     position: absolute; left: 50%; top: max(66px, calc(env(safe-area-inset-top) + 56px));
