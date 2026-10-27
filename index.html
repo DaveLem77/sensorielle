@@ -1001,12 +1001,20 @@
        JOURNAL.md). */
     object-fit: cover; object-position: 50% 12%;
     background: #dcdce0;
-    opacity: 0; /* pas de transition ici : un fondu croiserait deux signes
-                   pendant le changement, la maquette et la consigne
-                   demandent explicitement de l'éviter — le changement de
-                   <video> visible n'a lieu qu'une fois la suivante déjà
-                   prête (canplay), donc l'oeil ne voit jamais de flash
-                   noir malgré ce basculement instantané. */
+    opacity: 0;
+    /* Très court fondu croisé (2026-10-27, demande explicite : "quasiment
+       deux signes en même temps, très vite, pas saccadé" — un vrai
+       interprète a déjà les mains en mouvement vers le signe suivant
+       avant que le précédent soit terminé). Avant, le changement était
+       instantané (0 fondu) justement pour ne JAMAIS superposer deux
+       signes — mais cette coupure nette, même imperceptible isolément,
+       est ce qui donnait l'impression "saccadée" dénoncée. 90ms reste
+       volontairement très court : assez pour lisser la transition
+       (coarticulation), pas assez pour qu'on voie consciemment deux
+       signes distincts se chevaucher. Garder cette durée synchronisée
+       avec la constante JS CROSSFADE_MS (voir playFromQueue) — changer
+       l'une sans l'autre casse cette synchronisation. */
+    transition: opacity 90ms linear;
   }
   .speech-video.showing { opacity: 1; }
   /* Marqueurs grammaticaux non manuels (2026-10-19) : REMPLACE l'ancien
@@ -4213,6 +4221,111 @@ if (typeof document !== "undefined") {
       if (VIDEOS[target]) WORD_MAP[normalize(form)] = target;
     });
 
+    // ---- Repli morphologique (conjugaisons/accords) -----------------------
+    // Ajouté le 2026-10-27 : la correspondance directe ci-dessus n'accepte
+    // QUE la forme exacte filmée (ex. "manger") — un mot entendu conjugué
+    // ("mange", "mangeons", "mangé"...), au pluriel ("chevaux") ou accordé
+    // au féminin ("petite") ne matchait rien du tout et disparaissait de
+    // l'affichage sans aucun signe, même quand le signe existe bel et bien
+    // sous sa forme de base. Demande explicite : "ça doit toujours trouver
+    // une traduction dans les mots disponibles sans inventer une nouvelle
+    // phrase" — ce qui suit ne fait QUE proposer des formes de base
+    // PLAUSIBLES à partir du mot entendu (règles de conjugaison et
+    // d'accord du français, purement locales, aucun réseau, donc
+    // instantané) ; une forme proposée n'est RETENUE que si elle
+    // correspond à un mot RÉELLEMENT déjà filmé (vérifiée contre
+    // WORD_MAP) — impossible donc d'inventer un signe qui n'existe pas,
+    // seulement de retrouver un signe existant depuis une variante
+    // grammaticale de ce même mot. Désactivé pour les mots grammaticaux
+    // (STOPWORDS, défini plus bas) et les mots trop courts : ce sont
+    // justement les cas où une dégradation (enlever un "s" final...)
+    // risque de retomber par coïncidence sur un tout autre mot déjà filmé
+    // (ex. "mais" ne doit jamais se transformer en "mai").
+    function lemmaCandidates(norm) {
+      const out = [];
+      const add = (s) => { if (s && s !== norm && !out.includes(s)) out.push(s); };
+      // Verbes du 1er groupe (-er), orthographe la plus fréquente d'abord.
+      if (/eons$/.test(norm)) add(norm.replace(/eons$/, "ger"));
+      if (/ions$/.test(norm)) add(norm.replace(/ions$/, "er"));
+      if (/iez$/.test(norm)) add(norm.replace(/iez$/, "er"));
+      if (/ons$/.test(norm)) add(norm.replace(/ons$/, "er"));
+      if (/ez$/.test(norm)) add(norm.replace(/ez$/, "er"));
+      if (/ent$/.test(norm)) add(norm.replace(/ent$/, "er"));
+      if (/ais$/.test(norm)) add(norm.replace(/ais$/, "er"));
+      if (/ait$/.test(norm)) add(norm.replace(/ait$/, "er"));
+      if (/aient$/.test(norm)) add(norm.replace(/aient$/, "er"));
+      if (/erai$|eras$|era$|erons$|erez$|eront$/.test(norm)) add(norm.replace(/erai$|eras$|era$|erons$|erez$|eront$/, "er"));
+      if (/ees$/.test(norm)) add(norm.replace(/ees$/, "er"));
+      if (/ee$/.test(norm)) add(norm.replace(/ee$/, "er"));
+      if (/es$/.test(norm)) add(norm.replace(/es$/, "er"));
+      if (/e$/.test(norm)) add(norm.replace(/e$/, "er"));
+      // Verbes du 2e groupe (-ir, type finir).
+      if (/issons$|issez$|issent$|issais$|issait$|issaient$/.test(norm)) add(norm.replace(/issons$|issez$|issent$|issais$|issait$|issaient$/, "ir"));
+      if (/it$/.test(norm)) add(norm.replace(/it$/, "ir"));
+      if (/is$/.test(norm)) add(norm.replace(/is$/, "ir"));
+      // Verbes du 3e groupe (-re, type vendre).
+      if (/dons$|dez$|dent$|dais$|dait$/.test(norm)) add(norm.replace(/dons$|dez$|dent$|dais$|dait$/, "dre"));
+      if (/d$/.test(norm)) add(norm.replace(/d$/, "dre"));
+      // Pluriels.
+      if (/aux$/.test(norm)) { add(norm.replace(/aux$/, "al")); add(norm.replace(/aux$/, "ail")); }
+      if (/s$/.test(norm)) add(norm.replace(/s$/, ""));
+      if (/x$/.test(norm)) add(norm.replace(/x$/, ""));
+      // Accord féminin.
+      if (/euse$/.test(norm)) add(norm.replace(/euse$/, "eur"));
+      if (/trice$/.test(norm)) add(norm.replace(/trice$/, "teur"));
+      if (/ive$/.test(norm)) add(norm.replace(/ive$/, "if"));
+      if (/elle$/.test(norm)) add(norm.replace(/elle$/, "el"));
+      if (/ale$/.test(norm)) add(norm.replace(/ale$/, "al"));
+      if (/enne$/.test(norm)) add(norm.replace(/enne$/, "en"));
+      if (/e$/.test(norm)) add(norm.replace(/e$/, ""));
+      // Adverbes en -ment formés sur un adjectif.
+      if (/ement$/.test(norm)) { add(norm.replace(/ement$/, "e")); add(norm.replace(/ement$/, "")); }
+      if (/ment$/.test(norm)) add(norm.replace(/ment$/, ""));
+      return out;
+    }
+
+    // Petits mots irréguliers très fréquents (être/avoir/aller/faire...)
+    // qu'aucune règle régulière ci-dessus ne peut déduire : ajoutés un par
+    // un, seulement si la forme de base existe déjà parmi les signes
+    // filmés (même garde-fou que CONJUGATION_ALIASES ci-dessus).
+    const IRREGULAR_VERB_FORMS = {
+      vais: "aller", vas: "aller", va: "aller", allons: "aller", allez: "aller", vont: "aller", allait: "aller", allais: "aller",
+      fais: "faire", fait: "faire", faisons: "faire", faites: "faire", font: "faire", faisait: "faire",
+      veux: "vouloir", veut: "vouloir", voulons: "vouloir", voulez: "vouloir", veulent: "vouloir",
+      peux: "pouvoir", peut: "pouvoir", pouvons: "pouvoir", pouvez: "pouvoir", peuvent: "pouvoir",
+      dois: "devoir", doit: "devoir", devons: "devoir", devez: "devoir", doivent: "devoir",
+      viens: "venir", vient: "venir", venons: "venir", venez: "venir", viennent: "venir",
+      prends: "prendre", prend: "prendre", prenons: "prendre", prenez: "prendre", prennent: "prendre",
+      vois: "voir", voit: "voir", voyons: "voir", voyez: "voir", voient: "voir",
+      sais: "savoir", sait: "savoir", savons: "savoir", savez: "savoir", savent: "savoir",
+      dis: "dire", dit: "dire", disons: "dire", dites: "dire", disent: "dire",
+      mets: "mettre", met: "mettre", mettons: "mettre", mettez: "mettre", mettent: "mettre",
+      ouvre: "ouvrir", ouvres: "ouvrir", ouvrons: "ouvrir", ouvrez: "ouvrir", ouvrent: "ouvrir",
+      pense: "penser", penses: "penser", pensons: "penser", pensez: "penser", pensent: "penser",
+    };
+    Object.keys(IRREGULAR_VERB_FORMS).forEach((form) => {
+      const target = IRREGULAR_VERB_FORMS[form];
+      if (VIDEOS[target]) WORD_MAP[normalize(form)] = target;
+    });
+
+    // Point d'entrée UNIQUE pour "ce mot entendu correspond-il à un signe
+    // filmé ?" — direct d'abord (le plus courant, instantané), puis les
+    // variantes grammaticales ci-dessus en secours, toutes vérifiées
+    // contre le même WORD_MAP : jamais de signe inventé, seulement
+    // retrouvé. STOPWORDS est défini plus bas dans le fichier mais le
+    // référencer ici est sûr (cette fonction n'est jamais APPELÉE avant
+    // que tout le script ait fini de s'exécuter, donc STOPWORDS est déjà
+    // initialisé au moment du premier appel réel).
+    function resolveBuiltinKey(norm) {
+      if (WORD_MAP[norm]) return WORD_MAP[norm];
+      if (norm.length < 3 || STOPWORDS.has(norm)) return null;
+      const candidates = lemmaCandidates(norm);
+      for (let i = 0; i < candidates.length; i++) {
+        if (WORD_MAP[candidates[i]]) return WORD_MAP[candidates[i]];
+      }
+      return null;
+    }
+
     // ---- Dossier vidéos local (optionnel) ---------------------------------
     // Rien de tout ceci n'est disponible si le navigateur n'offre pas la
     // File System Access API (Firefox et Safari, à ce jour, ne l'offrent
@@ -4710,11 +4823,16 @@ if (typeof document !== "undefined") {
     // Lecture en chaîne, sans coupure visible : la vidéo suivante se
     // charge dans l'élément <video> actuellement CACHÉ (déjà prêt, jamais
     // affiché en train de changer de source), et ne bascule au premier
-    // plan qu'une fois réellement prête à jouer (canplay) — l'élément
-    // visible ne change donc jamais de contenu sous les yeux de la
-    // personne (pas de flash noir), et le basculement est instantané (pas
-    // de fondu) pour ne jamais superposer deux signes à l'écran en même
-    // temps.
+    // plan qu'une fois réellement prête à jouer (canplay/seeked) — ou,
+    // depuis le 2026-10-27, souvent instantanément, puisqu'elle a déjà été
+    // préparée À L'AVANCE pendant que le signe précédent jouait encore
+    // (voir prepareAheadIfPossible plus bas). Le basculement inclut aussi,
+    // depuis la même date, un très court fondu croisé (CSS, 90ms) plutôt
+    // qu'une coupure instantanée — demande explicite : "quasiment deux
+    // signes en même temps, très vite, pas saccadé", comme un vrai
+    // interprète dont les mains sont déjà en mouvement vers le signe
+    // suivant avant que le précédent soit terminé. Ce très court
+    // chevauchement visuel est volontaire, pas un bug.
     // Vitesse de lecture et rognage supplémentaire (en plus de celui déjà
     // fait au montage) pour une traduction plus rapide à regarder, demandé
     // le 2026-09-14 : chaque clip est lu à 1,5x, et encore un peu coupé au
@@ -4763,6 +4881,86 @@ if (typeof document !== "undefined") {
       prefetchOne(queue[0]);
     }
 
+    // ---- Préparation à l'avance du signe suivant (pipeline) ---------------
+    // Ajouté le 2026-10-27, demande explicite : rendre la transition entre
+    // deux signes aussi fluide qu'un vrai interprète ("quasiment deux
+    // signes en même temps, très vite, jamais saccadé"). Jusqu'ici, seuls
+    // les OCTETS de la vidéo suivante étaient préchargés par avance
+    // (prefetchOne/prefetchUpcoming, réseau seulement) : l'élément <video>
+    // lui-même (décodage + positionnement exact sur bounds.in) n'était
+    // préparé qu'au moment précis où le signe courant atteignait son
+    // bounds.out — ce court instant de décodage + seek, même avec les
+    // octets déjà en cache, pouvait suffire à donner une impression de
+    // saccade au changement de signe. Ce qui suit prépare maintenant
+    // l'ÉLÉMENT VIDÉO complet (positionné et prêt à jouer) pendant que le
+    // signe précédent joue ENCORE, dans le seul élément <video> alors
+    // libre — la bascule au moment réel n'a donc plus qu'à attendre une
+    // promesse déjà résolue (ou presque), au lieu de tout démarrer de
+    // zéro, ce qui élimine le micro-temps mort entre deux signes.
+    let preparedAhead = null;
+    function prepareAheadIfPossible(token) {
+      if (preparedAhead && preparedAhead.token === token) return; // déjà en cours pour ce tour
+      const peek = queue[0];
+      if (!peek) return;
+      const freeVideo = videos[1 - curIdx];
+      const placeholder = { item: peek, token, video: freeVideo, cancelled: false, revokeUrl: null };
+      placeholder.readyPromise = new Promise((resolve) => { placeholder.resolve = resolve; });
+      preparedAhead = placeholder;
+      const overallSafety = setTimeout(() => {
+        if (!placeholder.cancelled) { placeholder.cancelled = true; placeholder.resolve(); }
+      }, 4000);
+      (async () => {
+        try {
+          const src = await resolveSrc(peek);
+          if (placeholder.cancelled || token !== playToken) { placeholder.cancelled = true; clearTimeout(overallSafety); placeholder.resolve(); return; }
+          if (!src) { placeholder.cancelled = true; clearTimeout(overallSafety); placeholder.resolve(); return; }
+          placeholder.revokeUrl = peek.source === "local" ? src : null;
+          const bounds = CLIP_BOUNDS[peek.key];
+          let seekDone = false, canplayDone = false, settled = false;
+          const settle = () => {
+            if (settled || placeholder.cancelled || !(seekDone && canplayDone)) return;
+            settled = true;
+            clearTimeout(overallSafety);
+            freeVideo.onloadedmetadata = null;
+            freeVideo.onseeked = null;
+            freeVideo.oncanplay = null;
+            placeholder.resolve();
+          };
+          freeVideo.onloadedmetadata = () => {
+            freeVideo.onloadedmetadata = null;
+            if (placeholder.cancelled) return;
+            const dur = freeVideo.duration || 0;
+            const target = bounds ? bounds.in : Math.min(EXTRA_TRIM, dur / 3);
+            if (Math.abs(freeVideo.currentTime - target) < 0.02) { seekDone = true; settle(); }
+            else { freeVideo.currentTime = target; setTimeout(() => { seekDone = true; settle(); }, 250); }
+          };
+          freeVideo.onseeked = () => { seekDone = true; settle(); };
+          freeVideo.oncanplay = () => { canplayDone = true; settle(); };
+          freeVideo.onerror = () => { placeholder.cancelled = true; clearTimeout(overallSafety); placeholder.resolve(); };
+          freeVideo.src = src;
+          freeVideo.load();
+        } catch (e) {
+          placeholder.cancelled = true;
+          clearTimeout(overallSafety);
+          placeholder.resolve();
+        }
+      })();
+    }
+
+    // Abandonne une préparation à l'avance devenue inutile (la file a
+    // changé, ex. reformulation IA) avant qu'elle ne soit consommée —
+    // libère proprement l'élément vidéo concerné pour le chemin normal.
+    function discardPreparedAhead() {
+      if (!preparedAhead) return;
+      preparedAhead.cancelled = true;
+      preparedAhead.video.onloadedmetadata = null;
+      preparedAhead.video.onseeked = null;
+      preparedAhead.video.oncanplay = null;
+      preparedAhead.video.onerror = null;
+      if (preparedAhead.revokeUrl) URL.revokeObjectURL(preparedAhead.revokeUrl);
+      preparedAhead = null;
+    }
+
     async function playFromQueue(token) {
       if (token !== playToken) return;
       if (paused) { busy = false; return; }
@@ -4795,15 +4993,45 @@ if (typeof document !== "undefined") {
       const item = queue.shift();
       const bounds = CLIP_BOUNDS[item.key];
       dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
-      const src = await resolveSrc(item);
-      if (token !== playToken) { dbg("playFromQueue: token périmé pour '" + item.key + "', abandon"); return; }
-      if (!src) { dbg("playFromQueue: AUCUNE SOURCE pour '" + item.key + "' (source=" + item.source + "), on saute"); playFromQueue(token); return; }
-      // Une URL de Blob (dossier local) doit être libérée une fois la
-      // lecture terminée ou en erreur — une chaîne data: (mot intégré) n'en
-      // a pas besoin, `revokeUrl` reste alors null.
-      const revokeUrl = item.source === "local" ? src : null;
-      const nextIdx = 1 - curIdx;
-      const nextVideo = videos[nextIdx];
+
+      // Le signe suivant a-t-il déjà été préparé à l'avance (voir
+      // prepareAheadIfPossible plus bas) pendant que le signe précédent
+      // jouait encore ? Si oui et qu'il correspond bien à CE mot précis
+      // (la file peut avoir changé entre-temps, ex. reformulation IA), on
+      // réutilise directement cette préparation déjà en cours plutôt que
+      // de tout recommencer de zéro — c'est ce qui élimine le micro-temps
+      // mort de décodage/positionnement entre deux signes (2026-10-27).
+      let usedPrepared = null;
+      if (preparedAhead && preparedAhead.item.key === item.key && preparedAhead.item.source === item.source) {
+        usedPrepared = preparedAhead;
+        preparedAhead = null;
+      } else if (preparedAhead) {
+        discardPreparedAhead();
+      }
+
+      let nextVideo, revokeUrl, src;
+      if (usedPrepared) {
+        nextVideo = usedPrepared.video;
+        await usedPrepared.readyPromise;
+        if (token !== playToken) return;
+        if (usedPrepared.cancelled) {
+          dbg("playFromQueue: préparation à l'avance de '" + item.key + "' invalide, repli normal");
+          usedPrepared = null;
+        } else {
+          revokeUrl = usedPrepared.revokeUrl;
+          dbg("playFromQueue: '" + item.key + "' déjà préparé à l'avance, bascule immédiate");
+        }
+      }
+      if (!usedPrepared) {
+        src = await resolveSrc(item);
+        if (token !== playToken) { dbg("playFromQueue: token périmé pour '" + item.key + "', abandon"); return; }
+        if (!src) { dbg("playFromQueue: AUCUNE SOURCE pour '" + item.key + "' (source=" + item.source + "), on saute"); playFromQueue(token); return; }
+        // Une URL de Blob (dossier local) doit être libérée une fois la
+        // lecture terminée ou en erreur — une chaîne data: (mot intégré)
+        // n'en a pas besoin, `revokeUrl` reste alors null.
+        revokeUrl = item.source === "local" ? src : null;
+        nextVideo = videos[1 - curIdx];
+      }
       const curVideo = videos[curIdx];
       let advanced = false;
       function onTimeUpdate() {
@@ -4839,6 +5067,52 @@ if (typeof document !== "undefined") {
       // sécurité (timeout) évite de rester bloqué si "seeked" ne se
       // déclenche jamais (certains moteurs ne l'émettent pas pour un saut
       // vers une position déjà atteinte, ex. bounds.in = 0).
+      // Très court fondu croisé géré en CSS (.speech-video, transition:
+      // opacity 90ms) : garder cette durée synchronisée avec celle du CSS.
+      const CROSSFADE_MS = 90;
+      function reveal() {
+        nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
+        nextVideo.play().catch(() => {});
+        nextVideo.classList.add("showing");
+        curVideo.classList.remove("showing");
+        // Le fondu CSS laisse curVideo brièvement visible ET en train de
+        // jouer pendant la bascule (plutôt qu'une coupure nette) — c'est
+        // ce chevauchement très court qui donne l'effet "mains déjà en
+        // mouvement vers le signe suivant" d'un vrai interprète (demandé
+        // le 2026-10-27). On l'arrête proprement une fois le fondu
+        // terminé, sauf s'il a depuis été repris pour un autre mot (les 2
+        // éléments vidéo sont réutilisés en continu).
+        setTimeout(() => { if (!curVideo.classList.contains("showing")) curVideo.pause(); }, CROSSFADE_MS);
+        showIdle(false);
+        curIdx = 1 - curIdx;
+        currentlyShowingKey = item.key;
+        shownKeysThisUtterance.push(item.key);
+        if (warpActiveKind) layoutWarpCanvas();
+        dbg("affiché: '" + item.key + "' (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
+        nextVideo.addEventListener("timeupdate", onTimeUpdate);
+        nextVideo.onended = advance;
+        nextVideo.onerror = (ev) => { dbg("ERREUR vidéo pour '" + item.key + "': " + (nextVideo.error ? nextVideo.error.code : ev)); advance(); };
+        prefetchUpcoming();
+        // Prépare déjà le mot SUIVANT (voir prepareAheadIfPossible) dans
+        // l'élément vidéo qui vient d'être libéré, pendant que celui-ci
+        // joue encore — évite le micro-temps mort de décodage/
+        // positionnement au prochain changement de signe (2026-10-27).
+        // Retardé de CROSSFADE_MS : cet élément libéré est EXACTEMENT
+        // celui que le fondu CSS est en train de faire disparaître ;
+        // réassigner son src tout de suite casserait le fondu (image
+        // qui disparaît d'un coup au lieu de s'estomper). Le délai laisse
+        // le fondu se terminer visuellement d'abord — negligeable sur le
+        // temps d'avance gagné, puisque le mot qui vient d'être révélé
+        // joue encore pendant toute sa durée après ce court délai.
+        setTimeout(() => { if (token === playToken) prepareAheadIfPossible(token); }, CROSSFADE_MS);
+      }
+      // Préparation déjà disponible pour ce mot (voir playFromQueue plus
+      // haut) : bascule immédiate, sans attendre de seek/canplay puisque
+      // c'est déjà fait.
+      if (usedPrepared) {
+        reveal();
+        return;
+      }
       let seekDone = false;
       let canplayDone = false;
       let revealed = false;
@@ -4849,24 +5123,13 @@ if (typeof document !== "undefined") {
         nextVideo.oncanplay = null;
         if (seekSafetyTimer) { clearTimeout(seekSafetyTimer); seekSafetyTimer = null; }
       }
-      function reveal() {
+      function revealOnceReady() {
         if (revealed) return;
         if (!(seekDone && canplayDone)) return;
         revealed = true;
         cleanupPreReveal();
         if (token !== playToken) return;
-        nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
-        nextVideo.play().catch(() => {});
-        nextVideo.classList.add("showing");
-        curVideo.classList.remove("showing");
-        showIdle(false);
-        curIdx = nextIdx;
-        currentlyShowingKey = item.key;
-        shownKeysThisUtterance.push(item.key);
-        if (warpActiveKind) layoutWarpCanvas();
-        dbg("affiché: '" + item.key + "' (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
-        nextVideo.addEventListener("timeupdate", onTimeUpdate);
-        prefetchUpcoming();
+        reveal();
       }
       nextVideo.onloadedmetadata = () => {
         nextVideo.onloadedmetadata = null;
@@ -4877,20 +5140,20 @@ if (typeof document !== "undefined") {
           // Déjà à la bonne position (ex. bounds.in = 0) : "seeked" ne se
           // déclenchera pas forcément, pas besoin d'attendre.
           seekDone = true;
-          reveal();
+          revealOnceReady();
         } else {
           nextVideo.currentTime = target;
-          seekSafetyTimer = setTimeout(() => { seekDone = true; reveal(); }, 250);
+          seekSafetyTimer = setTimeout(() => { seekDone = true; revealOnceReady(); }, 250);
         }
       };
       nextVideo.onseeked = () => {
         seekDone = true;
         if (seekSafetyTimer) { clearTimeout(seekSafetyTimer); seekSafetyTimer = null; }
-        reveal();
+        revealOnceReady();
       };
       nextVideo.oncanplay = () => {
         canplayDone = true;
-        reveal();
+        revealOnceReady();
       };
       // Un clip qui échoue à décoder (fichier corrompu, format non
       // supporté par ce navigateur précis) ne doit jamais bloquer le reste
@@ -4947,7 +5210,7 @@ if (typeof document !== "undefined") {
           queue.push({ key: norm, source: "local" });
           return;
         }
-        const builtinKey = WORD_MAP[norm];
+        const builtinKey = resolveBuiltinKey(norm);
         if (builtinKey) {
           queue.push({ key: builtinKey, source: "builtin" });
         }
@@ -4982,7 +5245,7 @@ if (typeof document !== "undefined") {
           newSigns.push({ key: norm, source: "local" });
           return;
         }
-        const builtinKey = WORD_MAP[norm];
+        const builtinKey = resolveBuiltinKey(norm);
         if (builtinKey) {
           newSigns.push({ key: builtinKey, source: "builtin" });
         }
