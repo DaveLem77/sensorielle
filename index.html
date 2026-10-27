@@ -4329,6 +4329,42 @@ if (typeof document !== "undefined") {
       return null;
     }
 
+    // Bug trouvé le 2026-10-27 en relisant un journal réel : "l'école" ne
+    // trouvait JAMAIS de signe alors que "école" existe bel et bien dans
+    // le vocabulaire (325 mots). Cause : normalize() recevait le mot brut
+    // en UN SEUL morceau et collait tout ensemble ("l'école" -> "lecole"
+    // après avoir juste retiré l'apostrophe), ce qui ne correspond plus à
+    // rien. Le français colle très souvent un petit mot (le/la/je/ne/
+    // que/ce/se/te/me...) au mot suivant avec une apostrophe (l', j', n',
+    // qu', c', s', t', m', d') — sans ce découpage, TOUT mot de contenu
+    // suivant une élision était invisible pour la correspondance directe,
+    // exactement le symptôme décrit au tout début ("des fois sa mot pas
+    // trouvé et affiche rien"). On essaie maintenant le mot entier tel
+    // quel en premier (pour ne rien casser, ex. "aujourd'hui" qui est
+    // lui-même une entrée de vocabulaire), et SEULEMENT s'il ne matche
+    // rien, on retente chaque morceau séparé par l'apostrophe.
+    function matchRawWord(raw) {
+      const results = [];
+      const wholeNorm = normalize(raw);
+      if (wholeNorm) {
+        const localEntry = localWordFiles[wholeNorm];
+        if (localEntry) { results.push({ key: wholeNorm, source: "local" }); return results; }
+        const builtinKey = resolveBuiltinKey(wholeNorm);
+        if (builtinKey) { results.push({ key: builtinKey, source: "builtin" }); return results; }
+      }
+      if (/['\u2019]/.test(raw)) {
+        raw.split(/['\u2019]/).filter(Boolean).forEach((part) => {
+          const norm = normalize(part);
+          if (!norm) return;
+          const localEntry = localWordFiles[norm];
+          if (localEntry) { results.push({ key: norm, source: "local" }); return; }
+          const builtinKey = resolveBuiltinKey(norm);
+          if (builtinKey) results.push({ key: builtinKey, source: "builtin" });
+        });
+      }
+      return results;
+    }
+
     // ---- Dossier vidéos local (optionnel) ---------------------------------
     // Rien de tout ceci n'est disponible si le navigateur n'offre pas la
     // File System Access API (Firefox et Safari, à ce jour, ne l'offrent
@@ -4524,6 +4560,18 @@ if (typeof document !== "undefined") {
     // telecharger, aucun modele -> aucune panne possible liee au
     // chargement ou au reseau.
     let currentSentiment = "neutral";
+    // Bug trouvé le 2026-10-27 en relisant un journal réel : le hochement
+    // de Négation (et les autres marqueurs) redémarrait son animation CSS
+    // depuis zéro à CHAQUE morceau de transcription reçu ("SUITE phrase"
+    // arrive toutes les quelques centaines de ms pendant qu'on parle),
+    // même quand le sentiment détecté n'avait pas changé — car
+    // applySentimentVisual() retire puis remet systématiquement la classe
+    // CSS portant l'animation, ce qui la fait recommencer à l'image 0
+    // chaque fois. Résultat visible : un mouvement saccadé/erratique au
+    // lieu d'un hochement continu (signalé comme "la video bouge de
+    // maniere bizarre"). On ne retouche plus les classes/l'animation que
+    // lorsque le sentiment a réellement changé.
+    let lastAppliedSentiment = null;
 
     // Modulation d'aspect (ajoutee le 2026-10-19, meme analyse
     // grammaticale) : un signe repete traduit un aspect habituel
@@ -4802,6 +4850,7 @@ if (typeof document !== "undefined") {
       currentSentiment = "neutral";
       currentAspect = "none";
       habitualRepeatedForUtterance = false;
+      lastAppliedSentiment = null;
     }
 
     // Résout un item de la file vers une URL de vidéo jouable : un mot venu
@@ -5187,7 +5236,10 @@ if (typeof document !== "undefined") {
       currentSentiment = detectSentiment(text);
       currentAspect = detectAspect(text);
       habitualRepeatedForUtterance = false;
-      applySentimentVisual(currentSentiment);
+      if (currentSentiment !== lastAppliedSentiment) {
+        applySentimentVisual(currentSentiment);
+        lastAppliedSentiment = currentSentiment;
+      }
       dbg("marqueurs: sentiment=\"" + currentSentiment + "\" aspect=\"" + currentAspect + "\"");
 
       // Une nouvelle phrase prend immédiatement le relais de la file :
@@ -5202,16 +5254,7 @@ if (typeof document !== "undefined") {
       shownKeysThisUtterance = [];
 
       rawWords.forEach((raw) => {
-        const norm = normalize(raw);
-        const localEntry = localWordFiles[norm];
-        if (localEntry) {
-          queue.push({ key: norm, source: "local" });
-          return;
-        }
-        const builtinKey = resolveBuiltinKey(norm);
-        if (builtinKey) {
-          queue.push({ key: builtinKey, source: "builtin" });
-        }
+        queue.push(...matchRawWord(raw));
       });
       queue = dedupeAdjacent(queue, currentlyShowingKey);
       lastUtteranceSigns = queue.slice();
@@ -5237,16 +5280,7 @@ if (typeof document !== "undefined") {
 
       const newSigns = [];
       rawWords.forEach((raw) => {
-        const norm = normalize(raw);
-        const localEntry = localWordFiles[norm];
-        if (localEntry) {
-          newSigns.push({ key: norm, source: "local" });
-          return;
-        }
-        const builtinKey = resolveBuiltinKey(norm);
-        if (builtinKey) {
-          newSigns.push({ key: builtinKey, source: "builtin" });
-        }
+        newSigns.push(...matchRawWord(raw));
       });
       // Un redémarrage du moteur vocal (fréquent sur iPhone) peut recapter
       // une fraction de seconde déjà reconnue juste avant la coupure —
@@ -5260,7 +5294,10 @@ if (typeof document !== "undefined") {
       lastUtteranceSigns = lastUtteranceSigns.concat(dedupedNew);
       currentSentiment = detectSentiment(captionEl.textContent);
       currentAspect = detectAspect(captionEl.textContent);
-      applySentimentVisual(currentSentiment);
+      if (currentSentiment !== lastAppliedSentiment) {
+        applySentimentVisual(currentSentiment);
+        lastAppliedSentiment = currentSentiment;
+      }
       if (!paused) startPlayback();
     }
 
@@ -5483,15 +5520,17 @@ if (typeof document !== "undefined") {
         // temps qu'elle revienne du serveur) rejouait des mots déjà vus,
         // produisant des répétitions comme "merci bravo" -> "merci bravo
         // bravo" signalées le 2026-10-16.
-        let alreadyShownCount = 0;
-        while (
-          alreadyShownCount < signs.length &&
-          alreadyShownCount < shownKeysThisUtterance.length &&
-          signs[alreadyShownCount].key === shownKeysThisUtterance[alreadyShownCount]
-        ) {
-          alreadyShownCount++;
-        }
-        if (alreadyShownCount > 0) signs = signs.slice(alreadyShownCount);
+        // Bug trouvé le 2026-10-27 via un journal réel : ce retrait ne
+        // regardait qu'un PRÉFIXE dans le même ordre exact ("comment" déjà
+        // montré, réponse IA = [jour,comment] -> "comment" n'est pas en
+        // position 0 de la réponse, donc 0 mot retiré et "comment" rejoué
+        // une seconde fois juste après "jour"). Le retrait doit retirer
+        // tout mot déjà montré, PEU IMPORTE sa position dans la réponse de
+        // l'IA, pas seulement un préfixe qui matche dans le même ordre.
+        const shownSet = new Set(shownKeysThisUtterance);
+        const beforeFilterCount = signs.length;
+        signs = signs.filter((s) => !shownSet.has(s.key));
+        const alreadyShownCount = beforeFilterCount - signs.length;
         signs = dedupeAdjacent(signs, currentlyShowingKey);
         dbg("IA: réponse = [" + words.join(",") + "] -> " + alreadyShownCount + " mot(s) déjà montré(s) retiré(s), remplace la file par " + signs.length + " mots restants");
         if (!signs.length) return;
