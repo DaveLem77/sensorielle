@@ -167,38 +167,61 @@ export default {
       },
     };
 
-    let resp;
-    try {
-      resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": env.ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-5-5",
-          max_tokens: 400,
-          system: SYSTEM_PROMPT,
-          tools: [tool],
-          tool_choice: { type: "tool", name: TOOL_NAME },
-          messages: [{ role: "user", content: userPrompt }],
-        }),
-      });
-    } catch (e) {
-      return json({ error: "appel API Anthropic impossible: " + e.message }, 502);
+    const basePayload = {
+      max_tokens: 400,
+      system: SYSTEM_PROMPT,
+      tools: [tool],
+      tool_choice: { type: "tool", name: TOOL_NAME },
+      messages: [{ role: "user", content: userPrompt }],
+    };
+
+    // Ajoute le 2026-10-27 (signale : "erreur IA HTTP 502") : un echec
+    // ponctuel du modele principal (surcharge, incident temporaire cote
+    // Anthropic, modele pas encore active sur ce compte, etc.) faisait
+    // echouer TOUT l'appel sans aucun repli, alors qu'un modele plus
+    // ancien (Haiku 5.5) avait deja fait ses preuves comme fiable. On
+    // essaie maintenant Sonnet d'abord (meilleure qualite de
+    // reformulation), et seulement s'il echoue, UNE SEULE fois Haiku en
+    // repli avant d'abandonner -- le site continue de fonctionner (avec
+    // une qualite legerement moindre) plutot que d'afficher "rien" a la
+    // personne pendant un incident.
+    const MODELS_TO_TRY = ["claude-sonnet-5-5", "claude-haiku-5-5"];
+    let data = null;
+    let usedModel = null;
+    const attempts = [];
+    for (const model of MODELS_TO_TRY) {
+      let resp;
+      try {
+        resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": env.ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify(Object.assign({ model: model }, basePayload)),
+        });
+      } catch (e) {
+        attempts.push(model + ": appel impossible (" + e.message + ")");
+        continue;
+      }
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        attempts.push(model + ": HTTP " + resp.status + " " + errText.slice(0, 200));
+        continue;
+      }
+      try {
+        data = await resp.json();
+        usedModel = model;
+        break;
+      } catch (e) {
+        attempts.push(model + ": reponse illisible (" + e.message + ")");
+        continue;
+      }
     }
 
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      return json({ error: "Anthropic a répondu " + resp.status + " : " + errText.slice(0, 300) }, 502);
-    }
-
-    let data;
-    try {
-      data = await resp.json();
-    } catch (e) {
-      return json({ error: "réponse Anthropic illisible" }, 502);
+    if (!data) {
+      return json({ error: "Anthropic indisponible, tous les modeles ont echoue : " + attempts.join(" | ") }, 502);
     }
 
     const toolUse = (data.content || []).find((b) => b && b.type === "tool_use" && b.name === TOOL_NAME);

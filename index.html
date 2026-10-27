@@ -5455,7 +5455,17 @@ if (typeof document !== "undefined") {
           body: JSON.stringify({ sentence: text, vocabulary: Object.keys(VIDEOS) }),
           signal: controller.signal,
         });
-        if (!resp.ok) { dbg("IA: erreur HTTP " + resp.status); return; }
+        if (!resp.ok) {
+          // Avant, seul le code (ex. 502) était visible dans le journal
+          // — jamais la vraie cause. Le relais renvoie toujours 502 pour
+          // CHAQUE échec côté Anthropic, quelle que soit la raison réelle
+          // (modèle indisponible, surcharge, clé manquante...) ; le détail
+          // précis est dans le corps de la réponse, désormais affiché ici
+          // pour pouvoir diagnostiquer un futur incident sans deviner.
+          const errBody = await resp.text().catch(() => "");
+          dbg("IA: erreur HTTP " + resp.status + (errBody ? " — " + errBody.slice(0, 300) : ""));
+          return;
+        }
         const data = await resp.json();
         // La phrase en cours a changé pendant l'appel (nouvelle phrase
         // commencée) : cette réponse ne correspond plus à rien à l'écran.
