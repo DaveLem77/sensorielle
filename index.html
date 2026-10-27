@@ -1001,20 +1001,23 @@
        JOURNAL.md). */
     object-fit: cover; object-position: 50% 12%;
     background: #dcdce0;
+    /* Coupure instantanee, SANS fondu (retour en arriere le 2026-10-27).
+       Un court fondu croise avait ete essaye pour un effet "mains deja en
+       mouvement" plus fluide, mais signale ensuite comme un bug visible
+       ("bug front/cheveux", "pas fluide pas du tout") : deux clips
+       DIFFERENTS n'ont pas exactement la meme position de tete entre la
+       fin du signe A et le debut du signe B -- les superposer meme
+       brievement cree un dedoublement visible, surtout au contour
+       tete/cheveux (fort contraste contre le fond gris). Cette decision
+       avait deja ete prise une premiere fois avant cette session pour la
+       meme raison (voir JOURNAL.md) -- confirmee une seconde fois par ce
+       nouvel essai. Le changement visible n'a lieu qu'une fois la
+       suivante deja prete (seeked+canplay, voir playFromQueue), donc
+       l'oeil ne voit jamais de flash noir malgre ce basculement
+       instantane. La fluidite vient maintenant du pipeline de
+       prechargement a l'avance (prepareAheadIfPossible), pas d'un fondu
+       visuel. */
     opacity: 0;
-    /* Très court fondu croisé (2026-10-27, demande explicite : "quasiment
-       deux signes en même temps, très vite, pas saccadé" — un vrai
-       interprète a déjà les mains en mouvement vers le signe suivant
-       avant que le précédent soit terminé). Avant, le changement était
-       instantané (0 fondu) justement pour ne JAMAIS superposer deux
-       signes — mais cette coupure nette, même imperceptible isolément,
-       est ce qui donnait l'impression "saccadée" dénoncée. 90ms reste
-       volontairement très court : assez pour lisser la transition
-       (coarticulation), pas assez pour qu'on voie consciemment deux
-       signes distincts se chevaucher. Garder cette durée synchronisée
-       avec la constante JS CROSSFADE_MS (voir playFromQueue) — changer
-       l'une sans l'autre casse cette synchronisation. */
-    transition: opacity 90ms linear, transform 90ms ease-out;
   }
   .speech-video.showing { opacity: 1; }
   /* Marqueurs grammaticaux non manuels (2026-10-19) : REMPLACE l'ancien
@@ -4826,24 +4829,26 @@ if (typeof document !== "undefined") {
     // plan qu'une fois réellement prête à jouer (canplay/seeked) — ou,
     // depuis le 2026-10-27, souvent instantanément, puisqu'elle a déjà été
     // préparée À L'AVANCE pendant que le signe précédent jouait encore
-    // (voir prepareAheadIfPossible plus bas). Le basculement inclut aussi,
-    // depuis la même date, un très court fondu croisé (CSS, 90ms) plutôt
-    // qu'une coupure instantanée — demande explicite : "quasiment deux
-    // signes en même temps, très vite, pas saccadé", comme un vrai
-    // interprète dont les mains sont déjà en mouvement vers le signe
-    // suivant avant que le précédent soit terminé. Ce très court
-    // chevauchement visuel est volontaire, pas un bug.
+    // (voir prepareAheadIfPossible plus bas). Un court fondu croisé avait
+    // été essayé le 2026-10-27 pour adoucir encore la bascule, mais
+    // signalé ensuite comme un bug visible une fois en ligne (deux clips
+    // différents n'ont pas la même position de tête, donc les superposer
+    // même brièvement dédouble l'image) — retiré le même jour, retour à
+    // la bascule strictement instantanée ci-dessous (voir le CSS,
+    // .speech-video, pour l'historique complet de cette décision).
     // Vitesse de lecture et rognage supplémentaire (en plus de celui déjà
     // fait au montage) pour une traduction plus rapide à regarder, demandé
-    // le 2026-09-14 : chaque clip est lu à 1,5x, et encore un peu coupé au
-    // début et à la fin — sans jamais retirer plus du tiers de la durée
-    // d'un côté, pour ne pas casser les signes les plus courts (ex.
-    // "merci", ~1,4s).
-    // Relevé de 1,5x à 1,65x le 2026-10-20 (demande explicite : "tres tres
-    // tres fluide, plus rapide"), avec la correction de l'affichage ci-dessus
-    // (voir cleanupPreReveal/reveal plus bas) pour que le gain de vitesse ne
-    // s'accompagne pas d'un passage encore plus visible sur la pose de repos.
-    const PLAYBACK_RATE = 1.65;
+    // le 2026-09-14 : chaque clip est lu plus vite que sa vitesse réelle,
+    // et encore un peu coupé au début et à la fin — sans jamais retirer
+    // plus du tiers de la durée d'un côté, pour ne pas casser les signes
+    // les plus courts (ex. "merci", ~1,4s).
+    // Relevé de 1,5x à 1,65x le 2026-10-20, puis à 1,85x le 2026-10-27
+    // (demande répétée : "pas assez vite" même après le premier
+    // relèvement) — plafonné volontairement avant 2x : au-delà, les
+    // clips les plus courts (moins de 2s) laissent trop peu de marge
+    // réelle avant le rognage de secours (EXTRA_TRIM, voir plus bas) et
+    // risquent de couper le signe avant son vrai geste final.
+    const PLAYBACK_RATE = 1.85;
     // Remonté à 0,8s le 2026-10-13 puis redescendu ici à 0,5s le même
     // jour : à 0,8s, un clip court (ex. 2s) ne laissait plus qu'environ
     // 0,4s réelles de marge avant de devoir enchaîner — pas assez pour
@@ -5067,22 +5072,22 @@ if (typeof document !== "undefined") {
       // sécurité (timeout) évite de rester bloqué si "seeked" ne se
       // déclenche jamais (certains moteurs ne l'émettent pas pour un saut
       // vers une position déjà atteinte, ex. bounds.in = 0).
-      // Très court fondu croisé géré en CSS (.speech-video, transition:
-      // opacity 90ms) : garder cette durée synchronisée avec celle du CSS.
-      const CROSSFADE_MS = 90;
+      // Fondu croisé annulé le 2026-10-27 (signalé après déploiement réel :
+      // "bug d'affichage front/cheveux", "pas fluide pas du tout") — deux
+      // clips différents n'ont pas la même position de tête entre la fin
+      // d'un signe et le début du suivant, donc les superposer même
+      // brièvement créait un dédoublement visible. Retour à la bascule
+      // instantanée (voir le CSS, .speech-video). curVideo est donc
+      // libéré IMMÉDIATEMENT (plus besoin d'attendre un fondu) : la mise
+      // en pause et la préparation à l'avance du mot suivant démarrent
+      // dès la bascule, sans délai — ce qui donne même un peu PLUS
+      // d'avance au pipeline de préchargement qu'avant.
       function reveal() {
         nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
         nextVideo.play().catch(() => {});
         nextVideo.classList.add("showing");
         curVideo.classList.remove("showing");
-        // Le fondu CSS laisse curVideo brièvement visible ET en train de
-        // jouer pendant la bascule (plutôt qu'une coupure nette) — c'est
-        // ce chevauchement très court qui donne l'effet "mains déjà en
-        // mouvement vers le signe suivant" d'un vrai interprète (demandé
-        // le 2026-10-27). On l'arrête proprement une fois le fondu
-        // terminé, sauf s'il a depuis été repris pour un autre mot (les 2
-        // éléments vidéo sont réutilisés en continu).
-        setTimeout(() => { if (!curVideo.classList.contains("showing")) curVideo.pause(); }, CROSSFADE_MS);
+        curVideo.pause();
         showIdle(false);
         curIdx = 1 - curIdx;
         currentlyShowingKey = item.key;
@@ -5097,14 +5102,7 @@ if (typeof document !== "undefined") {
         // l'élément vidéo qui vient d'être libéré, pendant que celui-ci
         // joue encore — évite le micro-temps mort de décodage/
         // positionnement au prochain changement de signe (2026-10-27).
-        // Retardé de CROSSFADE_MS : cet élément libéré est EXACTEMENT
-        // celui que le fondu CSS est en train de faire disparaître ;
-        // réassigner son src tout de suite casserait le fondu (image
-        // qui disparaît d'un coup au lieu de s'estomper). Le délai laisse
-        // le fondu se terminer visuellement d'abord — negligeable sur le
-        // temps d'avance gagné, puisque le mot qui vient d'être révélé
-        // joue encore pendant toute sa durée après ce court délai.
-        setTimeout(() => { if (token === playToken) prepareAheadIfPossible(token); }, CROSSFADE_MS);
+        prepareAheadIfPossible(token);
       }
       // Préparation déjà disponible pour ce mot (voir playFromQueue plus
       // haut) : bascule immédiate, sans attendre de seek/canplay puisque
