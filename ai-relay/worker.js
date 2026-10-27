@@ -41,7 +41,13 @@ Choisis les mots dans l'ORDRE DE LA GRAMMAIRE LSQ, PAS l'ordre du français parl
 - Garde les pronoms (je, tu, il, elle, nous, vous, ils) à leur place logique de sujet ou d'objet selon le sens, pas forcément collés au verbe comme en français.
 
 Reformule/paraphrase la phrase avec les mots disponibles, dans cet ordre, pour garder le sens le mieux possible — sois créatif, cherche des synonymes et des mots reliés au sens général plutôt que d'abandonner trop vite. Exemple : pour une salutation comme "comment vas-tu aujourd'hui", s'il y a dans la liste un mot comme "comment", "content", "bien" ou "aller", utilise-les même si ce n'est pas une traduction mot à mot parfaite — transmettre l'intention générale de la phrase vaut mieux que rien du tout.
-Choisis une liste vide UNIQUEMENT si vraiment AUCUN mot de la liste n'a de lien, même approximatif, avec la phrase. Un seul mot qui garde un peu de sens vaut toujours mieux qu'une liste vide.`;
+
+Une liste vide est presque TOUJOURS une mauvaise réponse — avec plusieurs centaines de mots disponibles (objets du quotidien, famille, animaux, couleurs, nombres, temps, émotions, actions courantes...), il y a presque toujours un mot qui garde au moins un peu de lien. Avant de renvoyer une liste vide, essaie dans l'ordre :
+1. Le mot exact ou un synonyme direct.
+2. Un mot de la même catégorie ou famille de sens (ex. "chat" pour "félin", "pomme" pour "fruit" en général, "content" pour n'importe quelle émotion positive).
+3. Un mot qui capte le TON ou l'INTENTION de la phrase plutôt que son contenu précis (une question → "comment" ou "quand" ; un remerciement → "merci" ; une salutation → "bonjour").
+4. Au pire, UN SEUL mot de la liste qui a un lien même lointain avec le sujet général de la phrase.
+Choisis une liste vide UNIQUEMENT en dernier recours, si et seulement si tu as sincèrement cherché selon ces quatre niveaux et qu'absolument rien ne colle, même de loin (ex. une phrase entièrement hors sujet comme des chiffres de carte de crédit ou une langue étrangère incompréhensible). Dans le doute, choisis toujours au moins un mot plutôt que de renvoyer une liste vide.`;
 
 function corsHeaders(extra) {
   return Object.assign(
@@ -171,7 +177,7 @@ export default {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-haiku-5-5",
+          model: "claude-sonnet-5-5",
           max_tokens: 400,
           system: SYSTEM_PROMPT,
           tools: [tool],
