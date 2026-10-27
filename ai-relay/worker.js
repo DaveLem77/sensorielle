@@ -167,11 +167,26 @@ export default {
       },
     };
 
+    // Cause REELLE de l'erreur HTTP 502 remontee le 2026-10-27 (visible
+    // dans le journal de diagnostic du site grace au correctif precedent) :
+    // "tool_choice: type \"tool\" and \"any\" are not supported for this
+    // model." -- Claude Sonnet 5.5 n'accepte pas de FORCER l'appel d'un
+    // outil precis (ce que faisait tool_choice: {type:"tool"}), seulement
+    // "auto" (laisser le modele decider). Ce n'etait donc pas un probleme
+    // de nom de modele ni de cle API : 100% des appels a Sonnet 5.5
+    // echouaient a cause de ce seul parametre, incompatible avec ce
+    // modele precis. Passe a "auto" : avec un seul outil fourni et une
+    // consigne explicite ("Utilise l'outil fourni pour repondre") dans
+    // SYSTEM_PROMPT, le modele l'appelle quasi systematiquement quand
+    // meme ; si jamais il repondait par du texte plutot que par l'outil
+    // (tres rare), le code plus bas gere deja ce cas sans planter (la
+    // liste de mots reste simplement vide, comme n'importe quel echec
+    // normal du repli IA).
     const basePayload = {
       max_tokens: 400,
       system: SYSTEM_PROMPT,
       tools: [tool],
-      tool_choice: { type: "tool", name: TOOL_NAME },
+      tool_choice: { type: "auto" },
       messages: [{ role: "user", content: userPrompt }],
     };
 
