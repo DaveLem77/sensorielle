@@ -1014,7 +1014,7 @@
        signes distincts se chevaucher. Garder cette durée synchronisée
        avec la constante JS CROSSFADE_MS (voir playFromQueue) — changer
        l'une sans l'autre casse cette synchronisation. */
-    transition: opacity 90ms linear;
+    transition: opacity 90ms linear, transform 90ms ease-out;
   }
   .speech-video.showing { opacity: 1; }
   /* Marqueurs grammaticaux non manuels (2026-10-19) : REMPLACE l'ancien
@@ -1061,8 +1061,8 @@
   }
   @keyframes sentNegationShake {
     0%, 100% { transform: scale(1.05) rotate(0deg) translateX(0); }
-    25% { transform: scale(1.05) rotate(-3.4deg) translateX(-1.6%); }
-    75% { transform: scale(1.05) rotate(3.4deg) translateX(1.6%); }
+    25% { transform: scale(1.05) rotate(-1.6deg) translateX(-0.8%); }
+    75% { transform: scale(1.05) rotate(1.6deg) translateX(0.8%); }
   }
   @media (prefers-reduced-motion: reduce) {
     .speech-video-wrap.sent-exclamation .speech-video.showing,
