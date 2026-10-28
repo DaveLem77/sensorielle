@@ -4846,6 +4846,11 @@ if (typeof document !== "undefined") {
         mouthCurrentFrac = SRC_SPLIT_FRAC;
         if (warpCanvas) warpCanvas.classList.remove("is-active");
         warpRafId = null;
+        // Le warp est maintenant pleinement revenu au neutre (plus rien
+        // en cours d'easing) : c'est le bon moment, et pas avant, pour
+        // reprendre le mouvement d'ambiance (voir startIdleSway plus
+        // haut pour pourquoi ce timing precis compte).
+        startIdleSway();
         return;
       }
       // Tant qu'un marqueur est actif, on continue a redessiner CHAQUE
@@ -4888,6 +4893,88 @@ if (typeof document !== "undefined") {
       setWarpTarget(SRC_SPLIT_FRAC, null);
     }
 
+    // ---- Mouvement continu "vivant" (corps/tete), 2026-10-28 --------------
+    // Demande explicite de David ("comment ameliorer... changement
+    // drastique wow", a choisi "corps vivant en continu" face a 3 options
+    // proposees) : entre deux signes, hors marqueur grammatical
+    // (question/exclamation/negation), la video reste une image figee qui
+    // ne bouge que pendant ces marqueurs - "poupee qui pose entre les
+    // prises". Un vrai interprete n'est jamais parfaitement immobile.
+    //
+    // ATTENTION LINGUISTIQUE (pourquoi JAMAIS de rotation ni de secousse
+    // horizontale ici) : en LSQ, la position et le MOUVEMENT DE LA TETE
+    // portent une vraie valeur grammaticale (voir plus haut : rotation
+    // pour question oui/non vs question qui/quoi/ou/quand, secousse pour
+    // la negation). Un mouvement d'ambiance continu qui ressemblerait a
+    // une rotation ou un hochement risquerait d'etre lu comme un vrai
+    // marqueur par une personne sourde qui regarde attentivement -
+    // inacceptable pour un outil de traduction. Ce mouvement utilise donc
+    // UNIQUEMENT translateY + scale (une respiration verticale tres
+    // discrete), jamais rotate ni translateX - impossible a confondre
+    // avec un marqueur reel meme en y pretant attention. Amplitude tres
+    // faible (bien en-dessous du plus petit ecart utilise par un
+    // marqueur : 0.35% ici contre 1.4%+ pour une question) et periode
+    // lente (~5.2s, plus lente que la plupart des signes individuels)
+    // pour ne jamais sembler synchronisee avec un mot precis.
+    //
+    // Pilote en JS (pas en CSS @keyframes) expres : la file de signes
+    // bascule entre DEUX elements <video> differents (voir curIdx /
+    // prepareAheadIfPossible plus haut) - une animation CSS attachee via
+    // une classe redemarrerait a zero a CHAQUE changement de mot (nouvel
+    // element qui recoit la classe), soit un vrai a-coup visible toutes
+    // les 1-2s - exactement le contraire du but recherche. Ici une seule
+    // horloge continue (requestAnimationFrame, jamais reinitialisee par
+    // un changement de mot) calcule une position et l'applique a
+    // l'element actuellement "showing", quel qu'il soit : zero rupture
+    // au changement de signe.
+    const IDLE_SWAY_PERIOD_MS = 5200;
+    const IDLE_SWAY_AMP_Y = 0.35; // % de la hauteur du cadre
+    const IDLE_SWAY_AMP_SCALE = 0.006; // 0.6% d'echelle max
+    const reduceMotionMq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+    let idleSwayRafId = null;
+    let idleSwayStart = null;
+    function idleSwayTick(ts) {
+      // Un marqueur grammatical (warpActiveKind) ou une pause utilisateur
+      // a toujours priorite : on s'arrete net, sans redessiner, pour
+      // laisser le transform CSS du marqueur (ou l'etat fige en pause)
+      // seul maitre de l'element - jamais deux transforms qui se battent.
+      if (warpActiveKind !== null || paused || (reduceMotionMq && reduceMotionMq.matches)) {
+        idleSwayRafId = null;
+        return;
+      }
+      if (!idleSwayStart) idleSwayStart = ts;
+      const phase = ((ts - idleSwayStart) / IDLE_SWAY_PERIOD_MS) * 2 * Math.PI;
+      const y = Math.sin(phase) * IDLE_SWAY_AMP_Y;
+      const s = 1 + ((Math.sin(phase + Math.PI / 3) + 1) / 2) * IDLE_SWAY_AMP_SCALE;
+      const el = speechVideoWrap && speechVideoWrap.querySelector(".speech-video.showing");
+      if (el) el.style.transform = "translateY(" + y.toFixed(3) + "%) scale(" + s.toFixed(4) + ")";
+      idleSwayRafId = requestAnimationFrame(idleSwayTick);
+    }
+    function startIdleSway() {
+      if (idleSwayRafId) return;
+      if (reduceMotionMq && reduceMotionMq.matches) return;
+      // Le warp (sourcils/bouche) est encore en train de s'animer, que ce
+      // soit un marqueur activement affiche OU son retour au neutre en
+      // cours (les ~260ms d'easing) : ne JAMAIS demarrer la respiration
+      // pendant ce court instant, sinon la video (transform JS) et le
+      // canvas de warp (transform CSS du marqueur encore applique le
+      // temps de l'easing) pourraient se desynchroniser l'un de l'autre,
+      // precisement le genre de bug deja rencontre (voir plus haut,
+      // sentNegationShake). warpLoopTick appelle startIdleSway() lui-meme
+      // des que cet easing est vraiment termine (voir plus bas) - cet
+      // appel-ci reste donc un no-op silencieux le temps que ca dure.
+      if (warpRafId) return;
+      idleSwayStart = null;
+      idleSwayRafId = requestAnimationFrame(idleSwayTick);
+    }
+    function stopIdleSway() {
+      if (idleSwayRafId) { cancelAnimationFrame(idleSwayRafId); idleSwayRafId = null; }
+      // Les deux elements video (pas seulement celui "showing" en ce
+      // moment precis) : au cas ou l'appel tombe juste entre deux
+      // bascules, jamais laisser un transform reste sur l'un ou l'autre.
+      videos.forEach((v) => { if (v) v.style.transform = ""; });
+    }
+
     function applySentimentVisual(sentiment) {
       if (sentimentResetTimer) { clearTimeout(sentimentResetTimer); sentimentResetTimer = null; }
       if (speechVideoWrap) speechVideoWrap.classList.remove.apply(speechVideoWrap.classList, SENT_CLASSES);
@@ -4895,8 +4982,10 @@ if (typeof document !== "undefined") {
       if (!label) {
         if (sentimentBadge) sentimentBadge.hidden = true;
         clearWarp();
+        startIdleSway();
         return;
       }
+      stopIdleSway();
       if (speechVideoWrap) speechVideoWrap.classList.add("sent-" + sentiment);
       if (sentimentBadge && sentimentLabelEl) {
         sentimentLabelEl.textContent = label;
@@ -4917,6 +5006,7 @@ if (typeof document !== "undefined") {
           if (speechVideoWrap) speechVideoWrap.classList.remove("sent-exclamation");
           if (sentimentBadge) sentimentBadge.hidden = true;
           clearWarp();
+          startIdleSway();
         }, 950);
       }
     }
@@ -4930,6 +5020,7 @@ if (typeof document !== "undefined") {
       currentAspect = "none";
       habitualRepeatedForUtterance = false;
       lastAppliedSentiment = null;
+      startIdleSway();
     }
 
     // Résout un item de la file vers une URL de vidéo jouable : un mot venu
