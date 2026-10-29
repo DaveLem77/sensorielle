@@ -4607,7 +4607,23 @@ if (typeof document !== "undefined") {
         return whMatch ? "question-wh" : "question-yn";
       }
       if (/!\s*$/.test(t)) return "exclamation";
-      if (/\b(pas|jamais|aucun[e]?|non|rien|personne|plus)\b/i.test(t)) return "negation";
+      // Bug trouve le 2026-10-29 (signale "bugs dans la negation et
+      // question... ca devient bizarre") : "plus" et "personne" sont
+      // des mots français TRES frequents dans un sens qui n'a RIEN a
+      // voir avec la negation ("plus vite", "plus rapide", "une
+      // personne est venue") - des qu'un de ces deux mots apparaissait
+      // n'importe ou dans la phrase, TOUTE la phrase etait classee a
+      // tort comme Negation, declenchant le marqueur visuel le plus
+      // extreme (warp sourcils 0.80, le plus fort des 4) sur une
+      // phrase neutre. Combine au fait que chaque nouveau morceau de
+      // transcription peut changer la classification en cours de
+      // route, ca donnait exactement l'effet "bizarre" rapporte : le
+      // marqueur de negation qui s'active/se desactive au hasard sur
+      // des phrases qui n'ont rien a voir. Retires du declencheur :
+      // les mots restants (pas/jamais/aucun/non/rien) sont des bien
+      // meilleurs signaux, beaucoup plus rarement utilises hors
+      // contexte de negation en francais courant.
+      if (/\b(pas|jamais|aucun[e]?|non|rien)\b/i.test(t)) return "negation";
       return "neutral";
     }
 
@@ -5612,6 +5628,26 @@ if (typeof document !== "undefined") {
         signs = dedupeAdjacent(signs, currentlyShowingKey);
         dbg("IA: réponse = [" + words.join(",") + "] -> " + alreadyShownCount + " mot(s) déjà montré(s) retiré(s), remplace la file par " + signs.length + " mots restants");
         if (!signs.length) return;
+        // Bug trouvé le 2026-10-29 (signalé : "des fois ça pas rapport et
+        // ne traduit rien") : la reformulation IA REMPLACE toute la file
+        // pas-encore-montrée par sa propre réponse, même quand cette
+        // réponse couvre MOINS de mots que ce que la correspondance
+        // directe avait déjà trouvé pour ces mêmes mots-là. Exemple vécu :
+        // la correspondance directe trouve 5 signes pour une phrase de 6
+        // mots (file = 5), puis la reformulation IA revient avec une
+        // phrase reformulée qui ne tient qu'en 2-3 signes -> ces 2-3
+        // mots remplacent les 5 déjà trouvés, donc la traduction affichée
+        // RÉGRESSE au lieu de s'améliorer (voire disparaît en grande
+        // partie). On ne laisse plus l'IA remplacer la file que si sa
+        // réponse couvre AU MOINS autant de signes que ce qui est déjà en
+        // file directement — sinon on garde la correspondance directe
+        // (toujours affichée, jamais pire que rien), conformément à la
+        // demande d'origine : toujours trouver un moyen de traduire.
+        const directQueueLen = queue.length;
+        if (signs.length < directQueueLen) {
+          dbg("IA: réponse plus courte (" + signs.length + ") que la correspondance directe déjà en file (" + directQueueLen + ") -> ignorée, on garde la correspondance directe");
+          return;
+        }
         // La reformulation de l'IA porte sur la phrase ENTIÈRE (pas juste
         // le mot manquant) : elle remplace la suite de la file plutôt que
         // de s'y ajouter, pour éviter de rejouer deux fois les mots déjà
