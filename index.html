@@ -5046,21 +5046,11 @@ if (typeof document !== "undefined") {
     // promesse déjà résolue (ou presque), au lieu de tout démarrer de
     // zéro, ce qui élimine le micro-temps mort entre deux signes.
     let preparedAhead = null;
-    // Vrai une seule fois dès que le tout premier mot de la session a été
-    // pris en charge par playFromQueue — sert à ne déclencher la
-    // préparation anticipée spéciale (voir plus bas, 2026-10-28) qu'une
-    // seule fois, jamais à chaque nouvelle phrase.
-    let firstPlayPrimed = false;
-    function prepareAheadIfPossible(token, forcedVideo) {
+    function prepareAheadIfPossible(token) {
       if (preparedAhead && preparedAhead.token === token) return; // déjà en cours pour ce tour
       const peek = queue[0];
       if (!peek) return;
-      // forcedVideo : utilisé une seule fois (voir firstPlayPrimed plus haut)
-      // pour cibler explicitement l'élément vidéo encore totalement vierge
-      // pendant le chargement du tout premier mot, AVANT que curIdx n'ait
-      // jamais basculé — dans tous les autres cas (appel normal depuis
-      // reveal()), le calcul habituel videos[1 - curIdx] reste inchangé.
-      const freeVideo = forcedVideo || videos[1 - curIdx];
+      const freeVideo = videos[1 - curIdx];
       const placeholder = { item: peek, token, video: freeVideo, cancelled: false, revokeUrl: null };
       placeholder.readyPromise = new Promise((resolve) => { placeholder.resolve = resolve; });
       preparedAhead = placeholder;
@@ -5165,30 +5155,6 @@ if (typeof document !== "undefined") {
         preparedAhead = null;
       } else if (preparedAhead) {
         discardPreparedAhead();
-      }
-
-      // Correctif 2026-10-28 ("gros délai après la première vidéo, ensuite
-      // ça retombe normal") : pour TOUS les mots sauf le premier de la
-      // session, prepareAheadIfPossible() démarre dès reveal() du mot
-      // précédent — le mot suivant profite donc d'une avance égale à toute
-      // la durée de lecture du mot précédent. Mais pour le tout premier
-      // mot, rien n'a encore été révélé : prepareAheadIfPossible() n'est
-      // alors appelé qu'APRÈS que ce premier mot s'affiche, donnant une
-      // avance nulle au deuxième mot — ce qui ne posait pas de problème
-      // visible avant le retaillage des clips (2026-10-xx), mais devient
-      // perceptible maintenant que les clips sont bien plus courts : le
-      // deuxième mot n'a souvent pas fini de charger/se positionner quand
-      // le premier se termine déjà. On démarre donc ici, en parallèle du
-      // chargement du premier mot lui-même (avant même le "await
-      // resolveSrc" ci-dessous), la préparation du deuxième mot — ciblée
-      // explicitement sur videos[curIdx], l'élément alors garanti
-      // totalement inutilisé puisque curIdx n'a encore jamais basculé
-      // (le premier mot charge lui dans videos[1 - curIdx] un peu plus
-      // bas) : aucun risque de collision entre les deux. Ce chemin ne
-      // s'exécute qu'une seule fois par chargement de page (firstPlayPrimed).
-      if (!firstPlayPrimed) {
-        firstPlayPrimed = true;
-        prepareAheadIfPossible(token, videos[curIdx]);
       }
 
       let nextVideo, revokeUrl, src;
