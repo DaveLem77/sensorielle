@@ -85,3 +85,108 @@ Tant que ces tables/bucket n'existent pas, les deux formulaires
 concernés (Contribuer un signe, Demander une démo) échouent proprement
 et proposent automatiquement un envoi par courriel à la place — rien
 n'est perdu en attendant.
+
+
+5) Tableau de bord admin (dashboard/index.html, code 2244)
+---------------------------------------------------------------
+
+Permet de voir, pour chaque compte, le journal de ses phrases traduites
+(date, heure, texte, signes affichés) - utile pour verifier que la
+traduction fonctionne bien en vrai, phrase par phrase.
+
+a. Supabase > SQL Editor > New query > colle TOUT le bloc SQL ci-dessous
+   > Run. Ca cree les tables "profiles" et "conversation_logs", remplit
+   profiles pour les comptes existants, et met en place les regles de
+   securite (RLS) - PERSONNE ne peut lire les conversations de quelqu'un
+   d'autre, sauf un compte explicitement marque admin (etape b).
+
+   -- debut du bloc a copier --
+
+   create table if not exists public.profiles (
+     id uuid primary key references auth.users(id) on delete cascade,
+     email text,
+     created_at timestamptz not null default now(),
+     is_admin boolean not null default false
+   );
+
+   create table if not exists public.conversation_logs (
+     id bigint generated always as identity primary key,
+     user_id uuid not null references auth.users(id) on delete cascade,
+     text text not null,
+     signs text[],
+     created_at timestamptz not null default now()
+   );
+
+   create index if not exists conversation_logs_user_created_idx
+     on public.conversation_logs (user_id, created_at desc);
+
+   create or replace function public.handle_new_user()
+   returns trigger
+   language plpgsql
+   security definer
+   set search_path = public
+   as $$
+   begin
+     insert into public.profiles (id, email)
+     values (new.id, new.email)
+     on conflict (id) do nothing;
+     return new;
+   end;
+   $$;
+
+   drop trigger if exists on_auth_user_created on auth.users;
+   create trigger on_auth_user_created
+     after insert on auth.users
+     for each row execute function public.handle_new_user();
+
+   insert into public.profiles (id, email, created_at)
+   select id, email, created_at from auth.users
+   on conflict (id) do nothing;
+
+   create or replace function public.is_admin()
+   returns boolean
+   language sql
+   security definer
+   set search_path = public
+   stable
+   as $$
+     select coalesce((select is_admin from public.profiles where id = auth.uid()), false);
+   $$;
+
+   alter table public.profiles enable row level security;
+   alter table public.conversation_logs enable row level security;
+
+   drop policy if exists "profiles: lecture propre ou admin" on public.profiles;
+   create policy "profiles: lecture propre ou admin"
+     on public.profiles for select
+     using (auth.uid() = id or public.is_admin());
+
+   drop policy if exists "logs: ajout de ses propres lignes" on public.conversation_logs;
+   create policy "logs: ajout de ses propres lignes"
+     on public.conversation_logs for insert
+     with check (auth.uid() = user_id);
+
+   drop policy if exists "logs: lecture propre ou admin" on public.conversation_logs;
+   create policy "logs: lecture propre ou admin"
+     on public.conversation_logs for select
+     using (auth.uid() = user_id or public.is_admin());
+
+   -- fin du bloc a copier --
+
+b. ENSUITE, dans une NOUVELLE requete SQL Editor, remplace l'adresse par
+   TON courriel de connexion sur Sensorielle (celui que tu tapes dans la
+   fenetre "Se connecter" du site, pas necessairement ton Gmail), et
+   execute SEULEMENT cette ligne :
+
+   update public.profiles set is_admin = true where email = 'TON_COURRIEL_ICI';
+
+   C'est CETTE ligne qui decide qui peut voir les conversations de tout
+   le monde dans le tableau de bord - pas le code 2244 de la page (qui
+   n'est qu'un verrou simple, comme un code de porte, pas une vraie
+   securite). Sans etre a la fois (1) connecte sur le site avec CE
+   compte admin ET (2) sur la page /dashboard/, personne - meme en
+   connaissant le code 2244 - ne peut lire les conversations des autres.
+
+c. Important : connecte-toi sur sensorielle.ca avec ce compte admin
+   AVANT d'ouvrir /dashboard/ - le tableau de bord réutilise la session
+   déjà ouverte sur le site, il ne redemande pas de mot de passe.

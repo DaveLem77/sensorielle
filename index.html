@@ -1573,6 +1573,7 @@
             <a href="entreprises/index.html">Entreprises</a>
             <a href="confidentialite/index.html">Confidentialité</a>
             <a href="conditions/index.html">Conditions</a>
+            <a href="dashboard/index.html" style="opacity:.55" aria-label="Tableau de bord">Admin</a>
           </div>
         </div>
       </footer>
@@ -5329,6 +5330,29 @@ if (typeof document !== "undefined") {
     // version accumulait les phrases les unes après les autres, ce qui a
     // fini par désynchroniser la lecture après plusieurs mots, signalé le
     // 2026-09-09 — repartir à zéro à chaque phrase élimine ce risque.
+    // Journal de conversation par compte (2026-10-30), pour le tableau de
+    // bord admin protege par code (voir dashboard/index.html) - enregistre
+    // chaque phrase reconnue avec les signes vraiment affiches, horodatee,
+    // UNIQUEMENT pour une personne connectee (jamais pour un essai anonyme,
+    // la table conversation_logs refuse de toute facon l'insertion sans
+    // session via ses policies RLS). best-effort : une erreur reseau ne
+    // doit jamais interrompre la traduction elle-meme (try/catch + .catch()).
+    function logConversationLine(text, signKeys) {
+      try {
+        const auth = window.SENSORIELLE_AUTH;
+        if (!auth || !auth.client || !auth.getUser) return;
+        const user = auth.getUser();
+        if (!user) return;
+        auth.client.from("conversation_logs").insert({
+          user_id: user.id,
+          text: text,
+          signs: signKeys,
+        }).then(({ error }) => {
+          if (error) dbg("log conversation: erreur -> " + error.message);
+        });
+      } catch (e) {}
+    }
+
     function renderUtterance(text) {
       const rawWords = text.split(/\s+/).filter(Boolean);
       if (!rawWords.length) return;
@@ -5359,6 +5383,7 @@ if (typeof document !== "undefined") {
       });
       queue = dedupeAdjacent(queue, currentlyShowingKey);
       lastUtteranceSigns = queue.slice();
+      logConversationLine(text, queue.map((s) => s.key));
       dbg("NOUVELLE phrase \"" + text + "\" -> matché:[" + queue.map((s) => s.key).join(",") + "] (" + queue.length + "/" + rawWords.length + " mots)");
       if (!paused) playFromQueue(token);
     }
@@ -6487,6 +6512,17 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
   const SUPABASE_URL = "https://frinlluqjbwgctkzqoea.supabase.co";
   const SUPABASE_KEY = "sb_publishable_HQ1zoBcHrmetRRIopwKxgA_t4DAaNJZ";
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // Pont expose au reste de la page (2026-10-30, pour le log de
+  // conversation utilise par le mode "Je parle" plus haut dans ce
+  // fichier, dans un <script> different qui n execute AVANT celui-ci) :
+  // currentUser est capture par reference, donc toujours a jour au
+  // moment ou ces fonctions sont vraiment appelees (bien apres le
+  // chargement complet de la page).
+  window.SENSORIELLE_AUTH = {
+    client: sb,
+    getUser: () => currentUser,
+  };
 
   const speechBtn = document.getElementById("speechModeBtn");
   const speechNote = document.getElementById("speechAuthNote");

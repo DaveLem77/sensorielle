@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableau de bord — Sensorielle</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --s-bg:#F8F9FF;--s-surface:#fff;--s-bg-alt:#F4F1FD;
+  --s-ink:#080D25;--s-ink-dim:#62677A;--s-ink-faint:#9b9eac;
+  --s-line:#080d2514;--s-line-strong:#080d2524;
+  --s-violet:#7C4DFF;--s-violet-deep:#5B34D6;--s-violet-wash:rgba(124,77,255,.10);
+  --s-gradient:linear-gradient(100deg,#7157F5 0%,#B94FE4 38%,#F45E9A 68%,#FF8058 100%);
+  --s-display:'Manrope','Inter',sans-serif;
+  --s-shadow-soft:0 12px 40px rgba(50,35,100,.08);
+  --s-shadow-md:0 20px 55px rgba(50,35,100,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--s-bg);color:var(--s-ink);font:15px/1.6 'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit}
+
+/* ---- Verrou par code (2244) ------------------------------------------ */
+#pinGate{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%,#efeaff 0%,var(--s-bg) 60%);padding:24px}
+#pinGate.is-hidden{display:none}
+.pin-card{width:min(360px,100%);background:var(--s-surface);border-radius:22px;padding:34px 28px;box-shadow:var(--s-shadow-md);text-align:center}
+.pin-card .pin-lock{width:46px;height:46px;border-radius:50%;background:var(--s-gradient);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;box-shadow:0 10px 24px -8px rgba(124,77,255,.55)}
+.pin-card .pin-lock svg{width:21px;height:21px;color:#fff}
+.pin-card h1{font-family:var(--s-display);font-size:19px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px}
+.pin-card p{font-size:13px;color:var(--s-ink-dim);margin:0 0 22px;line-height:1.6}
+#pinInput{width:100%;text-align:center;font:700 26px/1 var(--s-display);letter-spacing:10px;padding:14px 10px 12px;border-radius:13px;border:1.5px solid var(--s-line-strong);background:var(--s-bg-alt);color:var(--s-ink);outline:none}
+#pinInput:focus{border-color:var(--s-violet)}
+#pinSubmit{width:100%;margin-top:14px;padding:13px;border:none;border-radius:999px;background:var(--s-gradient);color:#fff;font:700 13.5px var(--s-display);cursor:pointer;transition:transform .15s,box-shadow .15s}
+#pinSubmit:hover{transform:translateY(-1px);box-shadow:0 14px 30px -10px rgba(124,77,255,.55)}
+#pinError{margin-top:12px;font-size:12.5px;color:#c23a4e;min-height:16px}
+
+/* ---- App ----------------------------------------------------------- */
+#app{display:none;min-height:100vh;flex-direction:column}
+#app.is-visible{display:flex}
+header.top{position:sticky;top:0;z-index:10;background:rgba(248,249,255,.86);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--s-line);padding:14px 20px}
+.top-row{display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:1080px;margin-inline:auto}
+.brand{display:flex;align-items:center;gap:9px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--s-gradient);flex:none}
+.brand b{font-family:var(--s-display);font-weight:700;font-size:15px;letter-spacing:-.01em}
+.brand span{font-size:11.5px;color:var(--s-ink-dim)}
+.session-pill{font-size:11.5px;font-weight:600;color:var(--s-ink-dim);padding:6px 12px;border-radius:999px;background:var(--s-bg-alt);white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+.session-pill.is-admin{background:var(--s-violet-wash);color:var(--s-violet-deep)}
+
+main{flex:1;max-width:1080px;width:100%;margin-inline:auto;padding:22px 20px 60px;display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start}
+@media(max-width:860px){main{grid-template-columns:1fr;padding:16px 14px 48px}}
+
+.panel{background:var(--s-surface);border-radius:18px;box-shadow:var(--s-shadow-soft);overflow:hidden}
+.panel-head{padding:16px 18px 12px;border-bottom:1px solid var(--s-line)}
+.panel-head h2{font-family:var(--s-display);font-size:14px;font-weight:700;margin:0 0 2px}
+.panel-head p{font-size:11.5px;color:var(--s-ink-faint);margin:0}
+
+#accountsPanel{max-height:calc(100vh - 110px);display:flex;flex-direction:column}
+#accountsList{overflow-y:auto;flex:1}
+.acct-row{display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid var(--s-line);cursor:pointer;transition:background .12s}
+.acct-row:hover{background:var(--s-bg-alt)}
+.acct-row.is-active{background:var(--s-violet-wash)}
+.acct-avatar{width:36px;height:36px;border-radius:50%;background:var(--s-gradient);color:#fff;display:flex;align-items:center;justify-content:center;font:700 13px var(--s-display);flex:none}
+.acct-info{min-width:0;flex:1}
+.acct-email{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-meta{font-size:11px;color:var(--s-ink-faint);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-count{font-size:11px;font-weight:700;color:var(--s-violet-deep);background:var(--s-violet-wash);border-radius:999px;padding:3px 8px;flex:none}
+
+#logPanel{min-height:260px}
+.log-empty,.log-loading,.log-error{padding:60px 24px;text-align:center;color:var(--s-ink-faint);font-size:13px}
+.log-error{color:#c23a4e}
+.log-day{padding:14px 18px 4px}
+.log-day-label{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--s-ink-faint);padding:8px 0}
+.log-entry{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--s-line)}
+.log-entry:first-child{border-top:none}
+.log-time{flex:none;width:52px;font:700 11.5px var(--s-display);color:var(--s-violet-deep);padding-top:2px}
+.log-text{flex:1;font-size:13.5px;line-height:1.55;color:var(--s-ink)}
+.log-signs{margin-top:5px;display:flex;flex-wrap:wrap;gap:5px}
+.log-sign-pill{font-size:10.5px;font-weight:600;color:var(--s-ink-dim);background:var(--s-bg-alt);border-radius:999px;padding:2px 8px}
+
+.back-link{display:none;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--s-violet-deep);padding:14px 16px 0}
+@media(max-width:860px){
+  #accountsPanel.is-hidden-mobile{display:none}
+  #logPanel.is-hidden-mobile{display:none}
+  .back-link.is-visible{display:flex}
+}
+
+.notice{max-width:1080px;margin:14px auto 0;padding:0 20px}
+.notice-card{background:#fff7e6;border:1px solid #f1d98a;color:#7a5d12;border-radius:14px;padding:14px 16px;font-size:12.5px;line-height:1.6}
+.notice-card a{font-weight:700;text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div id="pinGate">
+  <div class="pin-card">
+    <div class="pin-lock"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="10" rx="2.2" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+    <h1>Tableau de bord</h1>
+    <p>Entre le code d'accès pour continuer.</p>
+    <form id="pinForm" autocomplete="off">
+      <input id="pinInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autofocus>
+      <button id="pinSubmit" type="submit">Déverrouiller</button>
+    </form>
+    <div id="pinError"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header class="top">
+    <div class="top-row">
+      <div class="brand"><span class="dot"></span><b>Sensorielle</b><span>· tableau de bord</span></div>
+      <div class="session-pill" id="sessionPill">Vérification…</div>
+    </div>
+  </header>
+
+  <div class="notice" id="noticeWrap" hidden>
+    <div class="notice-card" id="noticeCard"></div>
+  </div>
+
+  <main>
+    <section class="panel" id="accountsPanel">
+      <div class="panel-head">
+        <h2>Comptes</h2>
+        <p id="accountsSub">—</p>
+      </div>
+      <div id="accountsList">
+        <div class="log-loading" id="accountsLoading">Chargement…</div>
+      </div>
+    </section>
+
+    <section class="panel" id="logPanel">
+      <a class="back-link" id="backLink" href="#">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Tous les comptes
+      </a>
+      <div class="panel-head">
+        <h2 id="logTitle">Conversation</h2>
+        <p id="logSub">Choisis un compte à gauche.</p>
+      </div>
+      <div id="logBody">
+        <div class="log-empty">Sélectionne un compte pour voir son journal.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  "use strict";
+
+  // Code d'acces simple (verrou de page, PAS une vraie securite - voir
+  // SUPABASE-A-CONFIGURER.txt section 5 : la vraie protection vient des
+  // policies RLS + du compte Supabase marque is_admin, pas de ce code).
+  var ACCESS_CODE = "2244";
+  var SUPABASE_URL = "https://frinlluqjbwgctkzqoea.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_HQ1zoBcHrmetRRIopwKxgA_t4DAaNJZ";
+
+  var pinGate = document.getElementById("pinGate");
+  var pinForm = document.getElementById("pinForm");
+  var pinInput = document.getElementById("pinInput");
+  var pinError = document.getElementById("pinError");
+  var app = document.getElementById("app");
+
+  function unlock() {
+    pinGate.classList.add("is-hidden");
+    app.classList.add("is-visible");
+    try { sessionStorage.setItem("senso_dash_unlocked", "1"); } catch (e) {}
+    initDashboard();
+  }
+
+  pinForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (pinInput.value.trim() === ACCESS_CODE) {
+      unlock();
+    } else {
+      pinError.textContent = "Code incorrect.";
+      pinInput.value = "";
+      pinInput.focus();
+    }
+  });
+
+  var alreadyUnlocked = false;
+  try { alreadyUnlocked = sessionStorage.getItem("senso_dash_unlocked") === "1"; } catch (e) {}
+  if (alreadyUnlocked) unlock();
+
+  // ---- Le vrai tableau de bord, une fois le code entre -----------------
+  function initDashboard() {
+    if (!window.supabase || !window.supabase.createClient) {
+      showNotice("La librairie Supabase n'a pas pu se charger (réseau ?). Recharge la page.");
+      return;
+    }
+    var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    var sessionPill = document.getElementById("sessionPill");
+    var noticeWrap = document.getElementById("noticeWrap");
+    var noticeCard = document.getElementById("noticeCard");
+    var accountsList = document.getElementById("accountsList");
+    var accountsSub = document.getElementById("accountsSub");
+    var accountsPanel = document.getElementById("accountsPanel");
+    var logPanel = document.getElementById("logPanel");
+    var logBody = document.getElementById("logBody");
+    var logTitle = document.getElementById("logTitle");
+    var logSub = document.getElementById("logSub");
+    var backLink = document.getElementById("backLink");
+
+    function showNotice(html) {
+      noticeCard.innerHTML = html;
+      noticeWrap.hidden = false;
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+
+    function initials(email) {
+      var s = (email || "?").trim();
+      return s.slice(0, 2).toUpperCase();
+    }
+
+    function fmtRelative(dateStr) {
+      if (!dateStr) return "aucune activité";
+      var d = new Date(dateStr);
+      var diffMs = Date.now() - d.getTime();
+      var mins = Math.round(diffMs / 60000);
+      if (mins < 1) return "à l'instant";
+      if (mins < 60) return "il y a " + mins + " min";
+      var hrs = Math.round(mins / 60);
+      if (hrs < 24) return "il y a " + hrs + " h";
+      var days = Math.round(hrs / 24);
+      return "il y a " + days + " j";
+    }
+
+    function fmtDayLabel(dateStr) {
+      var d = new Date(dateStr);
+      return d.toLocaleDateString("fr-CA", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    }
+
+    function fmtTime(dateStr) {
+      var d = new Date(dateStr);
+      return d.toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function showMobileDetail(show) {
+      if (window.innerWidth > 860) return;
+      accountsPanel.classList.toggle("is-hidden-mobile", show);
+      logPanel.classList.toggle("is-hidden-mobile", !show);
+      backLink.classList.toggle("is-visible", show);
+    }
+
+    backLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      showMobileDetail(false);
+    });
+
+    var activeAccountId = null;
+
+    function renderAccounts(profiles, logCounts, lastActivity) {
+      accountsSub.textContent = profiles.length + (profiles.length === 1 ? " compte" : " comptes");
+      if (!profiles.length) {
+        accountsList.innerHTML = '<div class="log-empty">Aucun compte pour l\'instant.</div>';
+        return;
+      }
+      accountsList.innerHTML = "";
+      profiles.forEach(function (p) {
+        var row = document.createElement("div");
+        row.className = "acct-row";
+        row.dataset.id = p.id;
+        var count = logCounts[p.id] || 0;
+        row.innerHTML =
+          '<div class="acct-avatar">' + escapeHtml(initials(p.email)) + '</div>' +
+          '<div class="acct-info">' +
+            '<div class="acct-email">' + escapeHtml(p.email || "(sans courriel)") + '</div>' +
+            '<div class="acct-meta">' + escapeHtml(fmtRelative(lastActivity[p.id])) + '</div>' +
+          '</div>' +
+          (count ? '<div class="acct-count">' + count + '</div>' : '');
+        row.addEventListener("click", function () {
+          selectAccount(p, sb);
+        });
+        accountsList.appendChild(row);
+      });
+    }
+
+    function renderLogs(profile, rows) {
+      logTitle.textContent = profile.email || "(sans courriel)";
+      logSub.textContent = rows.length + (rows.length === 1 ? " phrase enregistrée" : " phrases enregistrées");
+      if (!rows.length) {
+        logBody.innerHTML = '<div class="log-empty">Rien enregistré pour ce compte pour l\'instant.</div>';
+        return;
+      }
+      var html = "";
+      var curDay = null;
+      rows.forEach(function (r) {
+        var dayLabel = fmtDayLabel(r.created_at);
+        if (dayLabel !== curDay) {
+          curDay = dayLabel;
+          html += '<div class="log-day"><div class="log-day-label">' + escapeHtml(dayLabel) + "</div></div>";
+        }
+        var signsHtml = "";
+        if (r.signs && r.signs.length) {
+          signsHtml = '<div class="log-signs">' + r.signs.map(function (s) {
+            return '<span class="log-sign-pill">' + escapeHtml(s) + "</span>";
+          }).join("") + "</div>";
+        }
+        html +=
+          '<div class="log-entry" style="padding-inline:18px">' +
+            '<div class="log-time">' + fmtTime(r.created_at) + '</div>' +
+            '<div class="log-text">' + escapeHtml(r.text) + signsHtml + '</div>' +
+          '</div>';
+      });
+      logBody.innerHTML = html;
+    }
+
+    function selectAccount(profile, sb) {
+      activeAccountId = profile.id;
+      document.querySelectorAll(".acct-row").forEach(function (el) {
+        el.classList.toggle("is-active", el.dataset.id === profile.id);
+      });
+      logBody.innerHTML = '<div class="log-loading">Chargement du journal…</div>';
+      showMobileDetail(true);
+      sb.from("conversation_logs")
+        .select("id,text,signs,created_at")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(500)
+        .then(function (res) {
+          if (res.error) {
+            logBody.innerHTML = '<div class="log-error">Impossible de charger ce journal : ' + escapeHtml(res.error.message) + "</div>";
+            return;
+          }
+          renderLogs(profile, res.data || []);
+        });
+    }
+
+    function loadEverything() {
+      sb.from("profiles")
+        .select("id,email,created_at")
+        .order("created_at", { ascending: false })
+        .then(function (profRes) {
+          if (profRes.error) {
+            accountsList.innerHTML = '<div class="log-error">Impossible de charger les comptes : ' + escapeHtml(profRes.error.message) + "</div>";
+            showNotice(
+              "Lecture refusée par Supabase. Si tu es bien connecté sur le site principal avec ton compte admin, vérifie l'étape (b) de la section 5 dans <code>SUPABASE-A-CONFIGURER.txt</code> (la ligne qui marque ce compte <code>is_admin = true</code>)."
+            );
+            return;
+          }
+          var profiles = profRes.data || [];
+          sb.from("conversation_logs")
+            .select("user_id,created_at")
+            .order("created_at", { ascending: false })
+            .limit(5000)
+            .then(function (logsRes) {
+              var logCounts = {};
+              var lastActivity = {};
+              (logsRes.data || []).forEach(function (row) {
+                logCounts[row.user_id] = (logCounts[row.user_id] || 0) + 1;
+                if (!lastActivity[row.user_id]) lastActivity[row.user_id] = row.created_at;
+              });
+              renderAccounts(profiles, logCounts, lastActivity);
+            });
+        });
+    }
+
+    sb.auth.onAuthStateChange(function (event, session) {
+      updateSessionPill(session);
+    });
+    sb.auth.getSession().then(function (res) {
+      var session = res.data && res.data.session;
+      updateSessionPill(session);
+      if (!session) {
+        showNotice(
+          "Tu n'es pas connecté. Connecte-toi sur <a href=\"../index.html\">la page principale</a> avec ton compte admin, puis reviens ici (recharge la page)."
+        );
+        accountsList.innerHTML = '<div class="log-empty">Connexion requise.</div>';
+        return;
+      }
+      loadEverything();
+    });
+
+    function updateSessionPill(session) {
+      if (!session || !session.user) {
+        sessionPill.textContent = "Non connecté";
+        sessionPill.classList.remove("is-admin");
+        return;
+      }
+      sessionPill.textContent = "Connecté : " + session.user.email;
+      sessionPill.classList.add("is-admin");
+    }
+  }
+})();
+</script>
+</body>
+</html>
