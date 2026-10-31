@@ -5008,11 +5008,23 @@ if (typeof document !== "undefined") {
     // les plus courts (ex. "merci", ~1,4s).
     // Relevé de 1,5x à 1,65x le 2026-10-20, puis à 1,85x le 2026-10-27
     // (demande répétée : "pas assez vite" même après le premier
-    // relèvement) — plafonné volontairement avant 2x : au-delà, les
-    // clips les plus courts (moins de 2s) laissent trop peu de marge
-    // réelle avant le rognage de secours (EXTRA_TRIM, voir plus bas) et
+    // relèvement) — plafonné volontairement avant 2x à ce moment-là : le
+    // risque identifié était que les clips les plus courts (moins de 2s)
+    // laissent trop peu de marge réelle avant le rognage de secours
+    // (EXTRA_TRIM) pour les mots encore absents de clip-bounds.json, et
     // risquent de couper le signe avant son vrai geste final.
-    const PLAYBACK_RATE = 1.85;
+    // Relevé à 2,0x le 2026-10-31 : clip-bounds.json couvre maintenant
+    // les 325 clips (vs 227 au moment du dernier réglage), donc le
+    // risque ci-dessus ne s'applique plus à aucun mot -- chaque signe
+    // est coupé à sa vraie borne de fin mesurée, jamais au rognage de
+    // secours générique. Recherche d'amélioration de fluidité plus
+    // poussée (fondu/interpolation entre deux signes consécutifs) testée
+    // le même jour et abandonnée : les mains sont dans des positions
+    // trop différentes d'un signe à l'autre, la superposition ou
+    // l'interpolation de mouvement (optical flow) donne une image floue/
+    // dédoublée, pas un geste fluide -- rejoint le constat déjà fait le
+    // 2026-10-27 avec le fondu croisé.
+    const PLAYBACK_RATE = 2.0;
     // Remonté à 0,8s le 2026-10-13 puis redescendu ici à 0,5s le même
     // jour : à 0,8s, un clip court (ex. 2s) ne laissait plus qu'environ
     // 0,4s réelles de marge avant de devoir enchaîner — pas assez pour
