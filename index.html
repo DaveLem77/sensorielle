@@ -244,13 +244,13 @@
   .nav-don { color: var(--s-violet) !important; font-weight: 600; }
   .nav-don:hover { color: var(--s-violet-deep) !important; }
   .mobile-menu a.nav-don { color: var(--s-violet); }
-  .donate-banner-wrap { margin-block: 0 70px; }
-  .donate-banner { position: relative; overflow: hidden; background: #fff; border: 1px solid #11162d15; border-radius: 14px; padding: 30px 36px; display: flex; align-items: center; justify-content: space-between; gap: 28px; flex-wrap: wrap; box-shadow: 0 16px 40px #080d2510; }
-  .donate-banner::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--s-gradient); }
-  .donate-banner p { margin: 0; font-family: var(--sans); font-size: 14.5px; line-height: 1.75; color: #6d7184; max-width: 46ch; }
-  .donate-banner p strong { color: #151a31; font-weight: 600; }
-  .donate-banner .new-button { flex: none; }
-  @media (max-width: 700px) { .donate-banner { flex-direction: column; align-items: flex-start; padding: 26px 24px; gap: 18px; } .donate-banner p { font-size: 13px; } .donate-banner .new-button { width: 100%; justify-content: center; } }
+  .donate-section { text-align: center; padding-block: 6px 80px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .donate-section .eyebrow { margin: 0; }
+  .donate-section h2 { font-size: clamp(32px, 3.6vw, 46px); margin: 2px 0 0; line-height: 1.15; letter-spacing: -0.04em; }
+  .donate-section h2 em { background: var(--s-gradient); background-clip: text; -webkit-background-clip: text; color: transparent; font-style: normal; }
+  .donate-section p:not(.eyebrow) { font-size: 14px; line-height: 1.75; color: #6d7184; max-width: 44ch; margin: 4px 0 0; }
+  .donate-section .new-button { margin-top: 8px; }
+  @media (max-width: 700px) { .donate-section { padding-block: 0 55px; gap: 14px; } .donate-section h2 { font-size: 30px; } }
   @media (max-width: 899px) { .nav-cta { display: none; } }
 
   .nav-burger {
@@ -1526,7 +1526,7 @@
     }
   })();
 </script>
-<section class="contribute-section wrap" id="contribuer"><div><p class="eyebrow">06 / PARTICIPER</p><h2>Chaque signe<br><em>compte.</em></h2><p>Vous connaissez la LSQ ? Aidez-nous à enrichir Sensorielle.</p><a class="new-button" href="collector/index.html" target="_blank" rel="noopener">Contribuer un signe <span>↗</span></a></div><div class="contrib-stat"><b>325</b><span>signes déjà filmés<br>dans le dictionnaire</span></div></section><div class="wrap donate-banner-wrap" id="don"><div class="donate-banner" data-reveal><p><strong>Sensorielle est gratuit et le restera.</strong> Un don aide à financer le tournage de nouveaux signes LSQ.</p><a class="new-button" href="https://buy.stripe.com/00wfZg6iv7F50pvgiv4wM0c" target="_blank" rel="noopener">Faire un don <span>↗</span></a></div></div>
+<section class="contribute-section wrap" id="contribuer"><div><p class="eyebrow">06 / PARTICIPER</p><h2>Chaque signe<br><em>compte.</em></h2><p>Vous connaissez la LSQ ? Aidez-nous à enrichir Sensorielle.</p><a class="new-button" href="collector/index.html" target="_blank" rel="noopener">Contribuer un signe <span>↗</span></a></div><div class="contrib-stat"><b>325</b><span>signes déjà filmés<br>dans le dictionnaire</span></div></section><section class="donate-section wrap" id="don" data-reveal><p class="eyebrow">07 / SOUTENIR</p><h2>Un don,<br><em>un pas de plus.</em></h2><p>Sensorielle est gratuit et le restera. Chaque don aide à financer le tournage et le sous-titrage de nouveaux signes LSQ.</p><a class="new-button" href="https://buy.stripe.com/00wfZg6iv7F50pvgiv4wM0c" target="_blank" rel="noopener">Faire un don <span>↗</span></a></section>
 <script>
   (function(){
     // 2026-10-21 (demande de David) : remplace la video "Famille Ici
