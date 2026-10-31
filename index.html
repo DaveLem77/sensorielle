@@ -4727,11 +4727,19 @@ if (typeof document !== "undefined") {
     }
 
     const SRC_SPLIT_FRAC = 0.50;
+    // Negation retiree d'ici le 2026-10-30 (signale "bug de filtre sur les
+    // yeux lors d'une negation") : c'etait deja note plus haut (voir le
+    // commentaire CSS .sent-negation) comme la cible la plus extreme des
+    // 4 marqueurs (0.80), ce qui rend toute imprecision de calibrage de
+    // la fenetre sourcils (WARP_WINDOWS, par mot) BEAUCOUP plus visible -
+    // au point de deborder visuellement sur les yeux pour certains clips.
+    // Le badge texte ("Négation", voir SENTIMENT_LABELS) reste le signal
+    // pour ce marqueur, comme deja le cas pour le tremblement de cadre
+    // retire le 2026-10-27 pour la meme raison.
     const WARP_TARGETS = {
       "question-yn": 0.30,
       "question-wh": 0.78,
       exclamation: 0.20,
-      negation: 0.80,
     };
     // Cibles pour la bouche : deliberement plus proches du neutre (0.50)
     // que celles des sourcils ci-dessus - une bouche deformee de travers
@@ -4744,7 +4752,6 @@ if (typeof document !== "undefined") {
       "question-yn": 0.42,
       "question-wh": 0.58,
       exclamation: 0.72,
-      negation: 0.38,
     };
     const WARP_EASE_MS = 260;
 
@@ -6054,10 +6061,69 @@ if (typeof document !== "undefined") {
       });
     }
 
+    // Prechauffage ponctuel des decodeurs video (2026-10-30), a la place
+    // du correctif precedent qui ciblait videos[curIdx] pour preparer le
+    // 2e mot en avance pendant le chargement du 1er - annule le meme
+    // jour car videos[curIdx] n'est PAS un 3e element libre, c'est en
+    // realite le meme element que "curVideo" du mot 1 lui-meme (il n'y a
+    // que 2 elements <video> au total), ce qui a casse la traduction
+    // ("ca met juste un mot"). Cette version-ci ne touche RIEN de l'etat
+    // du vrai pipeline (curIdx/preparedAhead/queue) : elle charge juste,
+    // UNE SEULE FOIS par chargement de page et bien AVANT tout vrai mot
+    // (des l'ouverture du micro), un clip jetable dans CHACUN des 2
+    // elements video l'un apres l'autre en parallele, attend que le
+    // navigateur l'ait reellement decode une premiere fois, puis remet
+    // l'element a zero (src retire + load()) - exactement pour payer a
+    // l'avance le cout du tout premier decodage video du navigateur
+    // (le plus lent), PENDANT que la personne est encore en train de
+    // parler/etre reconnue par la dictee, au lieu de le payer plus tard
+    // au moment du vrai 2e mot. Avant de remettre l'element a zero, on
+    // verifie que son src n'a pas deja ete repris par le vrai pipeline
+    // entre-temps (course possible si la dictee va tres vite) - si oui,
+    // on laisse l'element intact sans y toucher, par securite absolue.
+    let videoWarmupDone = false;
+    function warmUpOneVideo(el) {
+      return new Promise((resolve) => {
+        const throwawaySrc = Object.values(VIDEOS)[0];
+        if (!throwawaySrc) { resolve(); return; }
+        el.src = throwawaySrc;
+        const expectedSrc = el.src; // forme normalisee par le navigateur
+        el.load();
+        let settled = false;
+        let safety = null;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          el.onloadeddata = null;
+          el.onerror = null;
+          if (safety) clearTimeout(safety);
+          if (el.src === expectedSrc) {
+            el.pause();
+            el.removeAttribute("src");
+            el.load();
+          }
+          resolve();
+        };
+        safety = setTimeout(finish, 3000);
+        el.onloadeddata = finish;
+        el.onerror = finish;
+      });
+    }
+    function warmUpVideoDecoders() {
+      if (videoWarmupDone) return;
+      videoWarmupDone = true;
+      Promise.all([warmUpOneVideo(videos[0]), warmUpOneVideo(videos[1])]).then(() => {
+        dbg("prechauffage decodeurs video: termine");
+      });
+    }
+
     openBtn.addEventListener("click", () => {
       if (emptyState) emptyState.style.display = "none";
       stage.hidden = false;
       showIdle(true);
+      // Prechauffage demarre ici, des l'ouverture du micro - voir
+      // warmUpVideoDecoders plus haut (2026-10-30).
+      warmUpVideoDecoders();
       // L'onde sonore anime dès l'ouverture du mode, pas seulement après la
       // première phrase reconnue (demande explicite du 2026-09-09).
       transcriptBox.hidden = false;
