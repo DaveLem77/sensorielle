@@ -241,6 +241,9 @@
   }
   .nav-cta:hover { background: var(--s-violet-deep); transform: translateY(-1px); }
   .nav-cta:active { transform: translateY(0) scale(0.98); }
+  .nav-don { color: var(--s-violet) !important; font-weight: 600; }
+  .nav-don:hover { color: var(--s-violet-deep) !important; }
+  .mobile-menu a.nav-don { color: var(--s-violet); }
   @media (max-width: 899px) { .nav-cta { display: none; } }
 
   .nav-burger {
@@ -1386,7 +1389,7 @@
       <div class="nav-links">
         <a href="#demo" data-scroll>Découvrir</a>
         <a href="#contribuer" data-scroll>Contribuer</a>
-        <a href="#don" data-scroll>Faire un don</a>
+        <a href="#don" data-scroll class="nav-don">Faire un don</a>
         <a href="entreprises/index.html">Entreprises</a>
       </div>
       <div class="nav-right">
@@ -1409,6 +1412,7 @@
         <a href="#demo" data-scroll>Découvrir</a>
         <a href="#contribuer" data-scroll>Contribuer un signe</a>
         <a href="#essayer" data-scroll>Essayer</a>
+        <a href="#don" data-scroll class="nav-don">Faire un don</a>
         <a href="entreprises/index.html">Entreprises</a>
       </div>
     </nav>
