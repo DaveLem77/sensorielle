@@ -11,72 +11,47 @@
   #bar{height:10px;background:#ddd;border-radius:6px;overflow:hidden;margin-top:10px}
   #bar>div{height:100%;background:#5B34D6;width:0%;transition:width .2s}
   .note{color:#555}
+  #drop{border:3px dashed #999;border-radius:14px;padding:40px 20px;text-align:center;font-size:17px;color:#444;margin-top:16px;transition:background .15s,border-color .15s}
+  #drop.over{background:#efe9ff;border-color:#5B34D6;color:#5B34D6}
+  #status{margin-top:10px;font-weight:600}
 </style>
 </head>
 <body>
 <h2>Outil interne — extraction des points de main (325 signes)</h2>
-<p class="note">Cet outil tourne entièrement dans ce navigateur, sur ton ordinateur. Il utilise le même moteur de détection de main que le site (MediaPipe), lit chaque vidéo du dossier <code>media/signs</code>, et calcule les points de la main pour chaque image. Ça prend quelques minutes. À la fin, un fichier <b>sign-templates.json</b> se télécharge automatiquement dans ton dossier Téléchargements — renvoie-moi ce fichier (par pièce jointe dans le chat) et je m'occupe du reste.</p>
+<p class="note">Cet outil tourne entièrement dans ton navigateur, sur ton ordinateur. Il utilise le même moteur de détection de main que le site, lit chaque vidéo du dossier <code>media/signs</code> et calcule les points de la main pour chaque image. À la fin, un fichier <b>sign-templates.json</b> se télécharge automatiquement dans ton dossier Téléchargements — renvoie-moi ce fichier dans le chat.</p>
 
-<div>
-  <button id="btnFolder">1. Choisir le dossier media/signs</button>
-  <span id="folderStatus" class="note"></span>
+<div id="drop">
+  📁 Glisse ici le dossier <b>media/signs</b> au complet (depuis l'explorateur de fichiers)<br>
+  <span class="note">— ou clique pour choisir les fichiers autrement —</span>
+  <input type="file" id="fallbackInput" webkitdirectory multiple style="display:none">
 </div>
-<div>
-  <button id="btnStart" disabled>2. Démarrer l'extraction</button>
-</div>
+<div id="status" class="note"></div>
 
 <div id="bar"><div></div></div>
 <div id="log"></div>
-
-<input type="file" id="folderInput" webkitdirectory multiple style="display:none">
 
 <script type="module">
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
 const logEl = document.getElementById("log");
 const barEl = document.querySelector("#bar>div");
-const btnFolder = document.getElementById("btnFolder");
-const btnStart = document.getElementById("btnStart");
-const folderStatus = document.getElementById("folderStatus");
-const folderInput = document.getElementById("folderInput");
+const dropEl = document.getElementById("drop");
+const statusEl = document.getElementById("status");
+const fallbackInput = document.getElementById("fallbackInput");
 
 function log(msg) {
   logEl.textContent += msg + "\n";
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-let videoFiles = {};
-let boundsJson = null;
 let handLandmarker = null;
-
-btnFolder.addEventListener("click", () => folderInput.click());
-
-folderInput.addEventListener("change", async () => {
-  videoFiles = {};
-  boundsJson = null;
-  const files = Array.from(folderInput.files);
-  for (const f of files) {
-    const rel = f.webkitRelativePath || f.name;
-    const base = rel.split("/").pop();
-    if (base === "clip-bounds.json") {
-      boundsJson = JSON.parse(await f.text());
-    } else if (/\.mp4$/i.test(base)) {
-      const word = base.replace(/\.mp4$/i, "");
-      videoFiles[word] = f;
-    }
-  }
-  const n = Object.keys(videoFiles).length;
-  folderStatus.textContent = n + " vidéos trouvées" + (boundsJson ? ", clip-bounds.json chargé" : " — ATTENTION clip-bounds.json manquant");
-  log(`Dossier chargé : ${n} vidéos .mp4${boundsJson ? "" : " (pas de clip-bounds.json, bornes = clip entier)"}`);
-  if (n > 0) btnStart.disabled = false;
-});
+let modelPromise = loadModel();
 
 async function loadModel() {
-  log("Chargement du moteur de vision (WASM)…");
+  log("Chargement du modèle en arrière-plan…");
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
-  log("Téléchargement du modèle de main…");
   const modelAssetPath = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
   handLandmarker = await HandLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath, delegate: "CPU" },
@@ -84,6 +59,128 @@ async function loadModel() {
     numHands: 2
   });
   log("Modèle prêt.");
+}
+
+// --- Collect files from either a drag-and-drop folder or the fallback input ---
+
+function readAllEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const all = [];
+    function next() {
+      reader.readEntries((entries) => {
+        if (!entries.length) { resolve(all); return; }
+        all.push(...entries);
+        next();
+      }, reject);
+    }
+    next();
+  });
+}
+
+async function walkEntry(entry, out) {
+  if (entry.isFile) {
+    const file = await new Promise((res, rej) => entry.file(res, rej));
+    out.push(file);
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    const entries = await readAllEntries(reader);
+    for (const e of entries) await walkEntry(e, out);
+  }
+}
+
+async function filesFromDropEvent(e) {
+  const items = e.dataTransfer.items;
+  const out = [];
+  const promises = [];
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
+    if (entry) promises.push(walkEntry(entry, out));
+  }
+  await Promise.all(promises);
+  return out;
+}
+
+dropEl.addEventListener("click", (e) => {
+  if (e.target === fallbackInput) return;
+  fallbackInput.click();
+});
+dropEl.addEventListener("dragover", (e) => { e.preventDefault(); dropEl.classList.add("over"); });
+dropEl.addEventListener("dragleave", () => dropEl.classList.remove("over"));
+dropEl.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  dropEl.classList.remove("over");
+  statusEl.textContent = "Lecture du dossier déposé…";
+  try {
+    const files = await filesFromDropEvent(e);
+    await runExtraction(files);
+  } catch (err) {
+    statusEl.textContent = "Erreur en lisant le dossier déposé : " + err.message;
+    log("Erreur drop: " + err.message);
+  }
+});
+fallbackInput.addEventListener("change", async () => {
+  await runExtraction(Array.from(fallbackInput.files));
+});
+
+async function runExtraction(allFiles) {
+  dropEl.style.pointerEvents = "none";
+  dropEl.style.opacity = "0.6";
+  let boundsJson = null;
+  const videoFiles = {};
+  for (const f of allFiles) {
+    const rel = f.webkitRelativePath || f.name;
+    const base = rel.split("/").pop();
+    if (base === "clip-bounds.json") {
+      try { boundsJson = JSON.parse(await f.text()); } catch (e) { log("clip-bounds.json illisible: " + e.message); }
+    } else if (/\.mp4$/i.test(base)) {
+      videoFiles[base.replace(/\.mp4$/i, "")] = f;
+    }
+  }
+  const words = Object.keys(videoFiles).sort();
+  statusEl.textContent = `${words.length} vidéos trouvées${boundsJson ? "" : " (clip-bounds.json absent — bornes = clip entier)"}. Chargement du modèle…`;
+  log(`${words.length} vidéos trouvées.`);
+  if (!words.length) {
+    statusEl.textContent = "Aucune vidéo .mp4 trouvée dans ce qui a été déposé/choisi.";
+    dropEl.style.pointerEvents = ""; dropEl.style.opacity = "";
+    return;
+  }
+
+  try { await modelPromise; } catch (e) {
+    statusEl.textContent = "ERREUR chargement modèle : " + e.message;
+    log("ERREUR modèle: " + e.message);
+    dropEl.style.pointerEvents = ""; dropEl.style.opacity = "";
+    return;
+  }
+
+  statusEl.textContent = "Extraction en cours…";
+  const results = {};
+  let globalTs = 0;
+  let done = 0;
+  for (const word of words) {
+    try {
+      const b = boundsJson ? boundsJson[word] : null;
+      const r = await extractOneVideo(videoFiles[word], b, (ts) => { globalTs = ts; return globalTs; });
+      results[word] = { seq: r.seq };
+      log(`${word}: ${r.frameCount} images, mains détectées dans ${r.detectedCount}`);
+    } catch (e) {
+      log(`${word}: ÉCHEC (${e.message})`);
+    }
+    done++;
+    barEl.style.width = Math.round(100 * done / words.length) + "%";
+    statusEl.textContent = `Extraction en cours… ${done}/${words.length}`;
+  }
+
+  statusEl.textContent = "Terminé — téléchargement du fichier…";
+  log("\nTerminé. Téléchargement de sign-templates.json…");
+  const blob = new Blob([JSON.stringify(results)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "sign-templates.json";
+  document.body.appendChild(a);
+  a.click();
+  statusEl.textContent = "Fini ! sign-templates.json téléchargé — renvoie-le dans le chat.";
+  log("Fichier téléchargé dans ton dossier Téléchargements. Tu peux fermer cette page.");
+  dropEl.style.pointerEvents = ""; dropEl.style.opacity = "";
 }
 
 function normalizeHand(pts) {
@@ -101,8 +198,7 @@ function normalizeHand(pts) {
   return out;
 }
 
-let globalTs = 0;
-
+let tsCounter = 0;
 function extractOneVideo(file, bounds) {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
@@ -140,9 +236,9 @@ function extractOneVideo(file, bounds) {
         resolve({ seq, detectedCount, frameCount: seq.length });
         return;
       }
-      globalTs += 33;
+      tsCounter += 33;
       try {
-        const res = handLandmarker.detectForVideo(video, globalTs);
+        const res = handLandmarker.detectForVideo(video, tsCounter);
         let left = null, right = null;
         if (res.landmarks && res.landmarks.length) {
           for (let i = 0; i < res.landmarks.length; i++) {
@@ -161,42 +257,6 @@ function extractOneVideo(file, bounds) {
     video.requestVideoFrameCallback(onFrame);
   });
 }
-
-btnStart.addEventListener("click", async () => {
-  btnStart.disabled = true;
-  btnFolder.disabled = true;
-  try {
-    await loadModel();
-  } catch (e) {
-    log("ERREUR chargement modèle : " + e.message);
-    return;
-  }
-
-  const words = Object.keys(videoFiles).sort();
-  const results = {};
-  let done = 0;
-  for (const word of words) {
-    try {
-      const b = boundsJson ? boundsJson[word] : null;
-      const r = await extractOneVideo(videoFiles[word], b);
-      results[word] = { seq: r.seq };
-      log(`${word}: ${r.frameCount} images, mains détectées dans ${r.detectedCount}`);
-    } catch (e) {
-      log(`${word}: ÉCHEC (${e.message})`);
-    }
-    done++;
-    barEl.style.width = Math.round(100 * done / words.length) + "%";
-  }
-
-  log("\nTerminé. Téléchargement de sign-templates.json…");
-  const blob = new Blob([JSON.stringify(results)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "sign-templates.json";
-  document.body.appendChild(a);
-  a.click();
-  log("Fichier téléchargé dans ton dossier Téléchargements. Tu peux fermer cette page.");
-});
 </script>
 </body>
 </html>
