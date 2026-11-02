@@ -5269,7 +5269,7 @@ if (typeof document !== "undefined") {
       marcher: { pathKind: "walkAcross" },
       marche: { pathKind: "walkAcross" },
     };
-    const CLASSIFIER_OVERLAY_MS = 1200;
+    const CLASSIFIER_OVERLAY_MS = 1450;
 
     // Repere, dans une file DEJA resolue (items {key, source}), toute
     // sequence [animal, verbe-classificateur, lieu?] consecutive et la
@@ -5368,19 +5368,26 @@ if (typeof document !== "undefined") {
     // plus tard ajouteront simplement d'autres cas ici.
     function classifierPathPoint(pathKind, t) {
       if (pathKind === "zigzagUp") {
-        const x = 0.5 + Math.sin(t * Math.PI * 3.2) * 0.17 * (1 - t * 0.3);
-        const y = 0.86 - t * 0.62;
-        const scale = 1 - t * 0.28;
+        const x = 0.22 + 0.56 * t + Math.sin(t * Math.PI * 2.4) * 0.05 * (1 - t);
+        const y = 0.80 - 0.54 * t - Math.sin(t * Math.PI * 2.4) * 0.015;
+        const scale = 1.05 - t * 0.5;
         return { x: x, y: y, scale: scale };
       }
       if (pathKind === "walkAcross") {
-        const x = 0.18 + t * 0.64;
-        const y = 0.62 + Math.sin(t * Math.PI * 4) * 0.04;
+        const x = 0.16 + t * 0.66;
+        const y = 0.66 + Math.sin(t * Math.PI * 4) * 0.035;
         const scale = 0.85;
         return { x: x, y: y, scale: scale };
       }
       return { x: 0.5, y: 0.5, scale: 1 };
     }
+
+    // Repere fixe du "fond" (ex. MONTAGNE) : toujours au meme endroit,
+    // en dehors de la trajectoire de la figure pour les deux verbes geres
+    // (voir classifierPathPoint) -- ne se fait jamais chevaucher par la
+    // figure sauf a la toute fin de "zigzagUp", ou elle vient volontairement
+    // "l'atteindre".
+    const CLASSIFIER_GROUND_ANCHOR = { x: 0.8, y: 0.24 };
 
     let classifierFigureVideo = null, classifierGroundVideo = null;
     function getClassifierVideos() {
@@ -5399,35 +5406,89 @@ if (typeof document !== "undefined") {
       return { fig: classifierFigureVideo, ground: classifierGroundVideo };
     }
 
-    // Dessine la construction : le "fond" (repere fixe, ex. MONTAGNE) en
-    // bas du cadre si fourni, puis la "figure" (ex. CHAT) recadree et
-    // deplacee le long de la trajectoire -- les DEUX viennent de vraies
-    // videos deja filmees (drawImage sur un <video> en train de jouer,
-    // meme technique que drawWarpFrame), jamais d'un dessin vectoriel :
-    // aucun nouveau tournage necessaire.
+    // Bug visuel signale le 2026-11-02 ("de la merde... duplication
+    // bizarre", apres verification en direct par capture d'ecran gelee a
+    // mi-animation) : la version precedente dessinait le "fond" et la
+    // "figure" comme deux rectangles video PRESQUE PLEINE OPACITE, au
+    // MEME endroit a l'ecran en meme temps (le fond couvrait tout le
+    // centre-bas du cadre, exactement la ou la figure se deplacait aussi)
+    // -- resultat : on voyait deux gros plans du presentateur superposes,
+    // ca ne lisait pas du tout comme "un chat qui grimpe une montagne"
+    // mais comme un bug d'affichage (deux visages dedoubles). Refonte
+    // complete du rendu, toujours avec les MEMES videos de mots deja
+    // filmees (aucun nouveau tournage, contrainte inchangee) mais traitees
+    // differemment pour que ca lise clairement comme UNE figure qui se
+    // deplace devant UN repere fixe, jamais comme deux signes empiles :
+    //   1) jetons RONDS (decoupe circulaire franche) au lieu de rectangles
+    //      de video bruts colles a l'ecran -- lit comme un "pion" qui se
+    //      deplace, pas comme une deuxieme tete ;
+    //   2) le repere (fond) est maintenant PETIT, DESATURE (gris) et fixe
+    //      dans un coin qui ne croise jamais la trajectoire de la figure
+    //      (sauf a la toute fin de "zigzagUp", ou la figure vient
+    //      volontairement le rejoindre -- "le chat arrive a la montagne") ;
+    //   3) courte trainee (echos de plus en plus transparents derriere la
+    //      position actuelle) + ombre douce sous la figure, pour que le
+    //      mouvement se lise comme continu et fluide plutot que comme un
+    //      saut d'une pose figee a l'autre.
     function drawClassifierFrame(info, figVideo, groundVideo, t, pathKind) {
       const cw = info.cw, ch = info.ch, dpr = info.dpr;
+      const base = Math.min(cw, ch);
       classifierCtx.clearRect(0, 0, classifierCanvas.width, classifierCanvas.height);
-      if (groundVideo && groundVideo.videoWidth) {
-        const gw = groundVideo.videoWidth, gh = groundVideo.videoHeight;
-        const gCropW = gw * 0.5, gCropH = gh * 0.7;
-        const gSrcX = (gw - gCropW) / 2, gSrcY = gh * 0.1;
-        const gDestW = cw * 0.34 * dpr, gDestH = ch * 0.62 * dpr;
-        const gDestX = (cw * 0.5 - cw * 0.17) * dpr, gDestY = (ch * 0.32) * dpr;
+
+      function drawSoftShadow(cx, cy, r) {
+        const grad = classifierCtx.createRadialGradient(cx, cy + r * 0.82, r * 0.15, cx, cy + r * 0.82, r * 1.05);
+        grad.addColorStop(0, "rgba(10,10,20,0.28)");
+        grad.addColorStop(1, "rgba(10,10,20,0)");
         classifierCtx.save();
-        classifierCtx.globalAlpha = 0.55;
-        classifierCtx.drawImage(groundVideo, gSrcX, gSrcY, gCropW, gCropH, gDestX, gDestY, gDestW, gDestH);
+        classifierCtx.fillStyle = grad;
+        classifierCtx.beginPath();
+        classifierCtx.ellipse(cx, cy + r * 0.82, r * 0.85, r * 0.32, 0, 0, Math.PI * 2);
+        classifierCtx.fill();
         classifierCtx.restore();
       }
+
+      function drawToken(video, cx, cy, r, alpha, desaturate) {
+        if (!video || !video.videoWidth || r <= 0) return;
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const cropW = vw * 0.46, cropH = vh * 0.46;
+        const srcX = (vw - cropW) / 2, srcY = vh * 0.18;
+        classifierCtx.save();
+        classifierCtx.globalAlpha = alpha;
+        if (desaturate) classifierCtx.filter = "grayscale(65%) brightness(0.92)";
+        classifierCtx.beginPath();
+        classifierCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        classifierCtx.clip();
+        classifierCtx.drawImage(video, srcX, srcY, cropW, cropH, cx - r, cy - r, r * 2, r * 2);
+        classifierCtx.restore();
+        classifierCtx.save();
+        classifierCtx.globalAlpha = Math.min(1, alpha + 0.15);
+        classifierCtx.strokeStyle = "rgba(255,255,255,0.55)";
+        classifierCtx.lineWidth = Math.max(1, r * 0.035);
+        classifierCtx.beginPath();
+        classifierCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        classifierCtx.stroke();
+        classifierCtx.restore();
+      }
+
+      if (groundVideo && groundVideo.videoWidth) {
+        const gr = base * 0.17 * dpr;
+        const gcx = cw * CLASSIFIER_GROUND_ANCHOR.x * dpr, gcy = ch * CLASSIFIER_GROUND_ANCHOR.y * dpr;
+        drawToken(groundVideo, gcx, gcy, gr, 0.5, true);
+      }
+
       if (figVideo && figVideo.videoWidth) {
-        const fw = figVideo.videoWidth, fh = figVideo.videoHeight;
-        const fCropW = fw * 0.42, fCropH = fh * 0.42;
-        const fSrcX = (fw - fCropW) / 2, fSrcY = fh * 0.22;
+        const trailOffsets = [0.14, 0.08, 0.04];
+        for (let k = 0; k < trailOffsets.length; k++) {
+          const tt = t - trailOffsets[k];
+          if (tt < 0) continue;
+          const tp = classifierPathPoint(pathKind, tt);
+          const tr = base * 0.15 * tp.scale * dpr;
+          drawToken(figVideo, cw * tp.x * dpr, ch * tp.y * dpr, tr, 0.12, false);
+        }
         const pt = classifierPathPoint(pathKind, t);
-        const destSize = cw * 0.3 * pt.scale * dpr;
-        const destX = (cw * pt.x) * dpr - destSize / 2;
-        const destY = (ch * pt.y) * dpr - destSize / 2;
-        classifierCtx.drawImage(figVideo, fSrcX, fSrcY, fCropW, fCropH, destX, destY, destSize, destSize);
+        const r = base * 0.15 * pt.scale * dpr;
+        drawSoftShadow(cw * pt.x * dpr, ch * pt.y * dpr, r);
+        drawToken(figVideo, cw * pt.x * dpr, ch * pt.y * dpr, r, 1, false);
       }
     }
 
