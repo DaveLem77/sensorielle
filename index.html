@@ -5448,6 +5448,20 @@ if (typeof document !== "undefined") {
       if (!info) { done(); return; }
 
       function startAnim() {
+        // Bug trouve le 2026-11-02 en testant en direct dans un vrai
+        // navigateur (pas juste par lecture de code) : le message de repos
+        // ("Parle -- les signes correspondants s'enchainent ici, en
+        // direct.") reste affiche PAR-DESSUS le canevas du classificateur
+        // tant qu'aucun item "normal" n'est passe par le chemin habituel
+        // plus bas dans playFromQueue() (qui, lui, appelle showIdle(false)
+        // avant de reveler sa video) -- si la phrase entiere se reduit a
+        // UN SEUL item classificateur (ex. "le chat monte la montagne"),
+        // ce chemin normal n'est jamais atteint (voir le retour anticipe
+        // juste apres `item.source === "classifier"`), et l'animation se
+        // joue donc invisible, cachee derriere ce message. Meme correction
+        // que le chemin normal : masquer le repos des que l'animation
+        // demarre.
+        showIdle(false);
         classifierCanvas.classList.add("active");
         const startTs = performance.now();
         function tick(ts) {
