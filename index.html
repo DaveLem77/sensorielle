@@ -5165,7 +5165,22 @@ if (typeof document !== "undefined") {
           doSwap();
           return;
         }
-        drawBridgeFrame(img, i, frameW, frameH, info);
+        // Recalcule la boite (cw/ch/dpr) a CHAQUE image du pont plutot que
+        // de reutiliser "info" capture une seule fois avant la boucle --
+        // corrige le 2026-11-02 (signale par David, visible sur un
+        // enregistrement d'ecran reel : "ya comme une iteration entre
+        // merci et beaucoup cest laid"). Le pont dure ~100ms (3 images a
+        // BRIDGE_FRAME_MS) ; si la fenetre visible change de taille
+        // PENDANT ce court instant (ex. barre d'adresse mobile qui se
+        // retracte/reapparait au toucher, clavier qui se ferme), la
+        // video <video> en dessous (object-fit:cover en CSS pur) suit
+        // INSTANTANEMENT la nouvelle taille, mais le canvas du pont
+        // restait fige a l'ancienne taille jusqu'a la bascule finale --
+        // d'ou un saut de zoom visible pile au moment ou le pont cede la
+        // place a la vraie video. Recalculer ici (no-op si la taille n'a
+        // pas change, voir layoutBridgeCanvas) elimine ce decalage.
+        const freshInfo = layoutBridgeCanvas() || info;
+        drawBridgeFrame(img, i, frameW, frameH, freshInfo);
         i += 1;
         setTimeout(drawNext, BRIDGE_FRAME_MS);
       }
