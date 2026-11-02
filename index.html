@@ -5400,6 +5400,20 @@ if (typeof document !== "undefined") {
       // d'avance au pipeline de préchargement qu'avant.
       function reveal() {
         function doSwap() {
+          // 2026-11-02 (2e partie du correctif) : le canvas de warp du
+          // visage est UN SEUL element partage entre tous les mots (pas
+          // recree a chaque mot, contrairement aux <video>) -- donc meme
+          // apres avoir cible precisement l'element au moment de la
+          // detection (voir applySentimentVisual), si la bascule vers le
+          // mot suivant survient PENDANT que la pulsation est encore en
+          // train de jouer, ce meme canvas continue de zoomer alors qu'il
+          // affiche deja le nouveau mot. On retire la classe ponctuelle
+          // ICI, au moment exact de la bascule, peu importe ou en est le
+          // minuteur de 650ms -- garantit que la pulsation ne peut plus
+          // jamais deborder sur le mot suivant.
+          curVideo.classList.remove("sent-pulse-once");
+          nextVideo.classList.remove("sent-pulse-once");
+          if (warpCanvas) warpCanvas.classList.remove("sent-pulse-once");
           nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
           nextVideo.play().catch(() => {});
           nextVideo.classList.add("showing");
