@@ -6162,6 +6162,22 @@ if (typeof document !== "undefined") {
         signs = signs.filter((s) => !shownSet.has(s.key));
         const alreadyShownCount = beforeFilterCount - signs.length;
         signs = dedupeAdjacent(signs, currentlyShowingKey);
+        // Bug trouve le 2026-11-02 en testant la construction a
+        // classificateur de bout en bout (pas juste a l'instant ou elle
+        // s'affiche) : la reformulation IA tourne SYSTEMATIQUEMENT sur
+        // CHAQUE phrase (voir plus haut) et remplace la file sans jamais
+        // repasser par spliceClassifierConstructions -- une construction
+        // correctement assemblee par la correspondance directe ("le chat
+        // monte la montagne" -> un seul item classificateur) se faisait
+        // donc toujours defaire quelques centaines de ms plus tard par la
+        // reponse IA (ex. "montagne, chat, monter" rejoues comme 3 signes
+        // separes), le debounce de l'IA (1,2s) arrivant presque toujours
+        // pendant ou juste apres l'animation du classificateur (elle
+        // aussi ~1,2s). Repasse donc la reponse de l'IA par la meme
+        // detection avant de remplacer la file, exactement comme la
+        // correspondance directe le fait deja dans renderUtterance/
+        // appendToUtterance.
+        signs = spliceClassifierConstructions(signs);
         dbg("IA: réponse = [" + words.join(",") + "] -> " + alreadyShownCount + " mot(s) déjà montré(s) retiré(s), remplace la file par " + signs.length + " mots restants");
         if (!signs.length) return;
         // Bug trouvé le 2026-10-29 (signalé : "des fois ça pas rapport et
