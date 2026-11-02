@@ -1144,6 +1144,20 @@
     opacity: 0; transition: opacity 0.18s ease;
   }
   .speech-warp-canvas.is-active { opacity: 1; }
+  /* Pont de transition entre deux signes (RIFE, 2026-10-31) : voir le JS
+     (playBridgeThenSwap) pour le detail. Ce canvas affiche brievement 2-3
+     images de transition generees hors-ligne par-dessus curVideo, avant
+     la bascule normale vers nextVideo -- jamais de transition CSS ici
+     (pas de "transition: opacity"), le changement d'opacite doit rester
+     instantane pour garder le controle precis du minutage des images
+     (voir BRIDGE_FRAME_MS). z-index au-dessus du warp (3) : le pont doit
+     recouvrir entierement la video ET la deformation sourcils pendant
+     qu'il joue. */
+  .speech-bridge-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 4; opacity: 0;
+  }
+  .speech-bridge-canvas.active { opacity: 1; }
   .speech-idle {
     position: relative; z-index: 1; max-width: 26ch; text-align: center;
     font-size: 15px; line-height: 1.5;
@@ -1689,6 +1703,7 @@
     <video id="speechVideoA" class="speech-video" muted playsinline></video>
     <video id="speechVideoB" class="speech-video" muted playsinline></video>
     <canvas class="speech-warp-canvas" id="speechWarpCanvas" aria-hidden="true"></canvas>
+    <canvas class="speech-bridge-canvas" id="speechBridgeCanvas" aria-hidden="true"></canvas>
     <div class="speech-sentiment-badge" id="speechSentimentBadge" hidden aria-hidden="true"><span class="speech-sentiment-dot"></span><span id="speechSentimentLabel"></span></div>
     <p class="speech-idle" id="speechIdle">Parle — les signes correspondants s'enchaînent ici, en direct.</p>
   </div>
@@ -4662,6 +4677,8 @@ if (typeof document !== "undefined") {
     const sentimentLabelEl = document.getElementById("speechSentimentLabel");
     const warpCanvas = document.getElementById("speechWarpCanvas");
     const warpCtx = warpCanvas ? warpCanvas.getContext("2d") : null;
+    const bridgeCanvas = document.getElementById("speechBridgeCanvas");
+    const bridgeCtx = bridgeCanvas ? bridgeCanvas.getContext("2d") : null;
     let sentimentResetTimer = null;
 
     // Warp front/sourcils v3 (2026-10-19, remplace le calque colore juge
@@ -5037,6 +5054,105 @@ if (typeof document !== "undefined") {
     // plafonné au tiers de la durée pour ne pas casser un clip très court.
     const EXTRA_TRIM = 0.35;
 
+    // ---- Pont de transition entre deux signes (RIFE) ----------------------
+    // Ajouté le 2026-10-31, demande explicite ("ça doit fonctionner entre
+    // chaque mot aussi bien") après un premier essai approuvé sur "merci"
+    // -> "beaucoup". Un vrai fondu/interpolation en direct entre deux
+    // clips QUELCONQUES a été tenté et abandonné (voir plus haut,
+    // 2026-10-31 : mains dans des positions trop différentes, flou/
+    // dédoublement). Solution retenue : 2-3 images de transition sont
+    // générées HORS LIGNE (RIFE, interpolation de trajectoire réelle entre
+    // la dernière image d'un signe et la première du suivant -- pas un
+    // simple fondu) pour un sous-ensemble de mots très fréquents
+    // (connecteurs/pronoms/verbes courants -- ceux qui reviennent dans la
+    // grande majorité des phrases), puis rejouées ici juste avant la
+    // bascule normale. Impossible de couvrir TOUTES les paires possibles
+    // (325 mots = ~105 000 combinaisons, des dizaines d'heures de calcul) :
+    // pour tout couple sans pont précalculé, le comportement reste
+    // EXACTEMENT celui d'avant (bascule instantanée) -- aucune régression
+    // possible pour les mots hors de ce sous-ensemble.
+    let BRIDGE_INDEX = null; // Set "mot1__mot2" une fois chargé ; null = pas encore chargé (aucun pont tenté entre-temps, repli silencieux)
+    const BRIDGE_IMG_CACHE = new Map();
+    fetch("media/signs/bridges/bridges-index.json", { cache: "force-cache" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { BRIDGE_INDEX = new Set(j && Array.isArray(j.pairs) ? j.pairs : []); })
+      .catch(() => { BRIDGE_INDEX = new Set(); });
+
+    function bridgeKey(a, b) { return a + "__" + b; }
+
+    // Démarre le téléchargement de l'image-pont (3 images cote à cote,
+    // JPEG) dès que le couple (mot courant -> mot suivant) est connu,
+    // bien avant reveal() -- lui laisse le temps d'arriver pendant que le
+    // signe courant joue encore, comme prefetchOne pour les clips normaux.
+    function prefetchBridge(fromKey, toKey) {
+      if (!fromKey || !toKey || fromKey === toKey || !BRIDGE_INDEX) return;
+      const k = bridgeKey(fromKey, toKey);
+      if (!BRIDGE_INDEX.has(k) || BRIDGE_IMG_CACHE.has(k)) return;
+      const img = new Image();
+      img.src = "media/signs/bridges/" + k + ".jpg";
+      BRIDGE_IMG_CACHE.set(k, img);
+    }
+
+    // Même calcul cover + object-position:50%/12% que .speech-video (voir
+    // layoutWarpCanvas/drawWarpFrame plus bas) -- le pont doit se placer
+    // EXACTEMENT au même endroit que la vidéo qu'il recouvre.
+    function layoutBridgeCanvas() {
+      if (!bridgeCanvas || !speechVideoWrap) return null;
+      const cw = speechVideoWrap.clientWidth, ch = speechVideoWrap.clientHeight;
+      if (!cw || !ch) return null;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const pxW = Math.max(1, Math.round(cw * dpr));
+      const pxH = Math.max(1, Math.round(ch * dpr));
+      if (bridgeCanvas.width !== pxW) bridgeCanvas.width = pxW;
+      if (bridgeCanvas.height !== pxH) bridgeCanvas.height = pxH;
+      return { cw, ch, dpr };
+    }
+    window.addEventListener("resize", layoutBridgeCanvas);
+
+    function drawBridgeFrame(img, frameIdx, frameW, frameH, info) {
+      const { cw, ch, dpr } = info;
+      const scale = Math.max(cw / frameW, ch / frameH);
+      const offsetX = (cw - frameW * scale) * 0.5;
+      const offsetY = (ch - frameH * scale) * 0.12;
+      bridgeCtx.clearRect(0, 0, bridgeCanvas.width, bridgeCanvas.height);
+      bridgeCtx.drawImage(
+        img,
+        frameIdx * frameW, 0, frameW, frameH,
+        offsetX * dpr, offsetY * dpr, frameW * scale * dpr, frameH * scale * dpr
+      );
+    }
+
+    const BRIDGE_FRAME_MS = 33; // 3 images ~100ms au total, rythme proche de la démo approuvée
+
+    // Joue le pont (si disponible et déjà chargé) par-dessus curVideo,
+    // PUIS appelle doSwap() -- sinon appelle doSwap() immédiatement, sans
+    // délai ni changement d'état : un couple sans pont (ou pas encore
+    // chargé à temps) se comporte exactement comme avant le 2026-10-31.
+    function playBridgeThenSwap(fromKey, toKey, curVideo, doSwap) {
+      const k = fromKey && toKey ? bridgeKey(fromKey, toKey) : null;
+      const img = k ? BRIDGE_IMG_CACHE.get(k) : null;
+      const info = img && img.complete && img.naturalWidth ? layoutBridgeCanvas() : null;
+      if (!bridgeCtx || !k || !BRIDGE_INDEX || !BRIDGE_INDEX.has(k) || !img || !img.complete || !img.naturalWidth || !info) {
+        doSwap();
+        return;
+      }
+      const frameW = img.naturalWidth / 3;
+      const frameH = img.naturalHeight;
+      bridgeCanvas.classList.add("active");
+      let i = 0;
+      function drawNext() {
+        if (i >= 3) {
+          bridgeCanvas.classList.remove("active");
+          doSwap();
+          return;
+        }
+        drawBridgeFrame(img, i, frameW, frameH, info);
+        i += 1;
+        setTimeout(drawNext, BRIDGE_FRAME_MS);
+      }
+      drawNext();
+    }
+
     // Préchauffe (fetch en arrière-plan, sans l'afficher) le PROCHAIN mot
     // de la file dès que le mot actuel commence à s'afficher, plutôt que
     // d'attendre la toute fin de sa lecture pour commencer à le
@@ -5174,6 +5290,11 @@ if (typeof document !== "undefined") {
       const item = queue.shift();
       const bounds = CLIP_BOUNDS[item.key];
       dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
+      // Couple (mot actuellement affiché -> mot qu'on s'apprête à charger) :
+      // démarre tout de suite le téléchargement du pont, s'il en existe un
+      // (voir prefetchBridge plus haut) -- doit arriver avant reveal().
+      const bridgeFromKey = currentlyShowingKey;
+      prefetchBridge(bridgeFromKey, item.key);
 
       // Le signe suivant a-t-il déjà été préparé à l'avance (voir
       // prepareAheadIfPossible plus bas) pendant que le signe précédent
@@ -5259,26 +5380,34 @@ if (typeof document !== "undefined") {
       // dès la bascule, sans délai — ce qui donne même un peu PLUS
       // d'avance au pipeline de préchargement qu'avant.
       function reveal() {
-        nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
-        nextVideo.play().catch(() => {});
-        nextVideo.classList.add("showing");
-        curVideo.classList.remove("showing");
-        curVideo.pause();
-        showIdle(false);
-        curIdx = 1 - curIdx;
-        currentlyShowingKey = item.key;
-        shownKeysThisUtterance.push(item.key);
-        if (warpActiveKind) layoutWarpCanvas();
-        dbg("affiché: '" + item.key + "' (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
-        nextVideo.addEventListener("timeupdate", onTimeUpdate);
-        nextVideo.onended = advance;
-        nextVideo.onerror = (ev) => { dbg("ERREUR vidéo pour '" + item.key + "': " + (nextVideo.error ? nextVideo.error.code : ev)); advance(); };
-        prefetchUpcoming();
-        // Prépare déjà le mot SUIVANT (voir prepareAheadIfPossible) dans
-        // l'élément vidéo qui vient d'être libéré, pendant que celui-ci
-        // joue encore — évite le micro-temps mort de décodage/
-        // positionnement au prochain changement de signe (2026-10-27).
-        prepareAheadIfPossible(token);
+        function doSwap() {
+          nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
+          nextVideo.play().catch(() => {});
+          nextVideo.classList.add("showing");
+          curVideo.classList.remove("showing");
+          curVideo.pause();
+          showIdle(false);
+          curIdx = 1 - curIdx;
+          currentlyShowingKey = item.key;
+          shownKeysThisUtterance.push(item.key);
+          if (warpActiveKind) layoutWarpCanvas();
+          dbg("affiché: '" + item.key + "' (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
+          nextVideo.addEventListener("timeupdate", onTimeUpdate);
+          nextVideo.onended = advance;
+          nextVideo.onerror = (ev) => { dbg("ERREUR vidéo pour '" + item.key + "': " + (nextVideo.error ? nextVideo.error.code : ev)); advance(); };
+          prefetchUpcoming();
+          // Prépare déjà le mot SUIVANT (voir prepareAheadIfPossible) dans
+          // l'élément vidéo qui vient d'être libéré, pendant que celui-ci
+          // joue encore — évite le micro-temps mort de décodage/
+          // positionnement au prochain changement de signe (2026-10-27).
+          prepareAheadIfPossible(token);
+        }
+        // Pont de transition précalculé (voir playBridgeThenSwap plus
+        // haut) : affiché brièvement par-dessus curVideo s'il existe pour
+        // ce couple exact, sinon doSwap() s'exécute immédiatement —
+        // comportement strictement identique à avant pour tout couple
+        // sans pont.
+        playBridgeThenSwap(bridgeFromKey, item.key, curVideo, doSwap);
       }
       // Préparation déjà disponible pour ce mot (voir playFromQueue plus
       // haut) : bascule immédiate, sans attendre de seek/canplay puisque
