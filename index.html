@@ -5318,6 +5318,20 @@ if (typeof document !== "undefined") {
             }
             if (CLASSIFIER_FIGURES.has(cand.key) || CLASSIFIER_VERBS[cand.key]) break;
           }
+          // Trouve en testant la reponse de la reformulation IA (2026-11-02,
+          // voir plus bas) : elle renvoie parfois le lieu EN TETE ("montagne,
+          // chat, monter" plutot que "chat, monter, montagne") -- une facon
+          // tout aussi valide de dire la phrase (poser le decor avant
+          // l'action). Si aucun lieu trouve apres le verbe, regarde si le
+          // dernier mot deja place dans "out" (donc juste avant la figure)
+          // est un lieu, et l'absorbe dans la construction le cas echeant.
+          if (!groundItem && out.length) {
+            const prev = out[out.length - 1];
+            if (prev && prev.source === "builtin" && CLASSIFIER_GROUNDS.has(prev.key)) {
+              groundItem = prev;
+              out.pop();
+            }
+          }
           out.push({
             key: "classifier:" + cur.key + ">" + next.key + (groundItem ? ">" + groundItem.key : ""),
             source: "classifier",
