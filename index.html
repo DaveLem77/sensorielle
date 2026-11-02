@@ -4778,9 +4778,20 @@ if (typeof document !== "undefined") {
     // Le badge texte ("Négation", voir SENTIMENT_LABELS) reste le signal
     // pour ce marqueur, comme deja le cas pour le tremblement de cadre
     // retire le 2026-10-27 pour la meme raison.
+    // "question-wh" retiree d'ici le 2026-11-02 (signale par David : "bug
+    // de flou decalage bizarre lors d'une question" -- confirme en
+    // reproduisant en direct sur le site reel : a 0.78, le sourcil mord
+    // visiblement sur les cheveux pour au moins un mot teste (meme
+    // artefact "flou/bloque" deja documente plus haut pour la Negation,
+    // qui etait a 0.80 avant d'etre retiree le 2026-10-30 pour la meme
+    // raison). "question-yn" reste a 0.30 : teste en direct a cote, sans
+    // aucun artefact visible -- loin de la zone a risque (voir le
+    // commentaire plus haut : au-dela de ~0.80 la fenetre, meme etroite,
+    // finit par mordre sur les cheveux). Le badge texte ("Question")
+    // reste le signal pour question-wh, comme deja le cas pour la
+    // Negation.
     const WARP_TARGETS = {
       "question-yn": 0.30,
-      "question-wh": 0.78,
       exclamation: 0.20,
     };
     // Cibles pour la bouche : deliberement plus proches du neutre (0.50)
@@ -4789,10 +4800,10 @@ if (typeof document !== "undefined") {
     // LSQ), donc on reste prudent tant que ce nouvel effet n'a pas ete
     // valide en vrai par David. exclamation = plus grand ecart (bouche
     // qui s'ouvre davantage, coherent avec la pulsation d'echelle deja
-    // existante pour ce marqueur).
+    // existante pour ce marqueur). "question-wh" retiree en meme temps
+    // que son entree ci-dessus (voir commentaire WARP_TARGETS).
     const MOUTH_TARGETS = {
       "question-yn": 0.42,
-      "question-wh": 0.58,
       exclamation: 0.72,
     };
     const WARP_EASE_MS = 260;
