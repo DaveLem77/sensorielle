@@ -1169,6 +1169,17 @@
     pointer-events: none; z-index: 4; opacity: 0;
   }
   .speech-bridge-canvas.active { opacity: 1; }
+  /* Construction a classificateur (entite + fond), ex. "le chat monte la
+     montagne" : voir playClassifierOverlay() dans le JS. Ce canvas prend
+     le relais COMPLETEMENT (fondu 0->1) le temps de l'animation, puis
+     rend la main au mot suivant normalement -- z-index au-dessus du pont
+     (5) puisqu'il remplace entierement l'affichage normal pendant sa
+     duree, jamais superpose a autre chose. */
+  .speech-classifier-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.15s ease;
+  }
+  .speech-classifier-canvas.active { opacity: 1; }
   .speech-idle {
     position: relative; z-index: 1; max-width: 26ch; text-align: center;
     font-size: 15px; line-height: 1.5;
@@ -1715,6 +1726,7 @@
     <video id="speechVideoB" class="speech-video" muted playsinline></video>
     <canvas class="speech-warp-canvas" id="speechWarpCanvas" aria-hidden="true"></canvas>
     <canvas class="speech-bridge-canvas" id="speechBridgeCanvas" aria-hidden="true"></canvas>
+    <canvas class="speech-classifier-canvas" id="speechClassifierCanvas" aria-hidden="true"></canvas>
     <div class="speech-sentiment-badge" id="speechSentimentBadge" hidden aria-hidden="true"><span class="speech-sentiment-dot"></span><span id="speechSentimentLabel"></span></div>
     <p class="speech-idle" id="speechIdle">Parle — les signes correspondants s'enchaînent ici, en direct.</p>
   </div>
@@ -4690,6 +4702,8 @@ if (typeof document !== "undefined") {
     const warpCtx = warpCanvas ? warpCanvas.getContext("2d") : null;
     const bridgeCanvas = document.getElementById("speechBridgeCanvas");
     const bridgeCtx = bridgeCanvas ? bridgeCanvas.getContext("2d") : null;
+    const classifierCanvas = document.getElementById("speechClassifierCanvas");
+    const classifierCtx = classifierCanvas ? classifierCanvas.getContext("2d") : null;
     let sentimentResetTimer = null;
 
     // Warp front/sourcils v3 (2026-10-19, remplace le calque colore juge
@@ -5198,6 +5212,234 @@ if (typeof document !== "undefined") {
       drawNext();
     }
 
+    // ---- Construction a classificateur (entite + fond) --------------------
+    // Analyse grammaticale LSQ (voir le PDF envoye a David, section 5) : un
+    // classificateur ne peut pas apparaitre seul -- il faut d'abord nommer
+    // le referent (signe lexical normal, deja gere par la file normale
+    // ci-dessus, ex. CHAT), PUIS une main "devient" ce referent et se
+    // deplace dans l'espace, pendant qu'un second mot deja filme sert de
+    // repere fixe (le "fond"). Implemente SANS tourner un seul nouveau mot
+    // de video (demande explicite de David, 2026-11-02) : on reutilise les
+    // clips mot-a-mot deja filmes comme matiere premiere, et on les
+    // recompose en direct sur un canvas -- meme technique de
+    // drawImage(video,...) deja en place et deja fiable pour le warp des
+    // sourcils (voir drawWarpFrame plus haut), juste appliquee a une
+    // position qui se deplace plutot qu'a une fenetre qui s'etire.
+    //
+    // Portee volontairement etroite pour cette premiere version : seul le
+    // verbe MONTER declenche une construction, avec une liste fermee
+    // d'animaux et de lieux deja presents dans les 325 signes. Ajouter un
+    // autre verbe plus tard = ajouter une entree a CLASSIFIER_VERBS et un
+    // cas dans classifierPathPoint(), rien d'autre a toucher.
+    const CLASSIFIER_ANIMALS = new Set([
+      "chat", "chien", "cheval", "castor", "cochon", "coq", "crapaud",
+      "canard", "girafe", "gorille", "grenouille", "lapin", "lion", "loup",
+      "mouche", "mouton", "orignal", "ours", "oiseau", "éléphant", "brebis",
+      "jument",
+    ]);
+    const CLASSIFIER_GROUNDS = new Set(["montagne", "maison", "jardin", "forêt", "chaise", "lit"]);
+    const CLASSIFIER_VERBS = { monter: { pathKind: "zigzagUp" } };
+    const CLASSIFIER_OVERLAY_MS = 1200;
+
+    // Repere, dans une file DEJA resolue (items {key, source}), toute
+    // sequence [animal, verbe-classificateur, lieu?] consecutive et la
+    // remplace par UN SEUL item special {source:"classifier", ...} que
+    // playFromQueue sait reconnaitre (voir plus bas). Le lieu est
+    // optionnel : "le chat monte" marche aussi, juste sans repere fixe
+    // dessine. Ne touche a rien d'autre dans la file ; seuls des mots
+    // "builtin" (jamais un mot du dossier local de l'utilisateur, pour
+    // rester simple dans cette version) peuvent declencher la
+    // construction.
+    function spliceClassifierConstructions(items) {
+      const out = [];
+      let i = 0;
+      while (i < items.length) {
+        const cur = items[i];
+        const next = items[i + 1];
+        if (
+          cur && cur.source === "builtin" && CLASSIFIER_ANIMALS.has(cur.key) &&
+          next && next.source === "builtin" && CLASSIFIER_VERBS[next.key]
+        ) {
+          const verbInfo = CLASSIFIER_VERBS[next.key];
+          let groundItem = null, consumed = i + 2;
+          const direct = items[i + 2];
+          if (direct && direct.source === "builtin" && CLASSIFIER_GROUNDS.has(direct.key)) {
+            groundItem = direct;
+            consumed = i + 3;
+          } else {
+            // Verifie empiriquement (2026-11-02) : "la montagne"/"la maison"/
+            // "la forêt"/"la chaise" (lieux feminins) ne matchaient JAMAIS
+            // comme lieu, car "la" (l'article) est deja reconnu comme le
+            // signe "là" par la correspondance generale plus haut (accents
+            // retires par normalize -> meme forme) -- un mot "parasite"
+            // s'intercalait donc toujours entre le verbe et le vrai lieu.
+            // On tolere UN SEUL mot intercalaire ici, seulement s'il n'est
+            // lui-meme ni un autre animal ni un autre verbe classificateur
+            // (sinon on le laisse demarrer sa propre construction plus
+            // loin) -- ne touche a rien d'autre que cette fonction, la
+            // correspondance generale (WORD_MAP) reste intacte pour toutes
+            // les autres phrases.
+            const skippable = direct && !CLASSIFIER_ANIMALS.has(direct.key) && !CLASSIFIER_VERBS[direct.key];
+            const after = skippable ? items[i + 3] : null;
+            if (after && after.source === "builtin" && CLASSIFIER_GROUNDS.has(after.key)) {
+              groundItem = after;
+              consumed = i + 4;
+            }
+          }
+          out.push({
+            key: "classifier:" + cur.key + ">" + next.key + (groundItem ? ">" + groundItem.key : ""),
+            source: "classifier",
+            figureKey: cur.key,
+            groundKey: groundItem ? groundItem.key : null,
+            pathKind: verbInfo.pathKind,
+          });
+          i = consumed;
+          continue;
+        }
+        out.push(cur);
+        i += 1;
+      }
+      return out;
+    }
+
+    function layoutClassifierCanvas() {
+      if (!classifierCanvas || !speechVideoWrap) return null;
+      const cw = speechVideoWrap.clientWidth, ch = speechVideoWrap.clientHeight;
+      if (!cw || !ch) return null;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const pxW = Math.max(1, Math.round(cw * dpr));
+      const pxH = Math.max(1, Math.round(ch * dpr));
+      if (classifierCanvas.width !== pxW) classifierCanvas.width = pxW;
+      if (classifierCanvas.height !== pxH) classifierCanvas.height = pxH;
+      return { cw, ch, dpr };
+    }
+    window.addEventListener("resize", layoutClassifierCanvas);
+
+    // Trajectoire de la "figure" (main mobile) en fractions 0..1 de la
+    // boite, pour une fraction de temps t (0 au debut, 1 a la fin) -- voir
+    // le schema "ETAPE 2" du PDF envoye a David pour le mouvement vise
+    // (zigzag en montant). Un seul type pour l'instant ; d'autres verbes
+    // plus tard ajouteront simplement d'autres cas ici.
+    function classifierPathPoint(pathKind, t) {
+      if (pathKind === "zigzagUp") {
+        const x = 0.5 + Math.sin(t * Math.PI * 3.2) * 0.17 * (1 - t * 0.3);
+        const y = 0.86 - t * 0.62;
+        const scale = 1 - t * 0.28;
+        return { x: x, y: y, scale: scale };
+      }
+      return { x: 0.5, y: 0.5, scale: 1 };
+    }
+
+    let classifierFigureVideo = null, classifierGroundVideo = null;
+    function getClassifierVideos() {
+      if (!classifierFigureVideo) {
+        classifierFigureVideo = document.createElement("video");
+        classifierFigureVideo.muted = true;
+        classifierFigureVideo.playsInline = true;
+        classifierFigureVideo.setAttribute("aria-hidden", "true");
+      }
+      if (!classifierGroundVideo) {
+        classifierGroundVideo = document.createElement("video");
+        classifierGroundVideo.muted = true;
+        classifierGroundVideo.playsInline = true;
+        classifierGroundVideo.setAttribute("aria-hidden", "true");
+      }
+      return { fig: classifierFigureVideo, ground: classifierGroundVideo };
+    }
+
+    // Dessine la construction : le "fond" (repere fixe, ex. MONTAGNE) en
+    // bas du cadre si fourni, puis la "figure" (ex. CHAT) recadree et
+    // deplacee le long de la trajectoire -- les DEUX viennent de vraies
+    // videos deja filmees (drawImage sur un <video> en train de jouer,
+    // meme technique que drawWarpFrame), jamais d'un dessin vectoriel :
+    // aucun nouveau tournage necessaire.
+    function drawClassifierFrame(info, figVideo, groundVideo, t, pathKind) {
+      const cw = info.cw, ch = info.ch, dpr = info.dpr;
+      classifierCtx.clearRect(0, 0, classifierCanvas.width, classifierCanvas.height);
+      if (groundVideo && groundVideo.videoWidth) {
+        const gw = groundVideo.videoWidth, gh = groundVideo.videoHeight;
+        const gCropW = gw * 0.5, gCropH = gh * 0.7;
+        const gSrcX = (gw - gCropW) / 2, gSrcY = gh * 0.1;
+        const gDestW = cw * 0.34 * dpr, gDestH = ch * 0.62 * dpr;
+        const gDestX = (cw * 0.5 - cw * 0.17) * dpr, gDestY = (ch * 0.32) * dpr;
+        classifierCtx.save();
+        classifierCtx.globalAlpha = 0.55;
+        classifierCtx.drawImage(groundVideo, gSrcX, gSrcY, gCropW, gCropH, gDestX, gDestY, gDestW, gDestH);
+        classifierCtx.restore();
+      }
+      if (figVideo && figVideo.videoWidth) {
+        const fw = figVideo.videoWidth, fh = figVideo.videoHeight;
+        const fCropW = fw * 0.42, fCropH = fh * 0.42;
+        const fSrcX = (fw - fCropW) / 2, fSrcY = fh * 0.22;
+        const pt = classifierPathPoint(pathKind, t);
+        const destSize = cw * 0.3 * pt.scale * dpr;
+        const destX = (cw * pt.x) * dpr - destSize / 2;
+        const destY = (ch * pt.y) * dpr - destSize / 2;
+        classifierCtx.drawImage(figVideo, fSrcX, fSrcY, fCropW, fCropH, destX, destY, destSize, destSize);
+      }
+    }
+
+    // Joue la construction au complet : charge le mot-animal et (si
+    // fourni) le mot-lieu dans deux <video> dediees (jamais les <video>
+    // principales utilisees par la file normale, pour ne jamais perturber
+    // le pipeline de prechargement/bascule deja tres fin), anime ~1.2s,
+    // puis rend la main a la file normale via done() -- exactement comme
+    // advance() le fait pour un mot ordinaire.
+    function playClassifierOverlay(item, done) {
+      if (!classifierCanvas || !classifierCtx) { done(); return; }
+      const figSrc = VIDEOS[item.figureKey];
+      const groundSrc = item.groundKey ? VIDEOS[item.groundKey] : null;
+      if (!figSrc) { done(); return; }
+      const vids = getClassifierVideos();
+      const fig = vids.fig, ground = vids.ground;
+      const info = layoutClassifierCanvas();
+      if (!info) { done(); return; }
+
+      function startAnim() {
+        classifierCanvas.classList.add("active");
+        const startTs = performance.now();
+        function tick(ts) {
+          const t = Math.min(1, (ts - startTs) / CLASSIFIER_OVERLAY_MS);
+          const freshInfo = layoutClassifierCanvas() || info;
+          drawClassifierFrame(freshInfo, fig, groundSrc ? ground : null, t, item.pathKind);
+          if (t < 1) {
+            requestAnimationFrame(tick);
+          } else {
+            classifierCanvas.classList.remove("active");
+            fig.pause();
+            if (groundSrc) ground.pause();
+            currentlyShowingKey = item.figureKey;
+            done();
+          }
+        }
+        requestAnimationFrame(tick);
+      }
+
+      fig.src = figSrc;
+      fig.currentTime = 0;
+      fig.loop = true;
+      fig.play().catch(function () {});
+
+      if (groundSrc) {
+        ground.src = groundSrc;
+        let started = false;
+        ground.addEventListener("loadedmetadata", function onMeta() {
+          ground.removeEventListener("loadedmetadata", onMeta);
+          ground.currentTime = Math.min(1, (ground.duration || 1) * 0.5);
+        }, { once: true });
+        ground.addEventListener("seeked", function onSeek() {
+          ground.removeEventListener("seeked", onSeek);
+          if (!started) { started = true; startAnim(); }
+        }, { once: true });
+        // Filet de securite : si "seeked" ne se declenche jamais (ex.
+        // position deja a 0 sur certains moteurs), on demarre quand meme
+        // apres un court delai plutot que de rester bloque indefiniment.
+        setTimeout(function () { if (!started) { started = true; startAnim(); } }, 400);
+      } else {
+        startAnim();
+      }
+    }
+
     // Préchauffe (fetch en arrière-plan, sans l'afficher) le PROCHAIN mot
     // de la file dès que le mot actuel commence à s'afficher, plutôt que
     // d'attendre la toute fin de sa lecture pour commencer à le
@@ -5335,6 +5577,15 @@ if (typeof document !== "undefined") {
       const item = queue.shift();
       const bounds = CLIP_BOUNDS[item.key];
       dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
+      // Construction a classificateur (voir spliceClassifierConstructions
+      // plus haut) : court-circuite entierement la resolution normale de
+      // video/bornes/pont ci-dessous, joue son animation dediee, puis
+      // relance playFromQueue() comme le ferait advance() pour un mot
+      // normal -- le reste de la fonction ne voit jamais ce type d'item.
+      if (item.source === "classifier") {
+        playClassifierOverlay(item, function () { if (token === playToken) playFromQueue(token); });
+        return;
+      }
       // Couple (mot actuellement affiché -> mot qu'on s'apprête à charger) :
       // démarre tout de suite le téléchargement du pont, s'il en existe un
       // (voir prefetchBridge plus haut) -- doit arriver avant reveal().
@@ -5595,6 +5846,7 @@ if (typeof document !== "undefined") {
         queue.push(...matchRawWord(raw));
       });
       queue = dedupeAdjacent(queue, currentlyShowingKey);
+      queue = spliceClassifierConstructions(queue);
       lastUtteranceSigns = queue.slice();
       logConversationLine(text, queue.map((s) => s.key));
       dbg("NOUVELLE phrase \"" + text + "\" -> matché:[" + queue.map((s) => s.key).join(",") + "] (" + queue.length + "/" + rawWords.length + " mots)");
@@ -5630,6 +5882,7 @@ if (typeof document !== "undefined") {
       dbg("SUITE phrase \"" + text + "\" -> ajout:[" + dedupedNew.map((s) => s.key).join(",") + "] (" + dedupedNew.length + "/" + rawWords.length + " mots, file totale=" + (queue.length + dedupedNew.length) + ")");
       if (!dedupedNew.length) return;
       queue.push(...dedupedNew);
+      queue = spliceClassifierConstructions(queue);
       lastUtteranceSigns = lastUtteranceSigns.concat(dedupedNew);
       currentSentiment = detectSentiment(captionEl.textContent);
       currentAspect = detectAspect(captionEl.textContent);
