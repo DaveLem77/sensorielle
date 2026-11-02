@@ -5231,14 +5231,44 @@ if (typeof document !== "undefined") {
     // d'animaux et de lieux deja presents dans les 325 signes. Ajouter un
     // autre verbe plus tard = ajouter une entree a CLASSIFIER_VERBS et un
     // cas dans classifierPathPoint(), rien d'autre a toucher.
-    const CLASSIFIER_ANIMALS = new Set([
+    const CLASSIFIER_FIGURES = new Set([
+      // Animaux (peuvent tous grimper/marcher dans une construction).
       "chat", "chien", "cheval", "castor", "cochon", "coq", "crapaud",
       "canard", "girafe", "gorille", "grenouille", "lapin", "lion", "loup",
       "mouche", "mouton", "orignal", "ours", "oiseau", "éléphant", "brebis",
-      "jument",
+      "jument", "insecte", "poule", "poisson",
+      // Personnes et autres referents animes -- demande explicite de David
+      // (2026-11-02) : un classificateur fonctionne pour N'IMPORTE QUEL
+      // referent capable de se deplacer, pas seulement les animaux (ex.
+      // "la fille monte la montagne" doit marcher tout autant que "le
+      // chat monte la montagne").
+      "fille", "garcon", "homme", "femme", "bébé", "enfant", "maman", "papa",
+      "monsieur", "madame", "grand-mère", "grand-père", "cousin", "neveu",
+      "élève", "enseignant", "princesse_prince", "fantome", "monstre",
     ]);
-    const CLASSIFIER_GROUNDS = new Set(["montagne", "maison", "jardin", "forêt", "chaise", "lit"]);
-    const CLASSIFIER_VERBS = { monter: { pathKind: "zigzagUp" } };
+    // Lieux/objets fixes pouvant servir de repere spatial ("fond") --
+    // n'importe quel nom de lieu ou d'objet concret deja filme, pas une
+    // poignee choisie a la main. Exclut volontairement les mots trop
+    // abstraits/a trop grande echelle pour un "fond" localise dans
+    // l'espace de signation (ex. "monde", "pays", "nature").
+    const CLASSIFIER_GROUNDS = new Set([
+      "montagne", "maison", "jardin", "forêt", "chaise", "lit", "chemin",
+      "école", "cour", "porte", "fenetre", "classe", "campagne", "main",
+      "livre", "page",
+    ]);
+    const CLASSIFIER_VERBS = {
+      monter: { pathKind: "zigzagUp" },
+      // "marcher" ajoute le 2026-11-02 (meme demande : generaliser au-dela
+      // du seul verbe deja cable) -- seul autre verbe de deplacement
+      // present dans les 325 signes filmes ("descendre"/"sauter"/
+      // "courir"/etc. n'existent pas encore en video). Deux entrees :
+      // trouve en testant que "marche" (ex. "le chat MARCHE...") est lui-
+      // meme un signe filme SEPARE de "marcher" -- la correspondance
+      // directe des mots (voir WORD_MAP plus haut) renvoie donc "marche"
+      // et ne passe JAMAIS par la lemmatisation vers "marcher" ici.
+      marcher: { pathKind: "walkAcross" },
+      marche: { pathKind: "walkAcross" },
+    };
     const CLASSIFIER_OVERLAY_MS = 1200;
 
     // Repere, dans une file DEJA resolue (items {key, source}), toute
@@ -5257,34 +5287,36 @@ if (typeof document !== "undefined") {
         const cur = items[i];
         const next = items[i + 1];
         if (
-          cur && cur.source === "builtin" && CLASSIFIER_ANIMALS.has(cur.key) &&
+          cur && cur.source === "builtin" && CLASSIFIER_FIGURES.has(cur.key) &&
           next && next.source === "builtin" && CLASSIFIER_VERBS[next.key]
         ) {
           const verbInfo = CLASSIFIER_VERBS[next.key];
           let groundItem = null, consumed = i + 2;
-          const direct = items[i + 2];
-          if (direct && direct.source === "builtin" && CLASSIFIER_GROUNDS.has(direct.key)) {
-            groundItem = direct;
-            consumed = i + 3;
-          } else {
-            // Verifie empiriquement (2026-11-02) : "la montagne"/"la maison"/
-            // "la forêt"/"la chaise" (lieux feminins) ne matchaient JAMAIS
-            // comme lieu, car "la" (l'article) est deja reconnu comme le
-            // signe "là" par la correspondance generale plus haut (accents
-            // retires par normalize -> meme forme) -- un mot "parasite"
-            // s'intercalait donc toujours entre le verbe et le vrai lieu.
-            // On tolere UN SEUL mot intercalaire ici, seulement s'il n'est
-            // lui-meme ni un autre animal ni un autre verbe classificateur
-            // (sinon on le laisse demarrer sa propre construction plus
-            // loin) -- ne touche a rien d'autre que cette fonction, la
-            // correspondance generale (WORD_MAP) reste intacte pour toutes
-            // les autres phrases.
-            const skippable = direct && !CLASSIFIER_ANIMALS.has(direct.key) && !CLASSIFIER_VERBS[direct.key];
-            const after = skippable ? items[i + 3] : null;
-            if (after && after.source === "builtin" && CLASSIFIER_GROUNDS.has(after.key)) {
-              groundItem = after;
-              consumed = i + 4;
+          // Cherche un lieu jusqu'a quelques mots apres le verbe, tolerant
+          // les mots "parasites" intercales -- des prepositions ou
+          // articles deja reconnus comme un AUTRE signe par la
+          // correspondance generale (ex. "dans" est lui-meme un signe
+          // filme ; "la" se confond avec "là" une fois les accents
+          // retires par normalize) peuvent s'empiler avant le vrai lieu
+          // ("... marche DANS LA cour" = 2 mots parasites). Trouve
+          // empiriquement le 2026-11-02 en testant "dans la cour"/
+          // "dans l'école", qu'un seul mot de tolerance ne couvrait pas.
+          // S'arrete net si l'un de ces mots est lui-meme une autre
+          // figure ou un autre verbe classificateur -- jamais avale dans
+          // la construction en cours, il demarre sa propre construction
+          // plus loin. Ne touche a rien d'autre que cette fonction ; la
+          // correspondance generale (WORD_MAP) reste intacte pour toutes
+          // les autres phrases.
+          const MAX_LOOKAHEAD = 3;
+          for (let probe = i + 2; probe < i + 2 + MAX_LOOKAHEAD && probe < items.length; probe++) {
+            const cand = items[probe];
+            if (!cand) break;
+            if (cand.source === "builtin" && CLASSIFIER_GROUNDS.has(cand.key)) {
+              groundItem = cand;
+              consumed = probe + 1;
+              break;
             }
+            if (CLASSIFIER_FIGURES.has(cand.key) || CLASSIFIER_VERBS[cand.key]) break;
           }
           out.push({
             key: "classifier:" + cur.key + ">" + next.key + (groundItem ? ">" + groundItem.key : ""),
@@ -5325,6 +5357,12 @@ if (typeof document !== "undefined") {
         const x = 0.5 + Math.sin(t * Math.PI * 3.2) * 0.17 * (1 - t * 0.3);
         const y = 0.86 - t * 0.62;
         const scale = 1 - t * 0.28;
+        return { x: x, y: y, scale: scale };
+      }
+      if (pathKind === "walkAcross") {
+        const x = 0.18 + t * 0.64;
+        const y = 0.62 + Math.sin(t * Math.PI * 4) * 0.04;
+        const scale = 0.85;
         return { x: x, y: y, scale: scale };
       }
       return { x: 0.5, y: 0.5, scale: 1 };
