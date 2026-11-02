@@ -1057,8 +1057,19 @@
   .speech-video-wrap.sent-question-wh .speech-warp-canvas.is-active {
     transform: scale(1.05) rotate(2.6deg) translateY(-1.4%);
   }
-  .speech-video-wrap.sent-exclamation .speech-video.showing,
-  .speech-video-wrap.sent-exclamation .speech-warp-canvas.is-active {
+  /* 2026-11-02 : la pulsation ciblait ".sent-exclamation .showing" -- un
+     selecteur qui peut se remettre a correspondre a une AUTRE video des
+     qu'un mot change (".showing" se deplace vers le mot suivant) tant que
+     "sent-exclamation" reste actif sur le wrapper (fenetre de 950ms, voir
+     plus bas). Resultat : si la bascule vers le mot suivant tombait dans
+     cette fenetre, ce mot devenait a son tour cible de la regle CSS et
+     rejouait toute la pulsation depuis le debut -- percu comme un "enorme
+     zoom bizarre" surgissant en pleine transition entre deux mots
+     (signale avec "merci beaucoup"). Remplace par une classe ponctuelle
+     (voir applySentimentVisual) posee directement sur l'element affiche
+     AU MOMENT de la detection, jamais sur un mot suivant. */
+  .speech-video.sent-pulse-once,
+  .speech-warp-canvas.sent-pulse-once {
     animation: sentExclaimPulse 0.6s ease-out 1;
   }
   /* 2026-10-27 : la Negation secouait TOUT le cadre (rotation+translation)
@@ -1091,8 +1102,8 @@
     75% { transform: scale(1.05) rotate(1.6deg) translateX(0.8%); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .speech-video-wrap.sent-exclamation .speech-video.showing,
-    .speech-video-wrap.sent-exclamation .speech-warp-canvas.is-active { animation: none; }
+    .speech-video.sent-pulse-once,
+    .speech-warp-canvas.sent-pulse-once { animation: none; }
   }
   .speech-sentiment-badge {
     position: absolute; left: 50%; top: max(66px, calc(env(safe-area-inset-top) + 56px));
@@ -4966,6 +4977,14 @@ if (typeof document !== "undefined") {
       // toute la duree de l'enonce (leur vraie portee grammaticale), on
       // referme le badge une fois la pulsation terminee.
       if (sentiment === "exclamation") {
+        // Pulsation posee directement sur l'element affiche MAINTENANT
+        // (jamais via ".sent-exclamation .showing", voir le commentaire
+        // CSS ci-dessus) -- corrige le bug du 2026-11-02 ou un changement
+        // de mot pendant la fenetre de 950ms rejouait la pulsation sur le
+        // mot suivant.
+        const pulseEls = [videos[curIdx], warpCanvas].filter(Boolean);
+        pulseEls.forEach((el) => el.classList.add("sent-pulse-once"));
+        setTimeout(() => pulseEls.forEach((el) => el.classList.remove("sent-pulse-once")), 650);
         sentimentResetTimer = setTimeout(() => {
           if (speechVideoWrap) speechVideoWrap.classList.remove("sent-exclamation");
           if (sentimentBadge) sentimentBadge.hidden = true;
