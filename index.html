@@ -5336,6 +5336,7 @@ if (typeof document !== "undefined") {
             key: "classifier:" + cur.key + ">" + next.key + (groundItem ? ">" + groundItem.key : ""),
             source: "classifier",
             figureKey: cur.key,
+            verbKey: next.key,
             groundKey: groundItem ? groundItem.key : null,
             pathKind: verbInfo.pathKind,
           });
@@ -5705,12 +5706,31 @@ if (typeof document !== "undefined") {
       const bounds = CLIP_BOUNDS[item.key];
       dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
       // Construction a classificateur (voir spliceClassifierConstructions
-      // plus haut) : court-circuite entierement la resolution normale de
-      // video/bornes/pont ci-dessous, joue son animation dediee, puis
-      // relance playFromQueue() comme le ferait advance() pour un mot
-      // normal -- le reste de la fonction ne voit jamais ce type d'item.
+      // plus haut). Avant : jouait une animation dediee (overlay canvas
+      // avec deux medaillons ronds superposes) -- rejete en direct par
+      // David le 2026-11-02 ("cest de la merde ca doit etre fluide en
+      // direct pas de la duplication bizarre"), puis une version
+      // retravaillee encore rejetee ("doit etre une meme video pas des
+      // transitions louches qui se promenent"), avec la demande precise :
+      // on doit voir le signe de la figure, puis cette meme main qui se
+      // deplace dans l'espace devant le corps pour faire le mouvement.
+      // Verifie le 2026-11-02 en inspectant image par image la vraie
+      // video "monter" (via le lecteur direct, pas le canvas) : elle
+      // montre deja exactement ca -- le signeur en entier, main qui monte
+      // en executant le mouvement classificateur devant son buste, sans
+      // aucun trucage necessaire. La solution est donc de NE RIEN
+      // superposer : on "deplie" la construction en ses mots d'origine
+      // (figure, verbe, puis lieu si present) et on les remet en tete de
+      // la file, pour qu'ils passent par EXACTEMENT le meme chemin de
+      // lecture (vrai plein-ecran, memes bornes CLIP_BOUNDS, meme pont
+      // entre cliques) que n'importe quelle autre phrase -- zero code de
+      // rendu special, donc zero risque de rendu special "louche".
       if (item.source === "classifier") {
-        playClassifierOverlay(item, function () { if (token === playToken) playFromQueue(token); });
+        const expanded = [{ key: item.figureKey, source: "builtin" }, { key: item.verbKey, source: "builtin" }];
+        if (item.groundKey) expanded.push({ key: item.groundKey, source: "builtin" });
+        queue = expanded.concat(queue);
+        dbg("classificateur '" + item.key + "' deplie en mots normaux: " + expanded.map((e) => e.key).join(" > "));
+        playFromQueue(token);
         return;
       }
       // Couple (mot actuellement affiché -> mot qu'on s'apprête à charger) :
