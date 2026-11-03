@@ -5271,23 +5271,6 @@ if (typeof document !== "undefined") {
     };
     const CLASSIFIER_OVERLAY_MS = 1450;
 
-    // Calibration par mot-lieu (fond) : ou se trouve la main dans SA
-    // PROPRE video au moment "holdTime" (pour la decouper), et ou la
-    // reposer a l'ecran pendant qu'un autre mot joue (cx,cy,r en
-    // fractions 0..1 du cadre -- memes fractions dans les deux sens,
-    // puisque toutes les videos de mots partagent le MEME cadrage de
-    // camera fixe : "l'endroit ou etait la main pour MONTAGNE" est donc
-    // deja le bon endroit a l'ecran, quel que soit le mot qui joue en ce
-    // moment). Mesuree le 2026-11-02 par inspection directe, image par
-    // image, de la vraie video montagne.mp4 (voir playFromQueue plus bas
-    // pour l'usage). Seuls les mots-lieux presents ici beneficient de la
-    // vraie superposition simultanee ; les autres (non calibres) se
-    // replient simplement sur l'ancien comportement (mot joue en
-    // sequence) -- dégradation propre, jamais d'erreur visible.
-    const GROUND_HOLD_ANCHORS = {
-      montagne: { holdTime: 1.8, cx: 0.157, cy: 0.270, r: 0.095 },
-    };
-
     // Repere, dans une file DEJA resolue (items {key, source}), toute
     // sequence [animal, verbe-classificateur, lieu?] consecutive et la
     // remplace par UN SEUL item special {source:"classifier", ...} que
@@ -5422,120 +5405,6 @@ if (typeof document !== "undefined") {
         classifierGroundVideo.setAttribute("aria-hidden", "true");
       }
       return { fig: classifierFigureVideo, ground: classifierGroundVideo };
-    }
-
-    // Capture figee d'une "main de fond" (ex. MONTAGNE), prete a etre
-    // superposee EN PETIT et IMMOBILE par-dessus la vraie video du verbe
-    // pendant qu'elle joue -- c'est ce qui rend la construction VRAIMENT
-    // simultanee (main de fond tenue en place + main active qui bouge),
-    // au lieu de seulement mettre les mots les uns derriere les autres
-    // (voir le commentaire au-dessus du branchement "classifier" dans
-    // playFromQueue, et la question de David le 2026-11-02 : "en quoi
-    // c'est une maj, ca reste du mot a mot?"). Ne renvoie qu'un decoupage
-    // CIRCULAIRE a bord doux (jamais un rectangle de video brut colle a
-    // l'ecran), pour ne jamais recreer le bug "visage duplique" deja
-    // signale et corrige le 2026-11-02 -- et seulement si une calibration
-    // existe pour ce mot (voir GROUND_HOLD_ANCHORS) ; sinon renvoie null
-    // et playFromQueue se replie proprement sur la simple sequence de
-    // mots, sans aucune erreur visible.
-    async function captureGroundHandSnapshot(groundKey) {
-      const anchor = GROUND_HOLD_ANCHORS[groundKey];
-      const src = VIDEOS[groundKey];
-      if (!anchor || !src) return null;
-      try {
-        const vids = getClassifierVideos();
-        const v = vids.ground;
-        if (v.src !== src) {
-          v.src = src;
-          await new Promise((resolve, reject) => {
-            v.onloadedmetadata = resolve;
-            v.onerror = reject;
-          });
-        }
-        await new Promise((resolve, reject) => {
-          v.onseeked = resolve;
-          v.onerror = reject;
-          v.currentTime = Math.min(anchor.holdTime, v.duration || anchor.holdTime);
-        });
-        if (!v.videoWidth) return null;
-        const vw = v.videoWidth, vh = v.videoHeight;
-        const srcR = Math.min(vw, vh) * anchor.r;
-        const size = Math.round(srcR * 2.4);
-        const cnv = document.createElement("canvas");
-        cnv.width = size; cnv.height = size;
-        const cctx = cnv.getContext("2d");
-        const srcCx = vw * anchor.cx, srcCy = vh * anchor.cy;
-        cctx.save();
-        cctx.beginPath();
-        cctx.arc(size / 2, size / 2, srcR, 0, Math.PI * 2);
-        cctx.clip();
-        cctx.drawImage(v, srcCx - srcR, srcCy - srcR, srcR * 2, srcR * 2, size / 2 - srcR, size / 2 - srcR, srcR * 2, srcR * 2);
-        cctx.restore();
-        // bord doux : estompe l'anneau exterieur plutot qu'un trait net,
-        // pour que le disque lise comme une main qui "reste la" plutot
-        // que comme un autocollant colle sur l'image.
-        const grad = cctx.createRadialGradient(size / 2, size / 2, srcR * 0.78, size / 2, size / 2, srcR);
-        grad.addColorStop(0, "rgba(0,0,0,1)");
-        grad.addColorStop(1, "rgba(0,0,0,0)");
-        cctx.globalCompositeOperation = "destination-in";
-        cctx.fillStyle = grad;
-        cctx.beginPath();
-        cctx.arc(size / 2, size / 2, srcR, 0, Math.PI * 2);
-        cctx.fill();
-        cctx.globalCompositeOperation = "source-over";
-        return cnv;
-      } catch (e) {
-        dbg("captureGroundHandSnapshot('" + groundKey + "') echoue: " + e);
-        return null;
-      }
-    }
-
-    let groundOverlayRaf = null;
-    function stopGroundHandOverlay() {
-      if (groundOverlayRaf) { cancelAnimationFrame(groundOverlayRaf); groundOverlayRaf = null; }
-      if (classifierCanvas) classifierCanvas.classList.remove("active");
-      if (classifierCtx && classifierCanvas) classifierCtx.clearRect(0, 0, classifierCanvas.width, classifierCanvas.height);
-    }
-
-    // Superpose la capture figee (voir captureGroundHandSnapshot) au MEME
-    // endroit relatif de l'ecran que celui ou elle a ete prise -- donc
-    // directement a la bonne place par-dessus n'importe quel autre mot
-    // qui joue en ce moment, sans aucun calcul de repositionnement (voir
-    // GROUND_HOLD_ANCHORS). Fondu entree/tenue/fondu sortie, duree calee
-    // sur la duree REELLE du clip du verbe qui joue (passee en ms) plutot
-    // qu'une duree fixe, pour ne jamais deborder du clip ni disparaitre
-    // trop tot si un futur verbe est plus court ou plus long.
-    function showGroundHandOverlay(snapshotCanvas, anchor, totalMs) {
-      if (!classifierCanvas || !classifierCtx || !snapshotCanvas) return;
-      stopGroundHandOverlay();
-      const info = layoutClassifierCanvas();
-      if (!info) return;
-      classifierCanvas.classList.add("active");
-      const FADE_MS = 220;
-      const dur = Math.max(FADE_MS * 2 + 200, totalMs || 1400);
-      const startTs = performance.now();
-      function tick(ts) {
-        const elapsed = ts - startTs;
-        let alpha;
-        if (elapsed < FADE_MS) alpha = elapsed / FADE_MS;
-        else if (elapsed > dur - FADE_MS) alpha = Math.max(0, (dur - elapsed) / FADE_MS);
-        else alpha = 1;
-        const freshInfo = layoutClassifierCanvas() || info;
-        classifierCtx.clearRect(0, 0, classifierCanvas.width, classifierCanvas.height);
-        const cw = freshInfo.cw, ch = freshInfo.ch, dpr = freshInfo.dpr, base = Math.min(cw, ch);
-        const r = base * anchor.r * dpr;
-        const cx = cw * anchor.cx * dpr, cy = ch * anchor.cy * dpr;
-        classifierCtx.save();
-        classifierCtx.globalAlpha = Math.max(0, Math.min(1, alpha));
-        classifierCtx.drawImage(snapshotCanvas, cx - r * 1.2, cy - r * 1.2, r * 2.4, r * 2.4);
-        classifierCtx.restore();
-        if (elapsed < dur) {
-          groundOverlayRaf = requestAnimationFrame(tick);
-        } else {
-          stopGroundHandOverlay();
-        }
-      }
-      groundOverlayRaf = requestAnimationFrame(tick);
     }
 
     // Bug visuel signale le 2026-11-02 ("de la merde... duplication
@@ -5834,6 +5703,17 @@ if (typeof document !== "undefined") {
       }
       busy = true;
       const item = queue.shift();
+      // Pause deliberee avant le verbe d'une construction a
+      // classificateur (voir preDelayMs, branche au-dessus dans le
+      // depliage "classifier") -- tient simplement sur l'image deja
+      // affichee (rien ne bouge, rien n'est redessine) le temps du
+      // delai, donc aucun risque visuel : juste un silence volontaire,
+      // comme un signeur qui marque un temps avant d'executer le
+      // mouvement apres avoir etabli ses referents.
+      if (item.preDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, item.preDelayMs));
+        if (token !== playToken) return;
+      }
       const bounds = CLIP_BOUNDS[item.key];
       dbg("playFromQueue: charge '" + item.key + "' (reste " + queue.length + " dans la file)");
       // Construction a classificateur (voir spliceClassifierConstructions
@@ -5857,43 +5737,54 @@ if (typeof document !== "undefined") {
       // entre cliques) que n'importe quelle autre phrase -- zero code de
       // rendu special, donc zero risque de rendu special "louche".
       if (item.source === "classifier") {
-        // 2026-11-02 (suite) : David signale, a raison, que le depliage
-        // ci-dessus (figure, verbe, lieu en SEQUENCE) marche mais "reste
-        // du mot a mot comme avant" -- aucune des deux mains n'est plus
-        // JAMAIS tenue en place pendant que l'autre bouge, ce qui est
-        // pourtant exactement ce qui definit une construction a
-        // classificateur en LSQ (voir la recherche linguistique faite ce
-        // jour-la : la main "fond" reste immobile, la main "figure" se
-        // deplace PAR RAPPORT a elle -- simultane, pas sequentiel).
-        // David a choisi explicitement : "ca doit faire exactement ce
-        // que ca ferait en lsq", donc on retente la vraie simultaneite --
-        // mais SANS repeter les deux approches deja rejetees (un canvas
-        // qui remplace tout l'ecran par deux medaillons ronds qui se
-        // deplacent ; des mots tous joues en sequence). Nouvelle
-        // approche : la figure et le verbe jouent normalement en PLEIN
-        // ECRAN (comme n'importe quel mot, zero rendu special -- c'est
-        // CA que David a valide en disant que monter.mp4 montre deja le
-        // bon mouvement) ; le mot-lieu, lui, n'est PAS rejoue comme un
-        // 3e mot separe -- sa main est capturee IMMOBILE (voir
-        // captureGroundHandSnapshot) et superposee EN PETIT, au bon
-        // endroit, PENDANT que le clip du verbe joue (voir
-        // showGroundHandOverlay, branche dans doSwap() plus bas). C'est
-        // cette simultaneite reelle qui distingue maintenant la
-        // construction d'une simple suite de mots. Si le mot-lieu n'a
-        // pas encore de calibration dans GROUND_HOLD_ANCHORS, on se
-        // replie proprement sur l'ancien comportement (mot joue en
-        // sequence) plutot que de ne rien montrer du tout.
-        const groundAnchor = item.groundKey ? GROUND_HOLD_ANCHORS[item.groundKey] : null;
-        const verbItem = { key: item.verbKey, source: "builtin" };
-        if (groundAnchor) {
-          verbItem.groundSnapshotPromise = captureGroundHandSnapshot(item.groundKey);
-          verbItem.groundAnchor = groundAnchor;
-          dbg("classificateur '" + item.key + "': fond '" + item.groundKey + "' sera superpose en simultane sur le verbe '" + item.verbKey + "'");
-        }
-        const expanded = [{ key: item.figureKey, source: "builtin" }, verbItem];
-        if (item.groundKey && !groundAnchor) expanded.push({ key: item.groundKey, source: "builtin" });
-        queue = expanded.concat(queue);
-        dbg("classificateur '" + item.key + "' deplie: " + expanded.map((e) => e.key).join(" > "));
+        // 2026-11-02 (3e tentative) : deux pistes de superposition
+        // (medaillon plein ecran, puis une petite main figee en coin,
+        // voir l'historique au-dessus) ont ete testees ET verifiees en
+        // direct par capture d'image reelle -- memes minuscules et a
+        // bord doux, superposer un fragment video d'un AUTRE clip sur le
+        // clip en cours se voit toujours comme "deux personnes" (David,
+        // mot pour mot : "je veux pas voir deux personne mais comme une
+        // vrai personne en lsq communiquerais"). Verifie aussi avec une
+        // interpolation de mouvement (ffmpeg minterpolate) entre la
+        // derniere pose de la figure et la premiere pose du verbe :
+        // fantomes/dedoublement visibles des que l'ecart de pose entre
+        // les deux clips est grand (ce qui est systematiquement le cas
+        // entre deux signes differents) -- abandonne pour la meme raison.
+        // Conclusion verifiee, pas supposee : toute technique qui mélange
+        // des pixels de DEUX clips differents du meme signeur recree ce
+        // defaut, que ce soit par superposition ou par interpolation.
+        // La seule chose qui n'a jamais ete rejetee pour un defaut visuel
+        // est la lecture normale, plein ecran, d'UN SEUL clip a la fois
+        // (ce que confirmait deja le commit precedent) -- le vrai
+        // probleme signale par David n'etait donc pas visuel mais
+        // linguistique : "ca reste du mot a mot". Deux leviers qui ne
+        // touchent JAMAIS deux clips en meme temps peuvent quand meme
+        // changer cette impression :
+        //  1) ORDRE : en LSQ (comme en ASL), une construction a
+        //     classificateur etablit D'ABORD les referents (ici : la
+        //     figure ET le lieu), PUIS seulement effectue le predicat de
+        //     deplacement -- contrairement a l'ordre SVO du francais
+        //     ("le chat MONTE la montagne"). On rejoue donc [figure,
+        //     lieu, verbe] plutot que [figure, verbe, lieu] : plus fidele
+        //     a la vraie structure topic-comment de la LSQ, et deja
+        //     different du mot-a-mot qui suit l'ordre de la phrase parlee.
+        //  2) RYTHME : un signeur qui execute un classificateur ralentit
+        //     et marque un court temps d'arret apres avoir etabli les
+        //     referents, pour "placer" mentalement la scene avant de
+        //     jouer le mouvement -- voir preDelayMs (pause tenue sur la
+        //     derniere image du lieu, zero flou puisque RIEN ne bouge
+        //     pendant la pause) et classifierSlow (verbe legerement
+        //     ralenti, cote "on trace un trajet dans l'espace" plutot que
+        //     "on flash un mot"), tous deux branches plus bas dans
+        //     playFromQueue -- aucun des deux ne touche a l'image, donc
+        //     aucun risque de recreer le defaut "deux personnes".
+        const parts = [{ key: item.figureKey, source: "builtin" }];
+        if (item.groundKey) parts.push({ key: item.groundKey, source: "builtin" });
+        const verbItem = { key: item.verbKey, source: "builtin", classifierSlow: true };
+        if (item.groundKey) verbItem.preDelayMs = 320;
+        parts.push(verbItem);
+        queue = parts.concat(queue);
+        dbg("classificateur '" + item.key + "' deplie (ordre figure" + (item.groundKey ? "/lieu" : "") + "/verbe, verbe ralenti" + (item.groundKey ? " + pause avant" : "") + "): " + parts.map((e) => e.key).join(" > "));
         playFromQueue(token);
         return;
       }
@@ -6002,8 +5893,13 @@ if (typeof document !== "undefined") {
           curVideo.classList.remove("sent-pulse-once");
           nextVideo.classList.remove("sent-pulse-once");
           if (warpCanvas) warpCanvas.classList.remove("sent-pulse-once");
-          stopGroundHandOverlay();
-          nextVideo.playbackRate = currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE;
+          // classifierSlow (voir le depliage "classifier" plus haut) :
+          // le verbe d'une construction a classificateur joue legerement
+          // plus lentement qu'un mot normal -- cote "on trace un trajet
+          // dans l'espace" plutot que "on flash un mot" -- sans toucher
+          // a l'image (juste la vitesse de lecture), donc zero risque de
+          // recreer un defaut visuel.
+          nextVideo.playbackRate = item.classifierSlow ? PLAYBACK_RATE * 0.8 : (currentAspect === "durative" ? PLAYBACK_RATE * 0.72 : PLAYBACK_RATE);
           nextVideo.play().catch(() => {});
           nextVideo.classList.add("showing");
           curVideo.classList.remove("showing");
@@ -6011,14 +5907,6 @@ if (typeof document !== "undefined") {
           showIdle(false);
           curIdx = 1 - curIdx;
           currentlyShowingKey = item.key;
-          if (item.groundSnapshotPromise) {
-            const totalMs = ((bounds ? (bounds.out - bounds.in) : nextVideo.duration) || 1.4) * 1000;
-            item.groundSnapshotPromise.then((snap) => {
-              if (snap && token === playToken && currentlyShowingKey === item.key) {
-                showGroundHandOverlay(snap, item.groundAnchor, totalMs);
-              }
-            });
-          }
           shownKeysThisUtterance.push(item.key);
           if (warpActiveKind) layoutWarpCanvas();
           dbg("affiché: '" + item.key + "' (durée=" + (nextVideo.duration || 0).toFixed(2) + "s)");
