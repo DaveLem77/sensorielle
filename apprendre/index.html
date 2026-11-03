@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apprendre la LSQ — Sensorielle</title>
+<meta name="description" content="Apprends la langue des signes québécoise avec Sensorielle : vocabulaire et grammaire, en petites leçons, à ton rythme.">
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --s-bg:#F8F9FF; --s-surface:#fff; --s-bg-alt:#F4F1FD;
+  --s-ink:#080D25; --s-ink-dim:#62677A; --s-ink-faint:#85899c;
+  --s-line:#080d2514; --s-line-strong:#080d2528;
+  --s-violet:#7C4DFF; --s-violet-deep:#5B34D6; --s-violet-wash:#7c4dff12;
+  --s-pink:#E853D7; --s-orange:#FF8058;
+  --s-gradient:linear-gradient(100deg,#7157F5 0%,#B94FE4 38%,#F45E9A 68%,#FF8058 100%);
+  --s-display:'Geist','Inter',-apple-system,sans-serif;
+  --s-green:#2BB673; --s-green-deep:#1C8F58; --s-red:#F2454C; --s-gold:#F5B82E;
+  --s-radius:22px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--s-display);
+  background:var(--s-bg);
+  color:var(--s-ink);
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;
+}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+img,video{max-width:100%}
+::selection{background:var(--s-violet-wash)}
+
+/* ---------------------------------------------------------------- header */
+.top-bar{
+  position:sticky; top:0; z-index:40;
+  display:flex; align-items:center; gap:18px;
+  padding:14px max(20px,env(safe-area-inset-left,0px)) 14px max(20px,env(safe-area-inset-right,0px));
+  background:rgba(248,249,255,.86); backdrop-filter:blur(14px) saturate(1.3);
+  border-bottom:1px solid var(--s-line);
+}
+.top-bar .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; letter-spacing:-.01em; flex:0 0 auto}
+.top-bar .brand .mark{
+  width:28px;height:28px;border-radius:9px;background:var(--s-gradient);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;
+}
+.top-bar .brand .sep{color:var(--s-ink-faint);font-weight:500}
+.top-bar .spacer{flex:1}
+.stat-chip{
+  display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;
+  padding:6px 11px;border-radius:999px;background:var(--s-surface);
+  border:1px solid var(--s-line-strong);
+}
+.stat-chip.streak{color:#E07A1C}
+.stat-chip.xp{color:var(--s-violet-deep)}
+.stat-chip.hearts{color:var(--s-red)}
+.stat-chip .ic{font-size:15px;line-height:1}
+
+/* ---------------------------------------------------------------- home */
+.home-wrap{max-width:720px;margin:0 auto;padding:28px max(18px,env(safe-area-inset-left,0px)) 80px max(18px,env(safe-area-inset-right,0px))}
+.hero{
+  border-radius:28px; padding:28px 26px; margin-bottom:28px;
+  background:var(--s-gradient); color:#fff; position:relative; overflow:hidden;
+}
+.hero::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(120% 140% at 85% -10%, rgba(255,255,255,.28), transparent 55%);
+}
+.hero h1{font-size:26px;margin:0 0 6px;font-weight:800;letter-spacing:-.02em;position:relative}
+.hero p{margin:0;font-size:14.5px;opacity:.92;max-width:460px;line-height:1.5;position:relative}
+.hero .hands{position:absolute;right:-8px;bottom:-14px;font-size:64px;opacity:.22;transform:rotate(-8deg)}
+
+.world-tabs{display:flex;gap:8px;margin-bottom:22px;position:sticky;top:64px;z-index:10;background:var(--s-bg);padding:6px 0}
+.world-tab{
+  flex:1;padding:12px 10px;border-radius:16px;border:1.5px solid var(--s-line-strong);
+  background:var(--s-surface);font-weight:700;font-size:14px;color:var(--s-ink-dim);
+  display:flex;flex-direction:column;align-items:center;gap:2px;transition:.15s;
+}
+.world-tab .n{font-size:11.5px;font-weight:600;opacity:.75}
+.world-tab.active{background:var(--s-violet-wash);border-color:var(--s-violet);color:var(--s-violet-deep)}
+.world-tab:not(.active):hover{border-color:var(--s-ink-faint)}
+
+.section-head{display:flex;align-items:baseline;justify-content:space-between;margin:30px 0 16px}
+.section-head h2{font-size:13px;letter-spacing:.07em;text-transform:uppercase;color:var(--s-ink-faint);font-weight:700;margin:0}
+.section-head .count{font-size:12.5px;color:var(--s-ink-faint);font-weight:600}
+
+.path{display:flex;flex-direction:column;align-items:center;gap:0;padding:4px 0 10px}
+.path-row{display:flex;align-items:center;justify-content:center;width:100%;position:relative;padding:7px 0}
+.path-connector{position:absolute;top:-7px;left:50%;width:3px;height:14px;background:var(--s-line-strong);transform:translateX(-50%);border-radius:2px}
+.node-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.node{
+  width:72px;height:72px;border-radius:50%;border:none;position:relative;
+  display:flex;align-items:center;justify-content:center;font-size:28px;
+  box-shadow:0 5px 0 rgba(0,0,0,.08), 0 8px 18px rgba(124,77,255,.0);
+  transition:transform .12s;
+}
+.node:active{transform:translateY(3px)}
+.node.locked{background:var(--s-surface);border:2px solid var(--s-line-strong);color:var(--s-ink-faint);cursor:default;box-shadow:none}
+.node.available{background:var(--s-gradient);color:#fff;box-shadow:0 5px 0 var(--s-violet-deep), 0 10px 22px rgba(124,77,255,.35)}
+.node.available::before{
+  content:"";position:absolute;inset:-7px;border-radius:50%;border:2.5px solid var(--s-violet);
+  opacity:.5; animation:pulse-ring 1.8s ease-out infinite;
+}
+.node.done{background:linear-gradient(135deg,var(--s-gold),#F59A1F);color:#fff;box-shadow:0 5px 0 #C8820A}
+.node.done .stars{position:absolute;bottom:-11px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:1px;white-space:nowrap}
+@keyframes pulse-ring{0%{opacity:.55;transform:scale(1)}70%{opacity:0;transform:scale(1.28)}100%{opacity:0;transform:scale(1.28)}}
+.node-wrap .label{font-size:11.5px;font-weight:700;color:var(--s-ink-dim);max-width:92px;text-align:center;line-height:1.25}
+.node-wrap.offset-l{align-self:flex-start;margin-left:14%}
+.node-wrap.offset-r{align-self:flex-end;margin-right:14%}
+.node .lock{font-size:22px}
+
+.grammar-badge{
+  position:absolute;top:-4px;right:-4px;width:22px;height:22px;border-radius:50%;
+  background:var(--s-ink);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:800;
+}
+
+/* ---------------------------------------------------------------- lesson overlay */
+.lesson-overlay{
+  position:fixed;inset:0;background:var(--s-bg);z-index:100;display:none;
+  flex-direction:column;
+}
+.lesson-overlay.open{display:flex}
+.lesson-top{
+  display:flex;align-items:center;gap:14px;padding:16px max(18px,env(safe-area-inset-left,0px));
+}
+.lesson-close{width:34px;height:34px;border-radius:10px;border:none;background:transparent;color:var(--s-ink-faint);font-size:22px;display:flex;align-items:center;justify-content:center}
+.lesson-close:hover{background:var(--s-line)}
+.progress-track{flex:1;height:14px;border-radius:999px;background:var(--s-line-strong);overflow:hidden}
+.progress-fill{height:100%;border-radius:999px;background:var(--s-gradient);width:0%;transition:width .35s cubic-bezier(.4,0,.2,1)}
+.lesson-hearts{display:flex;gap:3px;font-size:16px}
+.lesson-hearts .h{transition:transform .2s}
+.lesson-hearts .h.lost{opacity:.25}
+
+.lesson-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:14px max(18px,env(safe-area-inset-left,0px)) 24px}
+.ex-wrap{max-width:560px;width:100%;margin:0 auto;display:flex;flex-direction:column;flex:1;justify-content:center}
+.ex-kicker{font-size:13px;font-weight:700;color:var(--s-ink-faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.ex-prompt{font-size:22px;font-weight:800;letter-spacing:-.01em;margin:0 0 22px;line-height:1.3}
+
+.video-stage{
+  width:100%;max-width:340px;margin:0 auto 22px;border-radius:24px;overflow:hidden;
+  background:var(--s-ink); aspect-ratio:4/5; position:relative; box-shadow:0 10px 30px rgba(8,13,37,.18);
+}
+.video-stage video{width:100%;height:100%;object-fit:cover;display:block}
+.video-stage .replay{
+  position:absolute;bottom:10px;right:10px;width:38px;height:38px;border-radius:50%;
+  background:rgba(255,255,255,.92);border:none;display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+
+.word-card{
+  background:var(--s-surface);border-radius:28px;padding:36px 24px;text-align:center;
+  box-shadow:0 10px 30px rgba(8,13,37,.08); border:1px solid var(--s-line);margin-bottom:22px;
+}
+.word-card .mot{font-size:34px;font-weight:800;letter-spacing:-.02em;color:var(--s-ink)}
+
+.choices{display:flex;flex-direction:column;gap:10px;margin-top:30px}
+.choices.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.choice-btn{
+  width:100%;text-align:left;padding:16px 18px;border-radius:16px;border:2px solid var(--s-line-strong);
+  background:var(--s-surface);font-size:16px;font-weight:600;color:var(--s-ink);
+  display:flex;align-items:center;gap:10px;transition:.12s;
+}
+.choice-btn:hover{border-color:var(--s-violet)}
+.choice-btn:active{transform:scale(.98)}
+.choice-btn.selected{border-color:var(--s-violet);background:var(--s-violet-wash)}
+.choice-btn.correct{border-color:var(--s-green);background:#EBFBF2;color:var(--s-green-deep)}
+.choice-btn.incorrect{border-color:var(--s-red);background:#FDEDEE;color:#B8333A}
+.choice-btn.video-choice{aspect-ratio:1/1.1;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;position:relative}
+.choice-btn.video-choice video{width:100%;height:100%;object-fit:cover}
+.choice-btn.video-choice .play-badge{position:absolute;inset:0;background:rgba(8,13,37,.12);display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px}
+
+.vf-row{display:flex;gap:12px;margin-top:30px}
+.vf-btn{flex:1;padding:20px;border-radius:18px;border:2px solid var(--s-line-strong);background:var(--s-surface);font-weight:800;font-size:17px}
+.vf-btn.vrai:hover{border-color:var(--s-green)}
+.vf-btn.faux:hover{border-color:var(--s-red)}
+
+.card-screen{display:flex;flex-direction:column;flex:1;justify-content:center}
+.card-screen .card-ic{font-size:40px;margin-bottom:14px}
+.card-screen h3{font-size:22px;font-weight:800;letter-spacing:-.01em;margin:0 0 14px;line-height:1.3}
+.card-screen .card-body{font-size:16px;line-height:1.65;color:var(--s-ink-dim)}
+.card-screen .card-body b{color:var(--s-ink);font-weight:700}
+.card-screen .card-body i{color:var(--s-violet-deep)}
+
+.match-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.match-tile{
+  border-radius:16px;border:2px solid var(--s-line-strong);background:var(--s-surface);
+  padding:14px;font-weight:700;font-size:15px;text-align:center;min-height:62px;
+  display:flex;align-items:center;justify-content:center;transition:.12s;
+}
+.match-tile.video-tile{padding:0;overflow:hidden;height:128px;position:relative}
+.match-tile.video-tile video{width:100%;height:100%;object-fit:cover}
+.match-tile.sel{border-color:var(--s-violet);background:var(--s-violet-wash)}
+.match-tile.matched{border-color:var(--s-green);background:#EBFBF2;opacity:.55;pointer-events:none}
+.match-tile.wrong-flash{border-color:var(--s-red);background:#FDEDEE}
+
+.bottom-bar{position:sticky;bottom:0;padding:16px max(18px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-bottom,0px));background:var(--s-bg);border-top:1px solid var(--s-line)}
+.bottom-bar.feedback-correct{background:#EBFBF2}
+.bottom-bar.feedback-incorrect{background:#FDEDEE}
+.feedback-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-weight:800;font-size:16px}
+.feedback-row.correct{color:var(--s-green-deep)}
+.feedback-row.incorrect{color:#B8333A}
+.feedback-sub{font-size:13.5px;font-weight:500;color:var(--s-ink-dim);margin:-6px 0 12px}
+.btn-primary{
+  width:100%;padding:17px;border-radius:16px;border:none;font-weight:800;font-size:16px;
+  background:var(--s-violet);color:#fff;box-shadow:0 4px 0 var(--s-violet-deep);transition:.12s;
+}
+.btn-primary:active{transform:translateY(3px);box-shadow:none}
+.btn-primary:disabled{background:var(--s-line-strong);color:var(--s-ink-faint);box-shadow:none;cursor:not-allowed}
+.btn-primary.go{background:var(--s-green);box-shadow:0 4px 0 var(--s-green-deep)}
+.btn-primary.stop{background:var(--s-red);box-shadow:0 4px 0 #C9333A}
+
+/* ---------------------------------------------------------------- summary */
+.summary-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}
+.summary-wrap .big-ic{font-size:64px;margin-bottom:6px}
+.summary-wrap h2{font-size:26px;font-weight:800;margin:0 0 6px;letter-spacing:-.02em}
+.summary-wrap p.sub{color:var(--s-ink-dim);margin:0 0 26px;font-size:15px}
+.summary-stats{display:flex;gap:12px;margin-bottom:30px;flex-wrap:wrap;justify-content:center}
+.summary-stat{background:var(--s-surface);border:1px solid var(--s-line-strong);border-radius:18px;padding:16px 20px;min-width:96px}
+.summary-stat .v{font-size:22px;font-weight:800;color:var(--s-violet-deep)}
+.summary-stat .l{font-size:11.5px;color:var(--s-ink-faint);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+
+/* ---------------------------------------------------------------- confetti */
+.confetti-piece{position:fixed;top:-12px;z-index:200;pointer-events:none;border-radius:2px}
+
+@media (max-width:480px){
+  .hero h1{font-size:22px}
+  .node{width:64px;height:64px;font-size:24px}
+  .word-card .mot{font-size:28px}
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a class="brand" href="../index.html"><span class="mark">S</span><span>Sensorielle</span><span class="sep">/</span><span>Apprendre</span></a>
+  <div class="spacer"></div>
+  <div class="stat-chip streak"><span class="ic">🔥</span><span id="stat-streak">0</span></div>
+  <div class="stat-chip xp"><span class="ic">⚡</span><span id="stat-xp">0</span></div>
+</div>
+
+<main id="home" class="home-wrap"></main>
+
+<div id="lesson-overlay" class="lesson-overlay">
+  <div class="lesson-top">
+    <button class="lesson-close" id="lesson-close">✕</button>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="lesson-hearts" id="lesson-hearts"></div>
+  </div>
+  <div class="lesson-body" id="lesson-body"></div>
+</div>
+
+<script src="curriculum-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
