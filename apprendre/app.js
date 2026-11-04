@@ -121,27 +121,44 @@
     src.start(t0); src.stop(t0 + dur + 0.02);
   }
   var Sound = {
+    // Deux notes claires, chaudes (sinus), qui montent -- propre, pas criard.
     correct: function () {
-      tone(587.33, 0, 0.1, "triangle", 0.16);
-      tone(880, 0.07, 0.16, "triangle", 0.15);
-      tone(1174.66, 0.13, 0.26, "sine", 0.14);
-      noiseBurst(0.13, 0.18, 0.05, 6000, "highpass");
+      tone(659.25, 0, 0.16, "sine", 0.13);
+      tone(987.77, 0.06, 0.24, "sine", 0.12);
     },
+    // Un seul "thud" bas et court -- net, pas agressif.
     incorrect: function () {
-      sweep(180, 90, 0, 0.16, "sawtooth", 0.13);
-      noiseBurst(0, 0.09, 0.08, 400, "lowpass");
+      tone(164.81, 0, 0.16, "sine", 0.14);
+      tone(130.81, 0.03, 0.14, "sine", 0.08);
     },
-    click: function () { tone(1200, 0, 0.045, "square", 0.045); },
+    click: function () { tone(740, 0, 0.035, "sine", 0.035); },
+    // Petite cadence a 4 notes, propre.
     lessonComplete: function () {
-      [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { tone(f, i * 0.09, 0.3, "triangle", 0.15); });
-      noiseBurst(0.4, 0.35, 0.06, 8000, "highpass");
+      [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) { tone(f, i * 0.1, 0.22, "sine", 0.12); });
     },
-    heartLost: function () { sweep(300, 120, 0, 0.2, "sawtooth", 0.14); },
+    heartLost: function () {
+      tone(196, 0, 0.17, "sine", 0.13);
+      tone(146.83, 0.04, 0.16, "sine", 0.08);
+    },
+    // Cadence un peu plus longue pour la fin de lecon.
     unitDone: function () {
-      [392, 523.25, 659.25, 880, 1046.5, 1318.5].forEach(function (f, i) { tone(f, i * 0.08, 0.35, "triangle", 0.14); });
-      noiseBurst(0.45, 0.5, 0.07, 9000, "highpass");
+      [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { tone(f, i * 0.09, 0.3, "sine", 0.13); });
     }
   };
+
+  // --------------------------------------------------------------- compte (Supabase)
+  var SUPABASE_URL = "https://frinlluqjbwgctkzqoea.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_HQ1zoBcHrmetRRIopwKxgA_t4DAaNJZ";
+  var sb = null;
+  try {
+    if (window.supabase && window.supabase.createClient) {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+  } catch (e) {}
+  var currentUser = null;
+  var gateMode = "signin"; // ou "signup"
+  var remoteLoaded = false;
+  var remoteSaveTimer = null;
 
   // --------------------------------------------------------------- stockage
   function loadState() {
@@ -156,7 +173,168 @@
     return s;
   }
   var state = loadState();
-  function saveState() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} }
+  function saveState() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+    scheduleRemoteSave();
+  }
+
+  // ------------------------------------------------------- sync compte distant
+  function scheduleRemoteSave() {
+    if (!sb || !currentUser) return;
+    clearTimeout(remoteSaveTimer);
+    remoteSaveTimer = setTimeout(saveRemoteProgress, 1200);
+  }
+  function saveRemoteProgress() {
+    if (!sb || !currentUser) return;
+    sb.from("apprendre_progress").upsert({
+      user_id: currentUser.id,
+      xp: state.xp,
+      streak: state.streak,
+      progress: state.progress,
+      updated_at: new Date().toISOString()
+    }).then(function (res) {
+      if (res && res.error) { /* table pas encore créée ou réseau absent : on reste en local */ }
+    }).catch(function () {});
+  }
+  function loadRemoteProgress(cb) {
+    if (!sb || !currentUser) { cb && cb(); return; }
+    sb.from("apprendre_progress").select("xp,streak,progress").eq("user_id", currentUser.id).maybeSingle()
+      .then(function (res) {
+        if (res && res.data) {
+          var r = res.data;
+          state.xp = Math.max(state.xp, typeof r.xp === "number" ? r.xp : 0);
+          if (r.streak && typeof r.streak === "object") {
+            var localLast = state.streak.last, remoteLast = r.streak.last;
+            if (!localLast || (remoteLast && remoteLast >= localLast)) state.streak = r.streak;
+          }
+          if (r.progress && typeof r.progress === "object") {
+            var merged = state.progress || {};
+            Object.keys(r.progress).forEach(function (id) {
+              var remoteP = r.progress[id] || {}, localP = merged[id];
+              merged[id] = {
+                done: !!(localP && localP.done) || !!remoteP.done,
+                stars: Math.max((localP && localP.stars) || 0, remoteP.stars || 0),
+                best: Math.max((localP && localP.best) || 0, remoteP.best || 0)
+              };
+            });
+            state.progress = merged;
+          }
+          try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+        }
+        remoteLoaded = true;
+        cb && cb();
+      })
+      .catch(function () { remoteLoaded = true; cb && cb(); });
+  }
+
+  // ------------------------------------------------------------- ecran compte
+  function initials(email) { return (email || "?").trim().charAt(0).toUpperCase(); }
+  function renderAccountChip() {
+    var chip = $("#account-chip");
+    if (!currentUser) { chip.hidden = true; return; }
+    chip.hidden = false;
+    $("#account-avatar-btn").textContent = initials(currentUser.email);
+    $("#account-email").textContent = currentUser.email || "";
+  }
+  $("#account-avatar-btn").onclick = function (e) {
+    e.stopPropagation();
+    $("#account-menu").hidden = !$("#account-menu").hidden;
+  };
+  document.addEventListener("click", function (e) {
+    var menu = $("#account-menu");
+    if (!menu || menu.hidden) return;
+    if (!menu.contains(e.target) && e.target.id !== "account-avatar-btn") menu.hidden = true;
+  });
+  $("#account-signout").onclick = function () {
+    Sound.click();
+    if (sb) { try { sb.auth.signOut(); } catch (e) {} }
+    currentUser = null;
+    $("#account-menu").hidden = true;
+    showGate();
+  };
+
+  function setGateMsg(text, ok) {
+    var msg = $("#gate-msg");
+    if (!text) { msg.hidden = true; msg.textContent = ""; return; }
+    msg.hidden = false;
+    msg.textContent = text;
+    msg.className = "gate-msg " + (ok ? "ok" : "err");
+  }
+  function renderGateMode() {
+    $("#gate-title").textContent = gateMode === "signup" ? "Crée ton compte" : "Content de te revoir";
+    $("#gate-submit").textContent = gateMode === "signup" ? "Créer mon compte" : "Continuer";
+    $("#gate-toggle").textContent = gateMode === "signup" ? "Déjà un compte ? Connecte-toi" : "Pas de compte ? Crée-en un gratuitement";
+    setGateMsg(null);
+  }
+  $("#gate-toggle").onclick = function () {
+    Sound.click();
+    gateMode = gateMode === "signup" ? "signin" : "signup";
+    renderGateMode();
+  };
+  $("#gate-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!sb) { setGateMsg("Le service de compte est indisponible pour l'instant. Réessaie plus tard.", false); return; }
+    var email = $("#gate-email").value.trim();
+    var password = $("#gate-password").value;
+    if (!email || password.length < 6) { setGateMsg("Entre un courriel valide et un mot de passe d'au moins 6 caractères.", false); return; }
+    $("#gate-submit").disabled = true;
+    setGateMsg(null);
+    var action = gateMode === "signup"
+      ? sb.auth.signUp({ email: email, password: password })
+      : sb.auth.signInWithPassword({ email: email, password: password });
+    action.then(function (res) {
+      $("#gate-submit").disabled = false;
+      if (res.error) { setGateMsg(res.error.message, false); return; }
+      if (gateMode === "signup" && res.data && res.data.user && !res.data.session) {
+        setGateMsg("Compte créé. Vérifie ta boîte courriel pour confirmer, puis connecte-toi.", true);
+        gateMode = "signin"; renderGateMode();
+        return;
+      }
+      // sb.auth.onAuthStateChange prend le relais pour afficher l'app
+    }).catch(function () {
+      $("#gate-submit").disabled = false;
+      setGateMsg("Une erreur est survenue. Réessaie.", false);
+    });
+  });
+  $("#gate-google").onclick = function () {
+    Sound.click();
+    if (!sb) { setGateMsg("Le service de compte est indisponible pour l'instant. Réessaie plus tard.", false); return; }
+    try { sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } }); } catch (e) {}
+  };
+
+  function showGate() {
+    $("#auth-gate").hidden = false;
+    $("#home").hidden = true;
+    $("#chip-streak").hidden = true;
+    $("#chip-xp").hidden = true;
+    renderAccountChip();
+    renderGateMode();
+  }
+  function showApp() {
+    $("#auth-gate").hidden = true;
+    $("#home").hidden = false;
+    $("#chip-streak").hidden = false;
+    $("#chip-xp").hidden = false;
+    renderAccountChip();
+    renderHome();
+  }
+  function handleSession(session) {
+    currentUser = session && session.user ? session.user : null;
+    if (currentUser) {
+      if (!remoteLoaded) loadRemoteProgress(function () { showApp(); });
+      else showApp();
+    } else {
+      remoteLoaded = false;
+      showGate();
+    }
+  }
+  function initAuth() {
+    if (!sb) { showGate(); return; }
+    try {
+      sb.auth.onAuthStateChange(function (_event, session) { handleSession(session); });
+    } catch (e) { showGate(); }
+  }
+
   function renderStatChips() {
     $("#chip-streak").innerHTML = ICON.flame + "<span>" + state.streak.count + "</span>";
     $("#chip-xp").innerHTML = ICON.bolt + "<span>" + state.xp + "</span>";
@@ -638,5 +816,5 @@
   }
 
   // ---------------------------------------------------------------- lancer
-  renderHome();
+  initAuth();
 })();

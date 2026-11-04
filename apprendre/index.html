@@ -20,6 +20,7 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+[hidden]{display:none!important}
 body{
   font-family:var(--s-display);
   background:var(--s-bg);
@@ -71,6 +72,47 @@ svg{display:block}
 .stat-chip.xp{color:var(--s-violet-deep)}
 .stat-chip.xp .icon{color:var(--s-violet)}
 .stat-chip .icon{width:15px;height:15px}
+
+.account-chip{position:relative;flex:0 0 auto}
+.account-avatar{
+  width:34px;height:34px;border-radius:50%;background:var(--s-gradient);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;border:none;
+}
+.account-menu{
+  position:absolute;top:calc(100% + 8px);right:0;min-width:200px;background:var(--s-surface);
+  border-radius:14px;box-shadow:0 20px 45px -15px rgba(11,15,34,.3);border:1px solid var(--s-line-strong);
+  padding:12px;z-index:50;
+}
+.account-menu[hidden]{display:none}
+.account-menu .email{font-size:11.5px;color:var(--s-ink-dim);padding:2px 6px 10px;border-bottom:1px solid var(--s-line);margin-bottom:8px;word-break:break-all}
+.account-menu button{width:100%;text-align:left;background:none;border:none;padding:9px 6px;border-radius:8px;font:600 13px var(--s-display);color:#a4302a;cursor:pointer}
+.account-menu button:hover{background:#fdeeee}
+
+/* ---------------------------------------------------------------- auth gate */
+.gate-wrap{min-height:calc(100vh - 62px);display:flex;align-items:center;justify-content:center;padding:28px max(18px,env(safe-area-inset-left,0px))}
+.gate-card{width:100%;max-width:380px}
+.gate-hero{
+  border-radius:26px 26px 0 0;padding:30px 28px 26px;background:var(--s-gradient);color:#fff;position:relative;overflow:hidden;
+}
+.gate-hero::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 140% at 88% -15%, rgba(255,255,255,.22), transparent 55%)}
+.gate-hero .eyebrow{position:relative;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.85;margin:0 0 8px}
+.gate-hero h1{position:relative;font-size:23px;margin:0 0 8px;font-weight:800;letter-spacing:-.02em}
+.gate-hero p{position:relative;margin:0;font-size:13.5px;opacity:.9;line-height:1.55}
+.gate-form{background:var(--s-surface);border-radius:0 0 26px 26px;padding:24px 26px 26px;border:1px solid var(--s-line-strong);border-top:none;box-shadow:0 20px 50px -24px rgba(8,13,37,.25)}
+.gate-field{margin-bottom:12px}
+.gate-field label{display:block;font-size:12.5px;font-weight:700;color:var(--s-ink-dim);margin-bottom:6px}
+.gate-field input{width:100%;padding:12px 13px;border-radius:12px;border:1.5px solid var(--s-line-strong);font:inherit;font-size:14.5px;color:var(--s-ink);background:var(--s-bg)}
+.gate-field input:focus{outline:none;border-color:var(--s-violet)}
+.gate-submit{width:100%;padding:14px;border-radius:13px;border:none;font-weight:800;font-size:15px;background:var(--s-violet);color:#fff;box-shadow:0 4px 0 var(--s-violet-deep);margin-top:4px}
+.gate-submit:active{transform:translateY(3px);box-shadow:none}
+.gate-toggle{width:100%;text-align:center;background:none;border:none;padding:12px 0 2px;font-size:13px;font-weight:600;color:var(--s-violet-deep)}
+.gate-divider{display:flex;align-items:center;gap:10px;margin:16px 0;font-size:11.5px;color:var(--s-ink-faint);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.gate-divider::before,.gate-divider::after{content:"";flex:1;height:1px;background:var(--s-line-strong)}
+.gate-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:13px;border-radius:13px;border:1.5px solid var(--s-line-strong);background:var(--s-surface);font-weight:700;font-size:14px;color:var(--s-ink)}
+.gate-google svg{width:18px;height:18px}
+.gate-msg{font-size:12.5px;margin:10px 2px 0;line-height:1.5}
+.gate-msg.err{color:var(--s-red-deep)}
+.gate-msg.ok{color:var(--s-green-deep)}
 
 /* ---------------------------------------------------------------- home */
 .home-wrap{max-width:660px;margin:0 auto;padding:26px max(18px,env(safe-area-inset-left,0px)) 80px max(18px,env(safe-area-inset-right,0px))}
@@ -155,14 +197,14 @@ svg{display:block}
 .lesson-hearts .icon{width:17px;height:17px;color:var(--s-red)}
 .lesson-hearts .icon.lost{color:var(--s-line-strong)}
 
-.lesson-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:10px max(18px,env(safe-area-inset-left,0px)) 24px}
+.lesson-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:10px max(18px,env(safe-area-inset-left,0px)) 140px}
 .ex-wrap{max-width:540px;width:100%;margin:0 auto;display:flex;flex-direction:column;flex:1;justify-content:center}
 .ex-kicker{font-size:12.5px;font-weight:700;color:var(--s-ink-faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px}
 .ex-prompt{font-size:21px;font-weight:800;letter-spacing:-.01em;margin:0 0 20px;line-height:1.3}
 
 .video-stage{
-  width:100%;max-width:300px;margin:0 auto 20px;border-radius:22px;overflow:hidden;
-  background:var(--s-bg-alt); aspect-ratio:3/4; position:relative; box-shadow:0 10px 26px rgba(8,13,37,.12);
+  width:100%;max-width:272px;margin:0 auto 20px;border-radius:22px;overflow:hidden;
+  background:var(--s-bg-alt); aspect-ratio:720/1094; position:relative; box-shadow:0 10px 26px rgba(8,13,37,.12);
   border:1px solid var(--s-line);
 }
 .video-stage video{width:100%;height:100%;object-fit:contain;display:block;background:var(--s-bg-alt)}
@@ -194,7 +236,7 @@ svg{display:block}
 .choice-btn:active:not(:disabled){transform:scale(.98)}
 .choice-btn.correct{border-color:var(--s-green);background:#EBFBF2;color:var(--s-green-deep)}
 .choice-btn.incorrect{border-color:var(--s-red);background:#FDEDEE;color:var(--s-red-deep)}
-.choice-btn.video-choice{aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;position:relative;background:var(--s-bg-alt)}
+.choice-btn.video-choice{aspect-ratio:720/1094;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;position:relative;background:var(--s-bg-alt)}
 .choice-btn.video-choice video{width:100%;height:100%;object-fit:contain;background:var(--s-bg-alt)}
 
 .vf-row{display:flex;gap:10px;margin-top:26px}
@@ -221,16 +263,22 @@ svg{display:block}
   padding:14px;font-weight:700;font-size:14.5px;text-align:center;min-height:58px;
   display:flex;align-items:center;justify-content:center;transition:.12s;
 }
-.match-tile.video-tile{padding:0;overflow:hidden;aspect-ratio:3/4;position:relative;background:var(--s-bg-alt)}
+.match-tile.video-tile{padding:0;overflow:hidden;aspect-ratio:720/1094;position:relative;background:var(--s-bg-alt)}
 .match-tile.video-tile video{width:100%;height:100%;object-fit:contain;background:var(--s-bg-alt)}
 .match-tile.sel{border-color:var(--s-violet);box-shadow:0 0 0 3px var(--s-violet-wash)}
 .match-tile.matched{border-color:var(--s-green);opacity:.4;pointer-events:none}
 .match-tile.video-tile.matched{opacity:.35}
 .match-tile.wrong-flash{border-color:var(--s-red)}
 
-.bottom-bar{position:sticky;bottom:0;padding:16px max(18px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-bottom,0px));background:linear-gradient(180deg,transparent,var(--s-bg) 22%)}
-.bottom-bar.feedback-correct{background:linear-gradient(180deg,transparent,#EBFBF2 22%)}
-.bottom-bar.feedback-incorrect{background:linear-gradient(180deg,transparent,#FDEDEE 22%)}
+.bottom-bar{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  padding:16px max(18px,env(safe-area-inset-left,0px)) max(18px,env(safe-area-inset-bottom,0px));
+  background:var(--s-bg);
+  box-shadow:0 -8px 24px -12px rgba(8,13,37,.12);
+  border-top:1px solid var(--s-line);
+}
+.bottom-bar.feedback-correct{background:#EBFBF2;border-top-color:#CBEEDA}
+.bottom-bar.feedback-incorrect{background:#FDEDEE;border-top-color:#F6D3D5}
 .feedback-row{display:flex;align-items:center;gap:9px;margin-bottom:10px;font-weight:800;font-size:15.5px}
 .feedback-row .icon{width:19px;height:19px}
 .feedback-row.correct{color:var(--s-green-deep)}
@@ -277,11 +325,46 @@ svg{display:block}
     <span>Sensorielle</span><span class="sep">/</span><span class="sub">Apprendre</span>
   </a>
   <div class="spacer"></div>
-  <div class="stat-chip streak" id="chip-streak"></div>
-  <div class="stat-chip xp" id="chip-xp"></div>
+  <div class="stat-chip streak" id="chip-streak" hidden></div>
+  <div class="stat-chip xp" id="chip-xp" hidden></div>
+  <div class="account-chip" id="account-chip" hidden>
+    <button class="account-avatar" id="account-avatar-btn" type="button"></button>
+    <div class="account-menu" id="account-menu" hidden>
+      <div class="email" id="account-email"></div>
+      <button id="account-signout" type="button">Se déconnecter</button>
+    </div>
+  </div>
 </div>
 
-<main id="home" class="home-wrap"></main>
+<div id="auth-gate" class="gate-wrap" hidden>
+  <div class="gate-card">
+    <div class="gate-hero">
+      <p class="eyebrow">Apprendre la LSQ</p>
+      <h1 id="gate-title">Crée ton compte</h1>
+      <p>Pour suivre ta progression, garder ta série de jours et revenir où tu en étais, connecte-toi à ton compte Sensorielle. C'est gratuit.</p>
+    </div>
+    <form class="gate-form" id="gate-form" novalidate>
+      <div class="gate-field">
+        <label for="gate-email">Courriel</label>
+        <input type="email" id="gate-email" autocomplete="email" required>
+      </div>
+      <div class="gate-field">
+        <label for="gate-password">Mot de passe</label>
+        <input type="password" id="gate-password" autocomplete="current-password" minlength="6" required>
+      </div>
+      <button type="submit" class="gate-submit" id="gate-submit">Continuer</button>
+      <button type="button" class="gate-toggle" id="gate-toggle">Pas de compte? Crée-en un gratuitement</button>
+      <div class="gate-divider">ou</div>
+      <button type="button" class="gate-google" id="gate-google">
+        <svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
+        Continuer avec Google
+      </button>
+      <div class="gate-msg" id="gate-msg" hidden></div>
+    </form>
+  </div>
+</div>
+
+<main id="home" class="home-wrap" hidden></main>
 
 <div id="lesson-overlay" class="lesson-overlay">
   <div class="lesson-top">
@@ -292,6 +375,7 @@ svg{display:block}
   <div class="lesson-body" id="lesson-body"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="curriculum-data.js"></script>
 <script src="app.js"></script>
 </body>
