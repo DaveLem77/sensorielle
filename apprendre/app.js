@@ -231,100 +231,126 @@
   function initials(email) { return (email || "?").trim().charAt(0).toUpperCase(); }
   function renderAccountChip() {
     var chip = $("#account-chip");
+    if (!chip) return;
     if (!currentUser) { chip.hidden = true; return; }
     chip.hidden = false;
-    $("#account-avatar-btn").textContent = initials(currentUser.email);
-    $("#account-email").textContent = currentUser.email || "";
+    if ($("#account-avatar-btn")) $("#account-avatar-btn").textContent = initials(currentUser.email);
+    if ($("#account-email")) $("#account-email").textContent = currentUser.email || "";
   }
-  $("#account-avatar-btn").onclick = function (e) {
-    e.stopPropagation();
-    $("#account-menu").hidden = !$("#account-menu").hidden;
-  };
-  document.addEventListener("click", function (e) {
-    var menu = $("#account-menu");
-    if (!menu || menu.hidden) return;
-    if (!menu.contains(e.target) && e.target.id !== "account-avatar-btn") menu.hidden = true;
-  });
-  $("#account-signout").onclick = function () {
-    Sound.click();
-    if (sb) { try { sb.auth.signOut(); } catch (e) {} }
-    currentUser = null;
-    $("#account-menu").hidden = true;
-    showGate();
-  };
+  // Branchement des boutons compte/gate -- protege par try/catch : si une page
+  // mise en cache cote navigateur/CDN melange un vieux index.html avec ce
+  // nouveau app.js (ou vice versa), un element manquant ne doit jamais faire
+  // planter tout le script et laisser un ecran blanc.
+  try {
+    if ($("#account-avatar-btn")) {
+      $("#account-avatar-btn").onclick = function (e) {
+        e.stopPropagation();
+        if ($("#account-menu")) $("#account-menu").hidden = !$("#account-menu").hidden;
+      };
+    }
+    document.addEventListener("click", function (e) {
+      var menu = $("#account-menu");
+      if (!menu || menu.hidden) return;
+      if (!menu.contains(e.target) && e.target.id !== "account-avatar-btn") menu.hidden = true;
+    });
+    if ($("#account-signout")) {
+      $("#account-signout").onclick = function () {
+        Sound.click();
+        if (sb) { try { sb.auth.signOut(); } catch (e) {} }
+        currentUser = null;
+        if ($("#account-menu")) $("#account-menu").hidden = true;
+        showGate();
+      };
+    }
+  } catch (e) { if (window.console) console.error("Apprendre: branchement du compte impossible", e); }
 
   function setGateMsg(text, ok) {
     var msg = $("#gate-msg");
+    if (!msg) return;
     if (!text) { msg.hidden = true; msg.textContent = ""; return; }
     msg.hidden = false;
     msg.textContent = text;
     msg.className = "gate-msg " + (ok ? "ok" : "err");
   }
   function renderGateMode() {
-    $("#gate-title").textContent = gateMode === "signup" ? "Crée ton compte" : "Content de te revoir";
-    $("#gate-submit").textContent = gateMode === "signup" ? "Créer mon compte" : "Continuer";
-    $("#gate-toggle").textContent = gateMode === "signup" ? "Déjà un compte ? Connecte-toi" : "Pas de compte ? Crée-en un gratuitement";
+    if ($("#gate-title")) $("#gate-title").textContent = gateMode === "signup" ? "Crée ton compte" : "Content de te revoir";
+    if ($("#gate-submit")) $("#gate-submit").textContent = gateMode === "signup" ? "Créer mon compte" : "Continuer";
+    if ($("#gate-toggle")) $("#gate-toggle").textContent = gateMode === "signup" ? "Déjà un compte ? Connecte-toi" : "Pas de compte ? Crée-en un gratuitement";
     setGateMsg(null);
   }
-  $("#gate-toggle").onclick = function () {
-    Sound.click();
-    gateMode = gateMode === "signup" ? "signin" : "signup";
-    renderGateMode();
-  };
-  $("#gate-form").addEventListener("submit", function (e) {
-    e.preventDefault();
-    if (!sb) { setGateMsg("Le service de compte est indisponible pour l'instant. Réessaie plus tard.", false); return; }
-    var email = $("#gate-email").value.trim();
-    var password = $("#gate-password").value;
-    if (!email || password.length < 6) { setGateMsg("Entre un courriel valide et un mot de passe d'au moins 6 caractères.", false); return; }
-    $("#gate-submit").disabled = true;
-    setGateMsg(null);
-    var action = gateMode === "signup"
-      ? sb.auth.signUp({ email: email, password: password })
-      : sb.auth.signInWithPassword({ email: email, password: password });
-    action.then(function (res) {
-      $("#gate-submit").disabled = false;
-      if (res.error) { setGateMsg(res.error.message, false); return; }
-      if (gateMode === "signup" && res.data && res.data.user && !res.data.session) {
-        setGateMsg("Compte créé. Vérifie ta boîte courriel pour confirmer, puis connecte-toi.", true);
-        gateMode = "signin"; renderGateMode();
-        return;
-      }
-      // sb.auth.onAuthStateChange prend le relais pour afficher l'app
-    }).catch(function () {
-      $("#gate-submit").disabled = false;
-      setGateMsg("Une erreur est survenue. Réessaie.", false);
-    });
-  });
-  $("#gate-google").onclick = function () {
-    Sound.click();
-    if (!sb) { setGateMsg("Le service de compte est indisponible pour l'instant. Réessaie plus tard.", false); return; }
-    try { sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } }); } catch (e) {}
-  };
+  try {
+    if ($("#gate-toggle")) {
+      $("#gate-toggle").onclick = function () {
+        Sound.click();
+        gateMode = gateMode === "signup" ? "signin" : "signup";
+        renderGateMode();
+      };
+    }
+    if ($("#gate-form")) {
+      $("#gate-form").addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (!sb) { setGateMsg("Le service de compte est indisponible pour l'instant. Réessaie plus tard.", false); return; }
+        var email = $("#gate-email").value.trim();
+        var password = $("#gate-password").value;
+        if (!email || password.length < 6) { setGateMsg("Entre un courriel valide et un mot de passe d'au moins 6 caractères.", false); return; }
+        $("#gate-submit").disabled = true;
+        setGateMsg(null);
+        var action = gateMode === "signup"
+          ? sb.auth.signUp({ email: email, password: password })
+          : sb.auth.signInWithPassword({ email: email, password: password });
+        action.then(function (res) {
+          $("#gate-submit").disabled = false;
+          if (res.error) { setGateMsg(res.error.message, false); return; }
+          if (gateMode === "signup" && res.data && res.data.user && !res.data.session) {
+            setGateMsg("Compte créé. Vérifie ta boîte courriel pour confirmer, puis connecte-toi.", true);
+            gateMode = "signin"; renderGateMode();
+            return;
+          }
+          // sb.auth.onAuthStateChange prend le relais pour afficher l'app
+        }).catch(function () {
+          $("#gate-submit").disabled = false;
+          setGateMsg("Une erreur est survenue. Réessaie.", false);
+        });
+      });
+    }
+    if ($("#gate-google")) {
+      $("#gate-google").onclick = function () {
+        Sound.click();
+        if (!sb) { setGateMsg("Le service de compte est indisponible pour l'instant. Réessaie plus tard.", false); return; }
+        try { sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } }); } catch (e) {}
+      };
+    }
+  } catch (e) { if (window.console) console.error("Apprendre: branchement du formulaire de connexion impossible", e); }
 
+  function toggleHidden(id, hidden) { var n = document.getElementById(id); if (n) n.hidden = hidden; }
   function showGate() {
-    $("#auth-gate").hidden = false;
-    $("#home").hidden = true;
-    $("#chip-streak").hidden = true;
-    $("#chip-xp").hidden = true;
-    renderAccountChip();
-    renderGateMode();
+    toggleHidden("auth-gate", false);
+    toggleHidden("home", true);
+    toggleHidden("chip-streak", true);
+    toggleHidden("chip-xp", true);
+    try { renderAccountChip(); } catch (e) {}
+    try { renderGateMode(); } catch (e) {}
   }
   function showApp() {
-    $("#auth-gate").hidden = true;
-    $("#home").hidden = false;
-    $("#chip-streak").hidden = false;
-    $("#chip-xp").hidden = false;
-    renderAccountChip();
+    toggleHidden("auth-gate", true);
+    toggleHidden("home", false);
+    toggleHidden("chip-streak", false);
+    toggleHidden("chip-xp", false);
+    try { renderAccountChip(); } catch (e) {}
     renderHome();
   }
   function handleSession(session) {
-    currentUser = session && session.user ? session.user : null;
-    if (currentUser) {
-      if (!remoteLoaded) loadRemoteProgress(function () { showApp(); });
-      else showApp();
-    } else {
-      remoteLoaded = false;
+    try {
+      currentUser = session && session.user ? session.user : null;
+      if (currentUser) {
+        if (!remoteLoaded) loadRemoteProgress(function () { showApp(); });
+        else showApp();
+      } else {
+        remoteLoaded = false;
+        showGate();
+      }
+    } catch (e) {
+      if (window.console) console.error("Apprendre: erreur lors de l'affichage apres connexion", e);
       showGate();
     }
   }
@@ -816,5 +842,15 @@
   }
 
   // ---------------------------------------------------------------- lancer
-  initAuth();
+  try {
+    initAuth();
+  } catch (e) {
+    // Dernier filet : si meme initAuth() plante, on ne laisse jamais un ecran
+    // blanc -- on affiche au moins l'ecran de connexion statique.
+    if (window.console) console.error("Apprendre: echec du demarrage, affichage de secours", e);
+    var gate = document.getElementById("auth-gate");
+    var home = document.getElementById("home");
+    if (gate) gate.hidden = false;
+    if (home) home.hidden = true;
+  }
 })();
