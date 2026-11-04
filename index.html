@@ -6206,6 +6206,7 @@ if (typeof document !== "undefined") {
         const fullText = msg.transcript || lastUtteranceText;
         dbg("tour #" + msg.turn_order + " terminé -> \"" + fullText + "\"");
         lastUtteranceText = fullText;
+        reorderRemainingQueueLocally();
         if (textHasContentWord(fullText)) {
           if (aiFallbackDebounceTimer) clearTimeout(aiFallbackDebounceTimer);
           const textAtSchedule = lastUtteranceText;
@@ -6253,6 +6254,79 @@ if (typeof document !== "undefined") {
       "ne","pas","plus","tres","si","comme","alors","aussi","bien",
       "tout","toute","tous","toutes","quand","pourquoi","comment","combien"
     ]);
+
+    // ---- Reordonnancement local (grammaire LSQ), sans IA -------------------
+    // Ajoute le 2026-11-03, demande explicite de David ("deja il faut [que
+    // l'ordre soit bon]"). Pendant qu'on parle, chaque signe s'affiche DES
+    // qu'il est reconnu (voir appendToUtterance) -- garde volontairement
+    // ainsi pour rester reactif, en direct. Consequence : l'ordre vu PENDANT
+    // la parole est toujours l'ordre francais litteral, et seule la reponse
+    // de l'IA (apres un aller-retour reseau d'au moins ~1,2s) corrige
+    // l'ordre -- un delai visible a chaque phrase.
+    //
+    // Cette fonction applique, INSTANTANEMENT et SANS RESEAU, les deux
+    // regles les plus simples et les plus fiables du MEME prompt envoye a
+    // l'IA (voir ai-relay/worker.js, SYSTEM_PROMPT) : une expression de
+    // temps passe en tete de phrase, et le verbe se deplace vers la fin
+    // (approximation locale de l'ordre OSV/SOV reel -- le complement reste
+    // ainsi avant le verbe, comme en vraie grammaire LSQ plutot qu'en ordre
+    // francais SVO).
+    //
+    // Appelee a la fin de chaque tour (voir handleSttTurn, msg.end_of_turn)
+    // sur ce qui n'a PAS ENCORE ete joue -- jamais sur ce qui est deja
+    // affiche (impossible de "desafficher" un signe deja montre a
+    // l'ecran) : seule la FIN d'une phrase assez longue pour avoir encore
+    // des signes en attente en beneficie vraiment. L'IA continue d'arriver
+    // ensuite, un peu plus tard, pour affiner encore (synonymes, mots
+    // absents du vocabulaire) -- cette fonction ne la remplace pas, elle
+    // raccourcit juste l'attente avant un ordre deja correct.
+    //
+    // Les deux listes ci-dessous sont tirees des 325 mots REELLEMENT
+    // filmes (verifie dans media/signs-data.js) -- jamais une liste
+    // generique de mots francais qui pourraient ne pas avoir de signe.
+    const TIME_FRONT_WORDS = new Set([
+      "demain","hier","maintenant","matin","midi","nuit","jour","journee",
+      "heure","quelleheure","findesemaine","printemps","ete","hiver",
+      "lundi","mardi","mercredi","jeudi","dimanche",
+      "janvier","fevrier","mars","avril","mai","juin","juillet","octobre","novembre","decembre",
+      "depuis","pendant","lorsque","puis","ensuite","enfin","deja","parfois",
+    ]);
+    const VERB_WORDS = new Set([
+      "manger","faire","pouvoir","devoir","prendre","dire","mettre","ouvrir",
+      "penser","monter","marcher","marche","donner","demander","chercher",
+      "connaitre","communiquer","entendre","ecrire","lire","jouer","chanter",
+      "boire","finir","lever","marier","devenir","parler","avoir",
+    ]);
+    // Reordonne un tableau d'items {key, source} deja resolus : les items
+    // "classifier" (plusieurs mots deja assembles en un seul geste, voir
+    // spliceClassifierConstructions) ne sont jamais deplaces -- leur ordre
+    // interne est deja gere separement. Partition stable (l'ordre relatif
+    // A L'INTERIEUR de chaque groupe est preserve), jamais de tri qui
+    // pourrait melanger deux mots du meme groupe entre eux.
+    function localReorderLSQ(items) {
+      if (!items || items.length < 2) return items || [];
+      const timeItems = [], verbItems = [], otherItems = [];
+      items.forEach((it) => {
+        if (!it || it.source === "classifier") { if (it) otherItems.push(it); return; }
+        const norm = normalize(it.key);
+        if (TIME_FRONT_WORDS.has(norm)) timeItems.push(it);
+        else if (VERB_WORDS.has(norm)) verbItems.push(it);
+        else otherItems.push(it);
+      });
+      return timeItems.concat(otherItems, verbItems);
+    }
+    // Applique localReorderLSQ() a ce qui reste a jouer (queue) ET a la
+    // phrase complete memorisee pour Rejouer/aspect habituel
+    // (lastUtteranceSigns) -- cette derniere n'est jamais "en cours
+    // d'affichage direct", donc la reordonner en entier est toujours
+    // correct (une relecture future part de zero, pas juste de la fin).
+    function reorderRemainingQueueLocally() {
+      if (queue.length > 1) {
+        queue = localReorderLSQ(queue);
+        dbg("ordre local (sans IA): file restante reordonnee -> [" + queue.map((s) => s.key).join(",") + "]");
+      }
+      if (lastUtteranceSigns.length > 1) lastUtteranceSigns = localReorderLSQ(lastUtteranceSigns);
+    }
 
     let aiFallbackAbort = null;
     let aiFallbackAbortToken = null;
