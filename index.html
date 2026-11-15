@@ -157,6 +157,11 @@
   .stage.mirror #overlay { transform: scaleX(-1); }
   #overlay { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
   #overlay[hidden] { display: none; }
+  /* Diagnostic de l'apercu live (David, 2026-11-15 : "y a plus de lignes
+     du tout qui me suivent") -- en dehors de #overlay donc jamais
+     inversé par .stage.mirror, pour rester lisible en caméra avant. */
+  .preview-diag { position: absolute; top: calc(60px + env(safe-area-inset-top, 0px)); left: 10px; right: 10px; z-index: 6; pointer-events: none; font: 11px/1.4 monospace; color: #9fe9ff; background: rgba(10,14,24,0.55); border-radius: 6px; padding: 4px 8px; max-width: calc(100% - 20px); }
+  .preview-diag[hidden] { display: none; }
   .scrim-top, .scrim-bottom { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2; }
   .scrim-top { top: 0; height: 22%; background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent); }
   .scrim-bottom { bottom: 0; height: 46%; background: linear-gradient(to top, rgba(0,0,0,0.66), transparent); }
@@ -1428,6 +1433,7 @@
 <div class="stage" id="stage">
   <video id="video" playsinline autoplay muted></video>
   <canvas id="overlay" hidden></canvas>
+  <div class="preview-diag" id="previewDiag" hidden></div>
   <div class="scrim-top"></div>
   <div class="scrim-bottom"></div>
 
@@ -1774,6 +1780,7 @@
   const video = document.getElementById("video");
   const overlay = document.getElementById("overlay");
   const overlayCtx = overlay ? overlay.getContext("2d") : null;
+  const previewDiag = document.getElementById("previewDiag");
   const emptyState = document.getElementById("emptyState");
   const topbar = document.getElementById("topbar");
   const mainBtn = document.getElementById("mainBtn");
@@ -1952,6 +1959,7 @@
     stopLivePreview();
     previewPrevGray = null;
     smoothZones = [];
+    if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "aperçu : démarrage…"; }
     previewTimer = setInterval(function () {
       if (!video.videoWidth || !WORK_W || !WORK_H) return;
       if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
@@ -1963,13 +1971,26 @@
         if (R && R.detectMotionVisual) {
           const visual = R.detectMotionVisual(img, previewPrevGray, WORK_W, WORK_H);
           previewPrevGray = visual.gray;
-          renderOverlay(blendActivity(visual.points));
+          const zones = blendActivity(visual.points);
+          renderOverlay(zones);
+          // Diagnostic visible (David, 2026-11-15 : "y a plus de lignes du
+          // tout qui me suivent") -- pour savoir, au prochain essai, si
+          // c'est "0% de l'image bouge" (seuil pixel trop strict, voir
+          // buildMasks) ou "ça bouge mais jamais groupé" (seuil/fusion
+          // par cellule) au lieu de deviner encore à l'aveugle.
+          if (previewDiag && visual.diag) {
+            const pct = visual.diag.totalPixels ? ((visual.diag.motionPixels / visual.diag.totalPixels) * 100).toFixed(1) : "0.0";
+            previewDiag.textContent = "aperçu : " + pct + "% de l'image bouge · " + visual.diag.cellsFound + " cellules actives · " + zones.length + " zone(s) affichée(s)";
+          }
         }
-      } catch (e) { /* aperçu seulement, jamais bloquant pour l'enregistrement */ }
+      } catch (e) {
+        if (previewDiag) previewDiag.textContent = "aperçu : erreur — " + ((e && e.message) ? e.message : String(e));
+      }
     }, 110);
   }
   function stopLivePreview() {
     if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+    if (previewDiag) { previewDiag.hidden = true; previewDiag.textContent = ""; }
     previewPrevGray = null;
     smoothZones = [];
   }

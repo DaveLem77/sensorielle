@@ -211,25 +211,44 @@
     var rows = Math.max(4, Math.round(h / 14));
     var cellW = w / cols, cellH = h / rows;
     var score = new Float32Array(cols * rows);
+    var motionPixels = 0;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         var idx = y * w + x;
         if (!masks.motion[idx]) continue;
+        motionPixels++;
         var ci = Math.min(cols - 1, Math.floor(x / cellW));
         var cj = Math.min(rows - 1, Math.floor(y / cellH));
         score[cj * cols + ci] += 1;
       }
     }
 
+    // David, 2026-11-15, apres ce 3e essai : "y a plus de lignes du tout
+    // qui me suivent" -- plus rien ne s'affiche jamais, donc le seuil par
+    // cellule etait probablement trop strict pour l'amplitude de
+    // mouvement reelle captee par SA camera (compression, bas niveau de
+    // lumiere, etc. -- on ne peut pas le savoir sans donnees reelles).
+    // Seuil de cellule abaisse (0.05 -> 0.02) ; le seuil de mouvement
+    // pixel par pixel (masks.motion, dans buildMasks) n'est PAS touche
+    // ici car il est partage avec createExtractor/pushFrame (la vraie
+    // reconnaissance, deja validee hors-ligne) -- le changer risquerait
+    // de modifier la reconnaissance elle-meme sans nouvelle validation.
+    // diag.motionPixels / diag.cellsFound sont renvoyes pour etre
+    // affiches a l'ecran (voir index.html) : si David revoit "rien" avec
+    // ce build, ces chiffres diront directement si c'est "aucun pixel ne
+    // bouge assez" (probleme de seuil pixel, dans buildMasks) ou "des
+    // pixels bougent mais jamais assez groupes" (probleme de seuil/
+    // regroupement par cellule, ici) -- au lieu de deviner une 4e fois.
     var cellArea = cellW * cellH;
     var cells = [];
     for (var k = 0; k < score.length; k++) {
       var s = score[k] / cellArea;
-      if (s > 0.05) {
+      if (s > 0.02) {
         cells.push({ x: (k % cols + 0.5) * cellW, y: (Math.floor(k / cols) + 0.5) * cellH, s: s });
       }
     }
-    if (!cells.length) return { face: face, points: [], gray: masks.gray, signal: "aucun" };
+    var diag = { motionPixels: motionPixels, totalPixels: w * h, cellsFound: cells.length };
+    if (!cells.length) return { face: face, points: [], gray: masks.gray, signal: "aucun", diag: diag };
     cells.sort(function (a, b) { return b.s - a.s; });
 
     // Regroupe les cellules actives voisines en au plus 3 zones (mains +
@@ -252,7 +271,7 @@
       }
       if (sw > 0) zones.push({ x: sx / sw, y: sy / sw, strength: sw, cellCount: n });
     }
-    return { face: face, points: zones, gray: masks.gray, signal: zones.length ? "mouvement" : "aucun" };
+    return { face: face, points: zones, gray: masks.gray, signal: zones.length ? "mouvement" : "aucun", diag: diag };
   }
 
   // ---- Extracteur d'etat, un objet par enregistrement en cours ---------
