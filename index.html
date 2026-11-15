@@ -1836,121 +1836,121 @@
     overlay.width = window.innerWidth;
     overlay.height = window.innerHeight;
   }
-  // renderOverlay dessine, si on lui passe une main détectée (voir
-  // startLivePreview), un mini squelette léger -- centre de la main +
-  // traits fins vers les bouts "doigts" approchés -- juste pour le
-  // retour visuel ; ça ne change rien à la reconnaissance elle-même (qui
-  // passe par createExtractor().pushFrame, séparément). Le repère ovale
-  // pour le visage a été retiré (David, 2026-11-15 : "c'est laid") --
-  // la zone visage reste utilisée en interne pour exclure le visage de
-  // la détection de main, elle n'est juste plus dessinée. Le CSS
-  // (.stage.mirror #overlay) gère tout seul le miroir en caméra avant :
-  // on dessine toujours dans le repère "écran non-inversé".
-  function renderOverlay(hand) {
+  // renderOverlay dessine, pour chaque zone d'activité détectée (voir
+  // startLivePreview / detectActivityVisual côté sign-recognizer.js), un
+  // halo doux qui suit la position + une traînée courte qui s'estompe
+  // (trajectoire récente) -- plus aucune ligne droite prétendant être un
+  // "doigt" précis. Le repère ovale pour le visage a été retiré (David,
+  // 2026-11-15 : "c'est laid") -- la zone visage reste utilisée en
+  // interne pour l'exclure de la détection, elle n'est juste plus
+  // dessinée. Le CSS (.stage.mirror #overlay) gère tout seul le miroir
+  // en caméra avant : on dessine toujours dans le repère "écran
+  // non-inversé".
+  function renderOverlay(zones) {
     if (!overlay || !overlayCtx) return;
     var vw = video.videoWidth, vh = video.videoHeight;
     var cw = overlay.width, ch = overlay.height;
     overlayCtx.clearRect(0, 0, cw, ch);
-    if (!vw || !vh || !cw || !ch || !hand || !WORK_W || !WORK_H) return;
+    if (!vw || !vh || !cw || !ch || !zones || !zones.length || !WORK_W || !WORK_H) return;
     var scale = Math.max(cw / vw, ch / vh);
     var offX = (cw - vw * scale) / 2;
     var offY = (ch - vh * scale) / 2;
-    // Les coordonnées de hand sont dans l'espace du canvas de travail
+    // Les coordonnées des zones sont dans l'espace du canvas de travail
     // (WORK_W x WORK_H), qui garde le même ratio que la vidéo brute ->
     // même transformation "cover", juste remise à l'échelle de
     // WORK_W/WORK_H vers vw/vh d'abord.
     var kx = vw / WORK_W, ky = vh / WORK_H;
-    var toScreen = function (px, py) {
-      return { x: offX + px * kx * scale, y: offY + py * ky * scale };
-    };
-    var center = toScreen(hand.cx, hand.cy);
+    var toScreen = function (px, py) { return { x: offX + px * kx * scale, y: offY + py * ky * scale }; };
     overlayCtx.save();
-    overlayCtx.strokeStyle = "rgba(100,220,255,0.95)";
-    overlayCtx.fillStyle = "rgba(100,220,255,0.95)";
-    overlayCtx.lineWidth = 2;
-    (hand.tips || []).forEach(function (tip) {
-      var p = toScreen(tip.x, tip.y);
+    zones.forEach(function (z) {
+      var hist = (z.history || []).map(function (p) { return toScreen(p.x, p.y); });
+      for (var i = 1; i < hist.length; i++) {
+        overlayCtx.beginPath();
+        overlayCtx.strokeStyle = "rgba(120,225,255," + (0.06 + 0.26 * (i / hist.length)) + ")";
+        overlayCtx.lineWidth = 2;
+        overlayCtx.moveTo(hist[i - 1].x, hist[i - 1].y);
+        overlayCtx.lineTo(hist[i].x, hist[i].y);
+        overlayCtx.stroke();
+      }
+      var p = toScreen(z.x, z.y);
+      var r = 10 + Math.min(12, (z.strength || 0) * 1.8);
+      var grad = overlayCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      grad.addColorStop(0, "rgba(130,230,255,0.85)");
+      grad.addColorStop(1, "rgba(130,230,255,0)");
+      overlayCtx.fillStyle = grad;
       overlayCtx.beginPath();
-      overlayCtx.moveTo(center.x, center.y);
-      overlayCtx.lineTo(p.x, p.y);
-      overlayCtx.stroke();
-      overlayCtx.beginPath();
-      overlayCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      overlayCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
       overlayCtx.fill();
     });
-    overlayCtx.beginPath();
-    overlayCtx.arc(center.x, center.y, 5, 0, Math.PI * 2);
-    overlayCtx.fill();
     overlayCtx.restore();
   }
   function drawGuide() { renderOverlay(null); }
   window.addEventListener("resize", function () { if (stage.classList.contains("live")) { resizeOverlay(); drawGuide(); } });
 
   // Aperçu continu léger (visuel seulement, jamais utilisé pour la
-  // reconnaissance) : détecte la main à l'affichage pendant que la caméra
-  // est ouverte -- avant, pendant et après un enregistrement -- pour
-  // montrer en direct ce que le système "voit".
+  // reconnaissance) : pendant que la caméra est ouverte -- avant,
+  // pendant et après un enregistrement -- montre en direct ce que le
+  // système "voit".
   //
-  // David, 2026-11-15, après le premier essai : "il met les lignes du
-  // corps n'importe où, ça bouge full les lignes, ça ne marche pas du
-  // tout" -- la détection brute, affichée telle quelle image par image,
-  // saute d'un faux positif à l'autre (vêtement, bras, arrière-plan).
-  // Deux correctifs : (1) côté sign-recognizer.js, detectHandVisual est
-  // maintenant plus strict (rejette les détections trop grandes/trop
-  // petites pour être une main) ; (2) ici, blendHand() lisse la position
-  // dans le temps (moyenne mobile) au lieu d'afficher la détection brute
-  // d'une seule image, et tolère quelques ratés avant de faire
-  // disparaître le repère, pour que ça suive vraiment la main au lieu de
-  // téléporter les lignes partout à chaque image.
+  // David, 2026-11-15 : après deux essais ("il met les lignes du corps
+  // n'importe où" puis encore "pas du tout" après un premier correctif),
+  // stratégie complètement différente de celle d'avant (un seul bloc +
+  // "bouts de doigts" sur son enveloppe convexe, trop fragile) :
+  // detectActivityVisual (sign-recognizer.js) mesure une densité
+  // d'activité par cellules et peut ressortir jusqu'à 2 zones (les deux
+  // mains, courant en LSQ, au lieu d'un seul bloc forcé). Ici,
+  // blendActivity() fait correspondre les zones d'une image à l'autre
+  // (au plus proche), les lisse dans le temps, garde un court historique
+  // pour la traînée, et tolère quelques ratés avant de faire disparaître
+  // une zone -- pour que le repère suive vraiment l'activité au lieu de
+  // sauter partout.
   let previewTimer = null;
   let previewPrevGray = null;
-  let smoothHand = null; // { cx, cy, tips:[{x,y}...] } déjà lissé, espace WORK
-  let missTicks = 0;
-  const SMOOTH_ALPHA = 0.28;
-  const MAX_MISS_TICKS = 5; // ~0.5s de tolérance avant de faire disparaître le repère
+  let smoothZones = []; // [{x,y,strength,missTicks,history:[{x,y}...]}], espace WORK
+  const ZONE_ALPHA = 0.3;
+  const ZONE_MAX_MISS = 5; // ~0.5s de tolérance avant de faire disparaître une zone
+  const TRAIL_LEN = 6;
   const previewCanvas = document.createElement("canvas");
   const previewCtx = previewCanvas.getContext("2d", { willReadFrequently: true });
 
-  function blendHand(raw) {
-    if (!raw) {
-      missTicks++;
-      if (missTicks > MAX_MISS_TICKS) smoothHand = null;
-      return smoothHand;
-    }
-    missTicks = 0;
-    if (!smoothHand) { smoothHand = { cx: raw.cx, cy: raw.cy, tips: (raw.tips || []).map(function (t) { return { x: t.x, y: t.y }; }) }; return smoothHand; }
-    smoothHand.cx += (raw.cx - smoothHand.cx) * SMOOTH_ALPHA;
-    smoothHand.cy += (raw.cy - smoothHand.cy) * SMOOTH_ALPHA;
-    var prevTips = smoothHand.tips, rawTips = raw.tips || [];
-    var used = new Array(prevTips.length).fill(false);
-    var nextTips = [];
-    rawTips.forEach(function (rt) {
+  function blendActivity(rawZones) {
+    rawZones = rawZones || [];
+    var usedRaw = new Array(rawZones.length).fill(false);
+    var maxJump = Math.max(WORK_W, WORK_H) * 0.5;
+    var maxJump2 = maxJump * maxJump;
+    smoothZones.forEach(function (sz) {
       var bestI = -1, bestD = Infinity;
-      for (var i = 0; i < prevTips.length; i++) {
-        if (used[i]) continue;
-        var dx = rt.x - prevTips[i].x, dy = rt.y - prevTips[i].y;
+      rawZones.forEach(function (rz, ri) {
+        if (usedRaw[ri]) return;
+        var dx = rz.x - sz.x, dy = rz.y - sz.y;
         var d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; bestI = i; }
-      }
-      if (bestI !== -1 && bestD < 1600) { // ~40px de tolérance d'appariement
-        used[bestI] = true;
-        nextTips.push({
-          x: prevTips[bestI].x + (rt.x - prevTips[bestI].x) * SMOOTH_ALPHA,
-          y: prevTips[bestI].y + (rt.y - prevTips[bestI].y) * SMOOTH_ALPHA,
-        });
+        if (d < bestD) { bestD = d; bestI = ri; }
+      });
+      if (bestI !== -1 && bestD < maxJump2) {
+        usedRaw[bestI] = true;
+        var rz = rawZones[bestI];
+        sz.x += (rz.x - sz.x) * ZONE_ALPHA;
+        sz.y += (rz.y - sz.y) * ZONE_ALPHA;
+        sz.strength = rz.strength;
+        sz.missTicks = 0;
       } else {
-        nextTips.push({ x: rt.x, y: rt.y });
+        sz.missTicks++;
       }
+      sz.history.push({ x: sz.x, y: sz.y });
+      if (sz.history.length > TRAIL_LEN) sz.history.shift();
     });
-    smoothHand.tips = nextTips;
-    return smoothHand;
+    rawZones.forEach(function (rz, ri) {
+      if (usedRaw[ri] || smoothZones.length >= 2) return;
+      smoothZones.push({ x: rz.x, y: rz.y, strength: rz.strength, missTicks: 0, history: [{ x: rz.x, y: rz.y }] });
+    });
+    smoothZones = smoothZones.filter(function (sz) { return sz.missTicks <= ZONE_MAX_MISS; });
+    return smoothZones;
   }
 
   function startLivePreview() {
     stopLivePreview();
     previewPrevGray = null;
-    smoothHand = null;
-    missTicks = 0;
+    smoothZones = [];
     previewTimer = setInterval(function () {
       if (!video.videoWidth || !WORK_W || !WORK_H) return;
       if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
@@ -1959,10 +1959,10 @@
         previewCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
         const img = previewCtx.getImageData(0, 0, WORK_W, WORK_H);
         const R = window.SensorielleSignRecognizer;
-        if (R && R.detectHandVisual) {
-          const visual = R.detectHandVisual(img, previewPrevGray, WORK_W, WORK_H);
+        if (R && R.detectActivityVisual) {
+          const visual = R.detectActivityVisual(img, previewPrevGray, WORK_W, WORK_H);
           previewPrevGray = visual.gray;
-          renderOverlay(blendHand(visual.hand));
+          renderOverlay(blendActivity(visual.points));
         }
       } catch (e) { /* aperçu seulement, jamais bloquant pour l'enregistrement */ }
     }, 110);
@@ -1970,8 +1970,7 @@
   function stopLivePreview() {
     if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
     previewPrevGray = null;
-    smoothHand = null;
-    missTicks = 0;
+    smoothZones = [];
   }
 
   function pickFrenchVoice() {

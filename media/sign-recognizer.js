@@ -108,8 +108,8 @@
 
   // Composantes connexes (union-find a deux passes) -> plus gros blob.
   // opts.points demande aussi un contour approche (min/max x par ligne
-  // du plus gros blob) pour l'aperçu visuel (voir detectHandVisual) --
-  // jamais utilise par pushFrame, qui n'en a pas besoin.
+  // du plus gros blob) -- jamais utilise par pushFrame, qui n'en a pas
+  // besoin (garde comme primitive reutilisable).
   function largestBlob(mask, w, h, minArea, opts) {
     var n = w * h;
     var label = new Int32Array(n);
@@ -179,71 +179,36 @@
     return result;
   }
 
-  // ---- Repere visuel "mini squelette" (David, 2026-11-15 : un retour
-  // visuel qui suit le visage, les mouvements et les "doigts") ----------
-  // Enveloppe convexe (monotone chain) du contour approche du blob, puis
-  // on choisit jusqu'a 5 points de l'enveloppe les plus eloignes du
-  // centre et suffisamment espaces entre eux -- une approximation
-  // classique "defauts de convexite" des bouts de doigts, sans modele.
-  function convexHull(points) {
-    if (points.length < 3) return points.slice();
-    var pts = points.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; });
-    function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
-    var lower = [];
-    for (var i = 0; i < pts.length; i++) {
-      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
-      lower.push(pts[i]);
-    }
-    var upper = [];
-    for (var j = pts.length - 1; j >= 0; j--) {
-      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[j]) <= 0) upper.pop();
-      upper.push(pts[j]);
-    }
-    upper.pop(); lower.pop();
-    return lower.concat(upper);
-  }
-
-  function pickTips(hull, cx, cy, maxTips, minSep) {
-    var scored = hull.map(function (p) {
-      var dx = p.x - cx, dy = p.y - cy;
-      return { p: p, d: Math.sqrt(dx * dx + dy * dy) };
-    }).sort(function (a, b) { return b.d - a.d; });
-    var picked = [];
-    for (var i = 0; i < scored.length && picked.length < maxTips; i++) {
-      var cand = scored[i].p;
-      var ok = true;
-      for (var j = 0; j < picked.length; j++) {
-        var dx = cand.x - picked[j].x, dy = cand.y - picked[j].y;
-        if (Math.sqrt(dx * dx + dy * dy) < minSep) { ok = false; break; }
-      }
-      if (ok) picked.push(cand);
-    }
-    return picked;
-  }
-
-  // Detection "a l'affichage seulement" (jamais utilisee pour la
-  // reconnaissance elle-meme) : reutilise exactement la meme chaine de
-  // repli peau+mouvement / mouvement / peau que pushFrame, pour que ce
-  // qu'on affiche corresponde a ce qui est vraiment capte pendant un
-  // enregistrement. prevGray est fourni par l'appelant (boucle d'aperçu
-  // continue, separee de l'enregistrement).
-  // Affichage seulement (jamais utilisee pour la reconnaissance -- voir
-  // createExtractor/pushFrame pour ca, qui reste inchange). David,
-  // 2026-11-15, apres le premier essai : "il met les lignes du corps
-  // n'importe ou, ca bouge full les lignes" -- la detection brute d'une
-  // seule image est trop permissive pour etre montree telle quelle :
-  // elle accroche sur un bras, un vetement, l'arriere-plan. Pour le
-  // visuel seulement (la reconnaissance elle-meme garde ses 3 paliers de
-  // repli tel quel, voir plus bas) :
-  //  - on laisse tomber le palier "peau seule" (le plus permissif, celui
-  //    le plus susceptible d'accrocher n'importe quelle zone de peau
-  //    hors de la main -- cou, bras, avant-bras) ;
-  //  - on rejette un blob trop petit (bruit) OU trop grand (un bras, une
-  //    manche, un pan de vetement -- pas une main) par rapport a la
-  //    taille du visage ;
-  //  - le lissage dans le temps (voir blendHand cote index.html) fait le
-  //    reste pour eviter que le repere ne teleporte d'une image a l'autre.
-  function detectHandVisual(imgData, prevGray, w, h) {
+  // ---- Repere visuel : carte de densite par cellules, strategie
+  // completement differente de l'ancienne (bloc unique + enveloppe
+  // convexe + "bouts de doigts"). ------------------------------------
+  // David, 2026-11-15, apres deux essais : la detection "plus gros bloc
+  // connexe" accrochait un bras, un vetement, ou sautait d'un faux
+  // positif a l'autre -- meme lissee dans le temps, une position fausse
+  // qui bouge lentement reste une position fausse. Deux defauts de fond
+  // dans l'ancienne approche :
+  //  1) elle force TOUT en un seul blob -- or en LSQ, signer a deux
+  //     mains est courant ; "le plus gros bloc connexe" ignore une main
+  //     des que l'autre est plus grande, et casse des que les deux mains
+  //     ne se touchent pas (cas frequent).
+  //  2) elle demandait une forme precise (enveloppe convexe + points les
+  //     plus eloignes du centre = "doigts") a un signal peau/mouvement
+  //     deja bruyant -- n'importe quelle irregularite (pli de vetement,
+  //     ombre) ressort comme un "doigt".
+  //
+  // Nouvelle strategie : on decoupe l'image (hors visage) en une grille
+  // de cellules, on mesure dans chaque cellule une densite d'activite
+  // (peau+mouvement compte le plus, mouvement seul un peu, peau seule
+  // tres peu pour ne pas laisser un bras immobile dominer), puis on
+  // regroupe les cellules actives voisines en AU PLUS DEUX zones
+  // (les deux mains possibles) par un plus-proche-voisin glouton. On
+  // n'essaie plus de deviner des "doigts" individuels : chaque zone est
+  // affichee comme un point/halo qui suit l'activite reelle, ce qui est
+  // un signal beaucoup plus robuste (une moyenne sur des dizaines de
+  // pixels, pas la forme fragile d'un seul contour) et gere nativement
+  // le cas a deux mains. Le lissage dans le temps (blendActivity, cote
+  // index.html) fait le reste pour une trajectoire fluide.
+  function detectActivityVisual(imgData, prevGray, w, h) {
     var masks = buildMasks(imgData, prevGray, w, h);
     var face = fixedFaceRef(w, h);
     var fx = face.cx, fy = face.cy, fhh = face.h;
@@ -253,32 +218,65 @@
     var by1 = Math.min(h, Math.round(fy + 1.6 * fhh));
     function outsideFace(x, y) { return !(y >= by0 && y < by1 && x >= bx0 && x < bx1); }
 
-    var skinMotion = new Uint8Array(w * h);
-    var motionOnly = new Uint8Array(w * h);
+    var cols = Math.max(4, Math.round(w / 16));
+    var rows = Math.max(4, Math.round(h / 16));
+    var cellW = w / cols, cellH = h / rows;
+    var score = new Float32Array(cols * rows);
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
-        var idx = y * w + x;
         if (!outsideFace(x, y)) continue;
-        if (masks.skin[idx] && masks.motion[idx]) skinMotion[idx] = 1;
-        if (masks.motion[idx]) motionOnly[idx] = 1;
+        var idx = y * w + x;
+        var v = 0;
+        if (masks.skin[idx] && masks.motion[idx]) v = 1.6;
+        else if (masks.motion[idx]) v = 1.0;
+        else if (masks.skin[idx]) v = 0.3;
+        if (!v) continue;
+        var ci = Math.min(cols - 1, Math.floor(x / cellW));
+        var cj = Math.min(rows - 1, Math.floor(y / cellH));
+        score[cj * cols + ci] += v;
       }
     }
-    var maxArea = fhh * fhh * 2.0; // plus gros qu'une main plausible -> rejete
-    var hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 14, { points: true });
-    var signal = "peau+mouvement";
-    if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 28, { points: true }); signal = "mouvement"; }
-    if (!hand || hand.area > maxArea) {
-      return { face: face, hand: null, gray: masks.gray, signal: hand ? "trop_grand" : "aucun" };
-    }
 
-    var hull = convexHull(hand.points);
-    var tips = pickTips(hull, hand.cx, hand.cy, 3, Math.max(7, fhh * 0.18));
-    return {
-      face: face,
-      hand: { cx: hand.cx, cy: hand.cy, tips: tips },
-      gray: masks.gray,
-      signal: signal,
-    };
+    var cellArea = cellW * cellH;
+    var cells = [];
+    for (var k = 0; k < score.length; k++) {
+      var s = score[k] / cellArea;
+      if (s > 0.045) {
+        cells.push({ x: (k % cols + 0.5) * cellW, y: (Math.floor(k / cols) + 0.5) * cellH, s: s });
+      }
+    }
+    if (!cells.length) return { face: face, points: [], gray: masks.gray, signal: "aucun" };
+    cells.sort(function (a, b) { return b.s - a.s; });
+
+    // Regroupe les cellules actives voisines en au plus 2 zones (mains) :
+    // glouton -- on part de la cellule la plus active, on absorbe toute
+    // cellule proche dans la meme zone, puis on recommence avec ce qui
+    // reste pour une 2e zone eventuelle.
+    var mergeDist = Math.max(cellW, cellH) * 1.6;
+    var used = new Array(cells.length).fill(false);
+    var zones = [];
+    for (var ci2 = 0; ci2 < cells.length && zones.length < 2; ci2++) {
+      if (used[ci2]) continue;
+      var sx = 0, sy = 0, sw = 0, n = 0;
+      for (var cj2 = 0; cj2 < cells.length; cj2++) {
+        if (used[cj2]) continue;
+        var dx = cells[cj2].x - cells[ci2].x, dy = cells[cj2].y - cells[ci2].y;
+        if (Math.sqrt(dx * dx + dy * dy) <= mergeDist) {
+          used[cj2] = true;
+          sx += cells[cj2].x * cells[cj2].s; sy += cells[cj2].y * cells[cj2].s; sw += cells[cj2].s; n++;
+        }
+      }
+      if (sw > 0) zones.push({ x: sx / sw, y: sy / sw, strength: sw, cellCount: n });
+    }
+    // Deux zones trop proches l'une de l'autre sont probablement la meme
+    // main -- on ne garde alors que la plus forte.
+    if (zones.length === 2) {
+      var ddx = zones[0].x - zones[1].x, ddy = zones[0].y - zones[1].y;
+      if (Math.sqrt(ddx * ddx + ddy * ddy) < fhh * 0.7) {
+        zones = [zones[0].strength >= zones[1].strength ? zones[0] : zones[1]];
+      }
+    }
+    return { face: face, points: zones, gray: masks.gray, signal: zones.length ? "activite" : "aucun" };
   }
 
   // ---- Extracteur d'etat, un objet par enregistrement en cours ---------
@@ -400,7 +398,7 @@
     loadSignatures: loadSignatures,
     createExtractor: createExtractor,
     recognize: recognize,
-    detectHandVisual: detectHandVisual,
+    detectActivityVisual: detectActivityVisual,
     FACE_CX_FRAC: FACE_CX_FRAC,
     FACE_CY_FRAC: FACE_CY_FRAC,
     FACE_H_FRAC: FACE_H_FRAC,
