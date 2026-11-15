@@ -1961,21 +1961,35 @@
     mainBtn.disabled = false;
   }
 
+  // Diagnostic (2026-11-15, David : "ça ne marche pas, il reconnaît
+  // rien" même après le premier correctif) : on ne peut pas voir sa
+  // console sur son téléphone, donc on affiche ce qui s'est vraiment
+  // passé pendant l'essai — nombre d'images utiles sur le total, dernier
+  // type de signal, et toute erreur — directement dans le message
+  // d'échec, pour savoir si le problème est "rien n'est capté du tout"
+  // ou autre chose.
+  let diagTicks = 0, diagHits = 0, diagLastErr = null;
+
   function startRecording() {
     if (recording || !video.videoWidth) return;
     recording = true;
     extractor = SensorielleSignRecognizer.createExtractor(); // signature vierge pour cet essai
+    diagTicks = 0; diagHits = 0; diagLastErr = null;
     shutterBtn.disabled = true;
     shutterBtn.classList.add("is-recording");
     resetCaption();
     const startedAt = Date.now();
     statusLine.textContent = "Enregistrement… signe maintenant.";
     sampleTimer = setInterval(function () {
-      workCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
+      diagTicks++;
       try {
+        workCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
         const img = workCtx.getImageData(0, 0, WORK_W, WORK_H);
-        extractor.pushFrame(img, WORK_W, WORK_H);
-      } catch (e) {}
+        const row = extractor.pushFrame(img, WORK_W, WORK_H);
+        if (row) diagHits++;
+      } catch (e) {
+        diagLastErr = (e && e.message) ? e.message : String(e);
+      }
       const left = Math.max(0, RECORD_MS - (Date.now() - startedAt));
       statusLine.textContent = "Enregistrement… " + (Math.ceil(left / 1000)) + "s";
     }, 80);
@@ -1991,9 +2005,12 @@
     shutterBtn.classList.remove("is-recording");
     if (cancelled) return;
     const rows = extractor.finish();
+    const lastSignal = extractor.getLastSignal ? extractor.getLastSignal() : "?";
     extractor = SensorielleSignRecognizer.createExtractor(); // prêt pour le prochain essai
     if (!rows || rows.length < 6) {
-      statusLine.textContent = "Signe trop court ou main non détectée — réessaie, bien dans le cadre.";
+      let diag = diagHits + "/" + diagTicks + " images, signal: " + lastSignal;
+      if (diagLastErr) diag += ", erreur: " + diagLastErr;
+      statusLine.textContent = "Signe trop court ou main non détectée — réessaie, bien dans le cadre. (" + diag + ")";
       smartSentence.textContent = IDLE_TEXT;
       return;
     }
