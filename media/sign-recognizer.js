@@ -179,61 +179,45 @@
     return result;
   }
 
-  // ---- Repere visuel : carte de densite par cellules, strategie
-  // completement differente de l'ancienne (bloc unique + enveloppe
-  // convexe + "bouts de doigts"). ------------------------------------
-  // David, 2026-11-15, apres deux essais : la detection "plus gros bloc
-  // connexe" accrochait un bras, un vetement, ou sautait d'un faux
-  // positif a l'autre -- meme lissee dans le temps, une position fausse
-  // qui bouge lentement reste une position fausse. Deux defauts de fond
-  // dans l'ancienne approche :
-  //  1) elle force TOUT en un seul blob -- or en LSQ, signer a deux
-  //     mains est courant ; "le plus gros bloc connexe" ignore une main
-  //     des que l'autre est plus grande, et casse des que les deux mains
-  //     ne se touchent pas (cas frequent).
-  //  2) elle demandait une forme precise (enveloppe convexe + points les
-  //     plus eloignes du centre = "doigts") a un signal peau/mouvement
-  //     deja bruyant -- n'importe quelle irregularite (pli de vetement,
-  //     ombre) ressort comme un "doigt".
-  //
-  // Nouvelle strategie : on decoupe l'image (hors visage) en une grille
-  // de cellules, on mesure dans chaque cellule une densite d'activite
-  // (peau+mouvement compte le plus, mouvement seul un peu, peau seule
-  // tres peu pour ne pas laisser un bras immobile dominer), puis on
-  // regroupe les cellules actives voisines en AU PLUS DEUX zones
-  // (les deux mains possibles) par un plus-proche-voisin glouton. On
-  // n'essaie plus de deviner des "doigts" individuels : chaque zone est
-  // affichee comme un point/halo qui suit l'activite reelle, ce qui est
-  // un signal beaucoup plus robuste (une moyenne sur des dizaines de
-  // pixels, pas la forme fragile d'un seul contour) et gere nativement
-  // le cas a deux mains. Le lissage dans le temps (blendActivity, cote
-  // index.html) fait le reste pour une trajectoire fluide.
-  function detectActivityVisual(imgData, prevGray, w, h) {
+  // ---- Repere visuel : densite de MOUVEMENT pur, sur toute l'image.
+  // 3e strategie, encore differente des deux precedentes. -------------
+  // David, 2026-11-15, apres le 2e essai encore rate : "suis le
+  // mouvement des mains ET du visage ET des bras" -- en clair, arreter
+  // d'essayer de deviner ce qui est une "main" (couleur de peau, boite
+  // d'exclusion du visage a position fixe) et juste suivre TOUT ce qui
+  // bouge, partout dans l'image. Deux sources d'erreur disparaissent
+  // d'un coup avec ce recentrage :
+  //  1) rgbToSkin() (seuils Cr/Cb) est sensible a l'eclairage et au
+  //     teint -- il pouvait rater la main ou accrocher autre chose selon
+  //     la lumiere chez David. Le mouvement (difference de gris entre
+  //     deux images) ne depend d'aucune couleur.
+  //  2) fixedFaceRef() suppose le visage a une position/taille FIXE
+  //     (fractions de l'image) -- si son cadrage reel differe de cette
+  //     hypothese, la boite d'exclusion tombe au mauvais endroit et
+  //     fausse tout ce qui en depend. Le mouvement pur n'a besoin
+  //     d'aucune hypothese de cadrage : visage, mains ET bras qui
+  //     bougent ressortent tous, tels quels, sans boite a positionner.
+  // On garde la meme mecanique de groupement que la version precedente
+  // (densite par cellules -> fusion des cellules actives voisines en
+  // zones), juste appliquee au mouvement seul sur l'image complete, et
+  // jusqu'a 3 zones au lieu de 2 (mains + visage + bras peuvent bouger
+  // independamment). Le lissage dans le temps (blendActivity, cote
+  // index.html) reste inchange.
+  function detectMotionVisual(imgData, prevGray, w, h) {
     var masks = buildMasks(imgData, prevGray, w, h);
-    var face = fixedFaceRef(w, h);
-    var fx = face.cx, fy = face.cy, fhh = face.h;
-    var bx0 = Math.max(0, Math.round(fx - 0.85 * fhh));
-    var bx1 = Math.min(w, Math.round(fx + 0.85 * fhh));
-    var by0 = Math.max(0, Math.round(fy - 0.9 * fhh));
-    var by1 = Math.min(h, Math.round(fy + 1.6 * fhh));
-    function outsideFace(x, y) { return !(y >= by0 && y < by1 && x >= bx0 && x < bx1); }
+    var face = fixedFaceRef(w, h); // garde seulement pour reference/diagnostic, plus pour exclure quoi que ce soit ici
 
-    var cols = Math.max(4, Math.round(w / 16));
-    var rows = Math.max(4, Math.round(h / 16));
+    var cols = Math.max(4, Math.round(w / 14));
+    var rows = Math.max(4, Math.round(h / 14));
     var cellW = w / cols, cellH = h / rows;
     var score = new Float32Array(cols * rows);
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
-        if (!outsideFace(x, y)) continue;
         var idx = y * w + x;
-        var v = 0;
-        if (masks.skin[idx] && masks.motion[idx]) v = 1.6;
-        else if (masks.motion[idx]) v = 1.0;
-        else if (masks.skin[idx]) v = 0.3;
-        if (!v) continue;
+        if (!masks.motion[idx]) continue;
         var ci = Math.min(cols - 1, Math.floor(x / cellW));
         var cj = Math.min(rows - 1, Math.floor(y / cellH));
-        score[cj * cols + ci] += v;
+        score[cj * cols + ci] += 1;
       }
     }
 
@@ -241,21 +225,21 @@
     var cells = [];
     for (var k = 0; k < score.length; k++) {
       var s = score[k] / cellArea;
-      if (s > 0.045) {
+      if (s > 0.05) {
         cells.push({ x: (k % cols + 0.5) * cellW, y: (Math.floor(k / cols) + 0.5) * cellH, s: s });
       }
     }
     if (!cells.length) return { face: face, points: [], gray: masks.gray, signal: "aucun" };
     cells.sort(function (a, b) { return b.s - a.s; });
 
-    // Regroupe les cellules actives voisines en au plus 2 zones (mains) :
-    // glouton -- on part de la cellule la plus active, on absorbe toute
-    // cellule proche dans la meme zone, puis on recommence avec ce qui
-    // reste pour une 2e zone eventuelle.
-    var mergeDist = Math.max(cellW, cellH) * 1.6;
+    // Regroupe les cellules actives voisines en au plus 3 zones (mains +
+    // visage/bras) : glouton -- on part de la cellule la plus active, on
+    // absorbe toute cellule proche dans la meme zone, et on recommence
+    // avec ce qui reste.
+    var mergeDist = Math.max(cellW, cellH) * 1.7;
     var used = new Array(cells.length).fill(false);
     var zones = [];
-    for (var ci2 = 0; ci2 < cells.length && zones.length < 2; ci2++) {
+    for (var ci2 = 0; ci2 < cells.length && zones.length < 3; ci2++) {
       if (used[ci2]) continue;
       var sx = 0, sy = 0, sw = 0, n = 0;
       for (var cj2 = 0; cj2 < cells.length; cj2++) {
@@ -268,15 +252,7 @@
       }
       if (sw > 0) zones.push({ x: sx / sw, y: sy / sw, strength: sw, cellCount: n });
     }
-    // Deux zones trop proches l'une de l'autre sont probablement la meme
-    // main -- on ne garde alors que la plus forte.
-    if (zones.length === 2) {
-      var ddx = zones[0].x - zones[1].x, ddy = zones[0].y - zones[1].y;
-      if (Math.sqrt(ddx * ddx + ddy * ddy) < fhh * 0.7) {
-        zones = [zones[0].strength >= zones[1].strength ? zones[0] : zones[1]];
-      }
-    }
-    return { face: face, points: zones, gray: masks.gray, signal: zones.length ? "activite" : "aucun" };
+    return { face: face, points: zones, gray: masks.gray, signal: zones.length ? "mouvement" : "aucun" };
   }
 
   // ---- Extracteur d'etat, un objet par enregistrement en cours ---------
@@ -398,7 +374,7 @@
     loadSignatures: loadSignatures,
     createExtractor: createExtractor,
     recognize: recognize,
-    detectActivityVisual: detectActivityVisual,
+    detectMotionVisual: detectMotionVisual,
     FACE_CX_FRAC: FACE_CX_FRAC,
     FACE_CY_FRAC: FACE_CY_FRAC,
     FACE_H_FRAC: FACE_H_FRAC,

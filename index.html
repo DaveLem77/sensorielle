@@ -1892,13 +1892,13 @@
   // pendant et après un enregistrement -- montre en direct ce que le
   // système "voit".
   //
-  // David, 2026-11-15 : après deux essais ("il met les lignes du corps
-  // n'importe où" puis encore "pas du tout" après un premier correctif),
-  // stratégie complètement différente de celle d'avant (un seul bloc +
-  // "bouts de doigts" sur son enveloppe convexe, trop fragile) :
-  // detectActivityVisual (sign-recognizer.js) mesure une densité
-  // d'activité par cellules et peut ressortir jusqu'à 2 zones (les deux
-  // mains, courant en LSQ, au lieu d'un seul bloc forcé). Ici,
+  // David, 2026-11-15, après deux essais ratés ("il met les lignes du
+  // corps n'importe où", puis encore "pas du tout") : "suis le mouvement
+  // des mains ET du visage ET des bras" -- 3e stratégie, on arrête
+  // d'essayer de deviner ce qui est une "main" (couleur de peau, boîte
+  // de visage à position fixe) et on suit tout mouvement, partout dans
+  // l'image (voir detectMotionVisual, sign-recognizer.js). Jusqu'à 3
+  // zones (mains + visage + bras peuvent bouger indépendamment). Ici,
   // blendActivity() fait correspondre les zones d'une image à l'autre
   // (au plus proche), les lisse dans le temps, garde un court historique
   // pour la traînée, et tolère quelques ratés avant de faire disparaître
@@ -1910,6 +1910,7 @@
   const ZONE_ALPHA = 0.3;
   const ZONE_MAX_MISS = 5; // ~0.5s de tolérance avant de faire disparaître une zone
   const TRAIL_LEN = 6;
+  const MAX_ZONES = 3; // mains + visage + bras, voir detectMotionVisual
   const previewCanvas = document.createElement("canvas");
   const previewCtx = previewCanvas.getContext("2d", { willReadFrequently: true });
 
@@ -1940,7 +1941,7 @@
       if (sz.history.length > TRAIL_LEN) sz.history.shift();
     });
     rawZones.forEach(function (rz, ri) {
-      if (usedRaw[ri] || smoothZones.length >= 2) return;
+      if (usedRaw[ri] || smoothZones.length >= MAX_ZONES) return;
       smoothZones.push({ x: rz.x, y: rz.y, strength: rz.strength, missTicks: 0, history: [{ x: rz.x, y: rz.y }] });
     });
     smoothZones = smoothZones.filter(function (sz) { return sz.missTicks <= ZONE_MAX_MISS; });
@@ -1959,8 +1960,8 @@
         previewCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
         const img = previewCtx.getImageData(0, 0, WORK_W, WORK_H);
         const R = window.SensorielleSignRecognizer;
-        if (R && R.detectActivityVisual) {
-          const visual = R.detectActivityVisual(img, previewPrevGray, WORK_W, WORK_H);
+        if (R && R.detectMotionVisual) {
+          const visual = R.detectMotionVisual(img, previewPrevGray, WORK_W, WORK_H);
           previewPrevGray = visual.gray;
           renderOverlay(blendActivity(visual.points));
         }
