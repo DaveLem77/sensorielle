@@ -1768,6 +1768,8 @@
   "use strict";
   const stage = document.getElementById("stage");
   const video = document.getElementById("video");
+  const overlay = document.getElementById("overlay");
+  const overlayCtx = overlay ? overlay.getContext("2d") : null;
   const emptyState = document.getElementById("emptyState");
   const topbar = document.getElementById("topbar");
   const mainBtn = document.getElementById("mainBtn");
@@ -1790,7 +1792,7 @@
   const voiceBtn = document.getElementById("voiceBtn");
   if (!stage || !video || !mainBtn || !shutterBtn) return;
 
-  const IDLE_TEXT = "Analyse en cours…";
+  const IDLE_TEXT = "Prête à enregistrer";
   const RECORD_MS = 3500;
   // Dimensions de travail recalculees une fois la camera ouverte (voir
   // sizeWorkCanvas) pour garder le vrai ratio largeur/hauteur de la video —
@@ -1818,6 +1820,43 @@
     else { WORK_H = maxDim; WORK_W = Math.max(16, Math.round(maxDim * vw / vh)); }
     work.width = WORK_W; work.height = WORK_H;
   }
+
+  // Repere ovale affiche a l'ecran pour que la personne y centre son
+  // visage : la video remplit l'ecran en "cover" (donc rognee), alors que
+  // l'analyse (voir sign-recognizer.js) travaille sur l'image COMPLETE —
+  // on recalcule donc ici la meme transformation "cover" pour que le
+  // repere dessine tombe exactement sur les fractions FACE_CX_FRAC/
+  // FACE_CY_FRAC/FACE_H_FRAC utilisees cote analyse.
+  function resizeOverlay() {
+    if (!overlay) return;
+    overlay.width = window.innerWidth;
+    overlay.height = window.innerHeight;
+  }
+  function drawGuide() {
+    if (!overlay || !overlayCtx) return;
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var cw = overlay.width, ch = overlay.height;
+    overlayCtx.clearRect(0, 0, cw, ch);
+    if (!vw || !vh || !cw || !ch) return;
+    var R = window.SensorielleSignRecognizer;
+    var cxFrac = R ? R.FACE_CX_FRAC : 0.5, cyFrac = R ? R.FACE_CY_FRAC : 0.34, hFrac = R ? R.FACE_H_FRAC : 0.30;
+    var scale = Math.max(cw / vw, ch / vh);
+    var offX = (cw - vw * scale) / 2;
+    var offY = (ch - vh * scale) / 2;
+    var gx = offX + vw * cxFrac * scale;
+    var gy = offY + vh * cyFrac * scale;
+    var gh = vh * hFrac * scale;
+    var gw = gh * 0.78;
+    overlayCtx.save();
+    overlayCtx.strokeStyle = "rgba(255,255,255,0.85)";
+    overlayCtx.lineWidth = 2.5;
+    overlayCtx.setLineDash([6, 6]);
+    overlayCtx.beginPath();
+    overlayCtx.ellipse(gx, gy, gw / 2, gh / 2, 0, 0, Math.PI * 2);
+    overlayCtx.stroke();
+    overlayCtx.restore();
+  }
+  window.addEventListener("resize", function () { if (stage.classList.contains("live")) { resizeOverlay(); drawGuide(); } });
 
   function pickFrenchVoice() {
     if (!("speechSynthesis" in window)) return;
@@ -1888,12 +1927,10 @@
         camToggle.hidden = cams.length <= 1;
       } catch (e) {}
 
-      // Pré-chauffe la référence visage dès l'ouverture, pas seulement
-      // pendant l'enregistrement, pour qu'elle soit déjà stable au moment
-      // où l'utilisateur appuie sur le bouton.
-      extractor = SensorielleSignRecognizer.createExtractor();
+      resizeOverlay();
+      overlay.hidden = false;
+      drawGuide();
       SensorielleSignRecognizer.loadSignatures().catch(function () {});
-      startWarmLoop();
     } catch (err) {
       mainBtn.disabled = false;
       mainBtnLabel.textContent = "Activer la caméra";
@@ -1910,7 +1947,6 @@
   }
 
   function stopCamera() {
-    stopWarmLoop();
     stopRecording(true);
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
     if ("speechSynthesis" in window) speechSynthesis.cancel();
@@ -1920,29 +1956,15 @@
     topbar.style.display = "none";
     controlsBar.style.display = "none";
     captionWrap.style.display = "none";
+    if (overlay) { overlay.hidden = true; overlayCtx && overlayCtx.clearRect(0, 0, overlay.width, overlay.height); }
     mainBtnLabel.textContent = "Activer la caméra";
     mainBtn.disabled = false;
   }
 
-  // Boucle légère tournant en continu caméra ouverte (hors enregistrement)
-  // pour garder la référence "visage" déjà stabilisée, comme en Python.
-  let warmRaf = null;
-  function warmTick() {
-    if (!recording && video.videoWidth) {
-      workCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
-      try {
-        const img = workCtx.getImageData(0, 0, WORK_W, WORK_H);
-        extractor.pushFrame(img, WORK_W, WORK_H);
-      } catch (e) {}
-    }
-    warmRaf = requestAnimationFrame(warmTick);
-  }
-  function startWarmLoop() { if (!warmRaf) warmRaf = requestAnimationFrame(warmTick); }
-  function stopWarmLoop() { if (warmRaf) { cancelAnimationFrame(warmRaf); warmRaf = null; } }
-
   function startRecording() {
     if (recording || !video.videoWidth) return;
     recording = true;
+    extractor = SensorielleSignRecognizer.createExtractor(); // signature vierge pour cet essai
     shutterBtn.disabled = true;
     shutterBtn.classList.add("is-recording");
     resetCaption();

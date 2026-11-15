@@ -4,8 +4,9 @@
    de vrais mots LSQ). Nouvelle approche : aucun modele de vision par
    ordinateur telecharge, aucun reseau requis apres le chargement de la
    page. On suit la trajectoire + la forme de la main en mouvement (couleur
-   de peau + mouvement image par image, normalise par rapport au visage
-   detecte par la meme technique) puis on compare la sequence enregistree
+   de peau + mouvement image par image, normalise par rapport a un repere
+   visage de position/taille fixe affiche a l'ecran -- voir FACE_CX_FRAC
+   etc. plus bas) puis on compare la sequence enregistree
    aux 325 vraies videos du dictionnaire (deja extraites hors-ligne, memes
    canaux ici) via une distance DTW (Dynamic Time Warping) multi-canaux.
 
@@ -42,13 +43,29 @@
   // mask: Uint8Array taille w*h, 1 = pixel retenu. Tout est fait sur une
   // image reduite (voir WORK_W/WORK_H côté appelant) pour rester rapide.
 
+  // Fraction fixe du cadre ou l'on suppose le visage (voir le repere
+  // ovale affiche a l'ecran, dessine avec exactement les memes fractions
+  // - cx/cy/h - cote index.html). Remplace le 2026-11-15 (David : "ca ne
+  // traduisait jamais rien" sur son telephone) l'ancienne detection du
+  // visage par "plus gros blob de peau immobile", qui ne declenchait
+  // jamais sous certains eclairages/tons de peau -> aucune ligne n'etait
+  // jamais enregistree, donc rien n'etait jamais reconnu. Une geometrie
+  // fixe fonctionne toujours ; sa precision depend de l'alignement au
+  // repere affiche, pas d'une detection qui peut echouer silencieusement.
+  var FACE_CX_FRAC = 0.5, FACE_CY_FRAC = 0.34, FACE_H_FRAC = 0.30;
+
+  function fixedFaceRef(w, h) {
+    return { cx: w * FACE_CX_FRAC, cy: h * FACE_CY_FRAC, h: Math.max(6, h * FACE_H_FRAC) };
+  }
+
   function rgbToSkin(r, g, b) {
-    // Conversion YCrCb (BT.601) + seuils classiques peau. Pas de
-    // dependance externe, juste de l'arithmetique.
+    // Conversion YCrCb (BT.601) + seuils peau elargis (2026-11-15 : les
+    // seuils d'origine, trop stricts, rataient trop de tons de peau et
+    // d'eclairages de camera selfie mobile).
     var y = 0.299 * r + 0.587 * g + 0.114 * b;
     var cr = (r - y) * 0.713 + 128;
     var cb = (b - y) * 0.564 + 128;
-    return cr >= 135 && cr <= 180 && cb >= 85 && cb <= 135;
+    return cr >= 125 && cr <= 188 && cb >= 72 && cb <= 142;
   }
 
   function buildMasks(imgData, prevGray, w, h) {
@@ -141,52 +158,48 @@
 
   // ---- Extracteur d'etat, un objet par enregistrement en cours ---------
   function createExtractor() {
-    var faceRef = null; // {cx, cy, h} lisse (EMA)
     var prevGray = null;
     var rows = [];
+    var lastSignal = "aucun"; // pour diagnostic (voir getLastSignal)
 
     function pushFrame(imgData, w, h) {
       var masks = buildMasks(imgData, prevGray, w, h);
       prevGray = masks.gray;
 
-      // Visage = plus gros blob de peau peu mobile (dans le haut de
-      // l'image, ou le visage se trouve typiquement face camera).
-      var stillSkin = new Uint8Array(w * h);
-      for (var i = 0; i < w * h; i++) {
-        stillSkin[i] = masks.skin[i] && !masks.motion[i] ? 1 : 0;
-      }
-      var faceBlob = largestBlob(stillSkin, w, h, 20);
-      if (faceBlob) {
-        var fh = Math.max(6, Math.sqrt(faceBlob.area) * 1.6);
-        if (!faceRef) {
-          faceRef = { cx: faceBlob.cx, cy: faceBlob.cy, h: fh };
-        } else {
-          faceRef.cx = 0.8 * faceRef.cx + 0.2 * faceBlob.cx;
-          faceRef.cy = 0.8 * faceRef.cy + 0.2 * faceBlob.cy;
-          faceRef.h = 0.8 * faceRef.h + 0.2 * fh;
-        }
-      }
-      if (!faceRef) return null; // pas encore de reference -> on attend
-
-      // Zone visage/cou a exclure, meme geometrie que la version Python.
-      var fx = faceRef.cx, fy = faceRef.cy, fhh = faceRef.h;
-      var bx0 = Math.max(0, Math.round(fx - 0.8 * fhh));
-      var bx1 = Math.min(w, Math.round(fx + 0.8 * fhh));
+      var face = fixedFaceRef(w, h);
+      var fx = face.cx, fy = face.cy, fhh = face.h;
+      var bx0 = Math.max(0, Math.round(fx - 0.85 * fhh));
+      var bx1 = Math.min(w, Math.round(fx + 0.85 * fhh));
       var by0 = Math.max(0, Math.round(fy - 0.9 * fhh));
-      var by1 = Math.min(h, Math.round(fy + 1.5 * fhh));
+      var by1 = Math.min(h, Math.round(fy + 1.6 * fhh));
 
-      var movingHand = new Uint8Array(w * h);
+      function outsideFace(x, y) { return !(y >= by0 && y < by1 && x >= bx0 && x < bx1); }
+
+      // 1) peau + mouvement (le plus precis quand ca marche).
+      // 2) a defaut, mouvement seul (plus permissif aux tons de peau et
+      //    eclairages mal captes par les seuils couleur).
+      // 3) a defaut, peau seule (utile si le signe est tenu presque
+      //    immobile, sous le seuil de mouvement).
+      // Les trois sont systematiquement limitees a l'exterieur du cadre
+      // visage/cou, donc aucune ne peut juste "retrouver" le visage lui-meme.
+      var hand = null, signal = "aucun";
+      var skinMotion = new Uint8Array(w * h);
+      var motionOnly = new Uint8Array(w * h);
+      var skinOnly = new Uint8Array(w * h);
       for (var y = 0; y < h; y++) {
-        var inBand = y >= by0 && y < by1;
         for (var x = 0; x < w; x++) {
           var idx = y * w + x;
-          if (!masks.skin[idx] || !masks.motion[idx]) continue;
-          if (inBand && x >= bx0 && x < bx1) continue; // visage/cou exclu
-          movingHand[idx] = 1;
+          if (!outsideFace(x, y)) continue;
+          if (masks.skin[idx] && masks.motion[idx]) skinMotion[idx] = 1;
+          if (masks.motion[idx]) motionOnly[idx] = 1;
+          if (masks.skin[idx]) skinOnly[idx] = 1;
         }
       }
-      movingHand = dilate(movingHand, w, h, 1);
-      var hand = largestBlob(movingHand, w, h, 10);
+      hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 8);
+      if (hand) signal = "peau+mouvement";
+      if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 18); if (hand) signal = "mouvement"; }
+      if (!hand) { hand = largestBlob(skinOnly, w, h, 14); if (hand) signal = "peau"; }
+      lastSignal = signal;
       if (!hand) return null;
 
       var row = [
@@ -203,7 +216,9 @@
       return rows.length ? rows : null;
     }
 
-    return { pushFrame: pushFrame, finish: finish };
+    function getLastSignal() { return lastSignal; }
+
+    return { pushFrame: pushFrame, finish: finish, getLastSignal: getLastSignal };
   }
 
   // ---- DTW multi-canaux (poids par canal, cout euclidien pondere) ------
@@ -260,5 +275,8 @@
     loadSignatures: loadSignatures,
     createExtractor: createExtractor,
     recognize: recognize,
+    FACE_CX_FRAC: FACE_CX_FRAC,
+    FACE_CY_FRAC: FACE_CY_FRAC,
+    FACE_H_FRAC: FACE_H_FRAC,
   };
 })(window);
