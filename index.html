@@ -1831,6 +1831,17 @@
     else { WORK_H = maxDim; WORK_W = Math.max(16, Math.round(maxDim * vw / vh)); }
     work.width = WORK_W; work.height = WORK_H;
   }
+  // David, 2026-11-15 : "ça marque 'démarrage...' et puis rien d'autre"
+  // -- le diagnostic de l'aperçu (voir startLivePreview) ne se met
+  // jamais à jour après le tout premier texte, ce qui pointe vers
+  // video.videoWidth qui reste à 0 sur son appareil au moment où on
+  // l'a lu (juste après video.play(), qui résout parfois avant que les
+  // métadonnées réelles soient disponibles sur certains navigateurs
+  // mobiles). sizeWorkCanvas() est donc rappelée ici aussi dès que le
+  // navigateur signale que les dimensions réelles sont connues, au lieu
+  // de ne compter que sur l'appel unique juste après play().
+  video.addEventListener("loadedmetadata", sizeWorkCanvas);
+  video.addEventListener("resize", sizeWorkCanvas);
 
   // Repere ovale affiche a l'ecran pour que la personne y centre son
   // visage : la video remplit l'ecran en "cover" (donc rognee), alors que
@@ -1960,8 +1971,19 @@
     previewPrevGray = null;
     smoothZones = [];
     if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "aperçu : démarrage…"; }
+    var waitTicks = 0;
     previewTimer = setInterval(function () {
-      if (!video.videoWidth || !WORK_W || !WORK_H) return;
+      if (!video.videoWidth || !WORK_W || !WORK_H) {
+        // Ne reste JAMAIS bloqué sur "démarrage…" sans explication (voir
+        // David, 2026-11-15) : on dit explicitement ce qu'on attend, avec
+        // les vraies valeurs, pour voir si ça se débloque après quelques
+        // images ou si ça reste coincé pour de bon.
+        waitTicks++;
+        if (previewDiag) {
+          previewDiag.textContent = "aperçu : en attente de la vidéo (videoWidth=" + video.videoWidth + ", readyState=" + video.readyState + ", tentative " + waitTicks + ")";
+        }
+        return;
+      }
       if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
       if (previewCanvas.height !== WORK_H) previewCanvas.height = WORK_H;
       try {
@@ -2110,7 +2132,14 @@
   let diagTicks = 0, diagHits = 0, diagLastErr = null;
 
   function startRecording() {
-    if (recording || !video.videoWidth) return;
+    if (recording) return;
+    if (!video.videoWidth) {
+      // Avant, ce cas ne faisait RIEN du tout (bouton qui semble mort,
+      // sans aucun message) -- voir le même symptôme suspecté côté
+      // aperçu live (David, 2026-11-15 : "démarrage… et puis rien").
+      showError("La caméra n'a pas encore fourni d'image (vidéo pas prête) — attends une seconde et réessaie.");
+      return;
+    }
     recording = true;
     extractor = SensorielleSignRecognizer.createExtractor(); // signature vierge pour cet essai
     diagTicks = 0; diagHits = 0; diagLastErr = null;
