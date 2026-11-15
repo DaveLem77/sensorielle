@@ -1854,51 +1854,51 @@
     overlay.width = window.innerWidth;
     overlay.height = window.innerHeight;
   }
-  // renderOverlay dessine, pour chaque zone d'activité détectée (voir
-  // startLivePreview / detectActivityVisual côté sign-recognizer.js), un
-  // halo doux qui suit la position + une traînée courte qui s'estompe
-  // (trajectoire récente) -- plus aucune ligne droite prétendant être un
-  // "doigt" précis. Le repère ovale pour le visage a été retiré (David,
-  // 2026-11-15 : "c'est laid") -- la zone visage reste utilisée en
-  // interne pour l'exclure de la détection, elle n'est juste plus
-  // dessinée. Le CSS (.stage.mirror #overlay) gère tout seul le miroir
-  // en caméra avant : on dessine toujours dans le repère "écran
-  // non-inversé".
-  function renderOverlay(zones) {
+  // renderOverlay dessine un nuage de points directement sur le
+  // mouvement brut de quelques images récentes (les plus vieilles plus
+  // transparentes, pour une traînée qui s'estompe) -- AUCUN
+  // regroupement en "zones", AUCUNE identité à suivre d'une image à
+  // l'autre. Le repère ovale pour le visage a été retiré (David,
+  // 2026-11-15 : "c'est laid"). Le CSS (.stage.mirror #overlay) gère
+  // tout seul le miroir en caméra avant : on dessine toujours dans le
+  // repère "écran non-inversé".
+  //
+  // David, 2026-11-15 : "ça ne suit pas du tout les mouvements, change
+  // de stratégie, c'est comme un filtre mais avec les mains et les bras
+  // en plus." Le vrai bug de la version précédente (zones groupées +
+  // appariées d'une image à l'autre, voir l'historique git) : tout
+  // mouvement trop loin de la position actuelle du repère était rejeté
+  // comme un "raté" plutôt que suivi -- donc dès qu'on bougeait
+  // vraiment, le repère restait figé. Cette version-ci n'a plus cette
+  // logique du tout : chaque image affiche directement où est le
+  // mouvement CETTE image, sans décider si "c'est la même main qu'avant".
+  function renderOverlay(frames) {
     if (!overlay || !overlayCtx) return;
     var vw = video.videoWidth, vh = video.videoHeight;
     var cw = overlay.width, ch = overlay.height;
     overlayCtx.clearRect(0, 0, cw, ch);
-    if (!vw || !vh || !cw || !ch || !zones || !zones.length || !WORK_W || !WORK_H) return;
+    if (!vw || !vh || !cw || !ch || !frames || !frames.length || !WORK_W || !WORK_H) return;
     var scale = Math.max(cw / vw, ch / vh);
     var offX = (cw - vw * scale) / 2;
     var offY = (ch - vh * scale) / 2;
-    // Les coordonnées des zones sont dans l'espace du canvas de travail
+    // Les coordonnées des points sont dans l'espace du canvas de travail
     // (WORK_W x WORK_H), qui garde le même ratio que la vidéo brute ->
     // même transformation "cover", juste remise à l'échelle de
     // WORK_W/WORK_H vers vw/vh d'abord.
     var kx = vw / WORK_W, ky = vh / WORK_H;
     var toScreen = function (px, py) { return { x: offX + px * kx * scale, y: offY + py * ky * scale }; };
     overlayCtx.save();
-    zones.forEach(function (z) {
-      var hist = (z.history || []).map(function (p) { return toScreen(p.x, p.y); });
-      for (var i = 1; i < hist.length; i++) {
+    var n = frames.length;
+    frames.forEach(function (pts, i) {
+      var alpha = 0.12 + 0.75 * ((i + 1) / n); // plus vieux = plus transparent, plus récent = presque plein
+      var r = 2.6 + 2 * ((i + 1) / n);
+      overlayCtx.fillStyle = "rgba(130,230,255," + alpha.toFixed(2) + ")";
+      for (var k = 0; k < pts.length; k++) {
+        var p = toScreen(pts[k].x, pts[k].y);
         overlayCtx.beginPath();
-        overlayCtx.strokeStyle = "rgba(120,225,255," + (0.06 + 0.26 * (i / hist.length)) + ")";
-        overlayCtx.lineWidth = 2;
-        overlayCtx.moveTo(hist[i - 1].x, hist[i - 1].y);
-        overlayCtx.lineTo(hist[i].x, hist[i].y);
-        overlayCtx.stroke();
+        overlayCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        overlayCtx.fill();
       }
-      var p = toScreen(z.x, z.y);
-      var r = 10 + Math.min(12, (z.strength || 0) * 1.8);
-      var grad = overlayCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-      grad.addColorStop(0, "rgba(130,230,255,0.85)");
-      grad.addColorStop(1, "rgba(130,230,255,0)");
-      overlayCtx.fillStyle = grad;
-      overlayCtx.beginPath();
-      overlayCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      overlayCtx.fill();
     });
     overlayCtx.restore();
   }
@@ -1908,68 +1908,22 @@
   // Aperçu continu léger (visuel seulement, jamais utilisé pour la
   // reconnaissance) : pendant que la caméra est ouverte -- avant,
   // pendant et après un enregistrement -- montre en direct ce que le
-  // système "voit".
-  //
-  // David, 2026-11-15, après deux essais ratés ("il met les lignes du
-  // corps n'importe où", puis encore "pas du tout") : "suis le mouvement
-  // des mains ET du visage ET des bras" -- 3e stratégie, on arrête
-  // d'essayer de deviner ce qui est une "main" (couleur de peau, boîte
-  // de visage à position fixe) et on suit tout mouvement, partout dans
-  // l'image (voir detectMotionVisual, sign-recognizer.js). Jusqu'à 3
-  // zones (mains + visage + bras peuvent bouger indépendamment). Ici,
-  // blendActivity() fait correspondre les zones d'une image à l'autre
-  // (au plus proche), les lisse dans le temps, garde un court historique
-  // pour la traînée, et tolère quelques ratés avant de faire disparaître
-  // une zone -- pour que le repère suive vraiment l'activité au lieu de
-  // sauter partout.
+  // système "voit". 4e stratégie (voir detectMotionPoints,
+  // sign-recognizer.js, et le commentaire sur renderOverlay ci-dessus) :
+  // plus de regroupement en zones ni de lissage/appariement d'une image
+  // à l'autre -- on garde juste les quelques dernières images de points
+  // de mouvement bruts pour une traînée qui s'estompe.
   let previewTimer = null;
   let previewPrevGray = null;
-  let smoothZones = []; // [{x,y,strength,missTicks,history:[{x,y}...]}], espace WORK
-  const ZONE_ALPHA = 0.3;
-  const ZONE_MAX_MISS = 5; // ~0.5s de tolérance avant de faire disparaître une zone
-  const TRAIL_LEN = 6;
-  const MAX_ZONES = 3; // mains + visage + bras, voir detectMotionVisual
+  let recentFrames = []; // [[{x,y}...], ...], la plus récente en dernier
+  const TRAIL_FRAMES = 3;
   const previewCanvas = document.createElement("canvas");
   const previewCtx = previewCanvas.getContext("2d", { willReadFrequently: true });
-
-  function blendActivity(rawZones) {
-    rawZones = rawZones || [];
-    var usedRaw = new Array(rawZones.length).fill(false);
-    var maxJump = Math.max(WORK_W, WORK_H) * 0.5;
-    var maxJump2 = maxJump * maxJump;
-    smoothZones.forEach(function (sz) {
-      var bestI = -1, bestD = Infinity;
-      rawZones.forEach(function (rz, ri) {
-        if (usedRaw[ri]) return;
-        var dx = rz.x - sz.x, dy = rz.y - sz.y;
-        var d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; bestI = ri; }
-      });
-      if (bestI !== -1 && bestD < maxJump2) {
-        usedRaw[bestI] = true;
-        var rz = rawZones[bestI];
-        sz.x += (rz.x - sz.x) * ZONE_ALPHA;
-        sz.y += (rz.y - sz.y) * ZONE_ALPHA;
-        sz.strength = rz.strength;
-        sz.missTicks = 0;
-      } else {
-        sz.missTicks++;
-      }
-      sz.history.push({ x: sz.x, y: sz.y });
-      if (sz.history.length > TRAIL_LEN) sz.history.shift();
-    });
-    rawZones.forEach(function (rz, ri) {
-      if (usedRaw[ri] || smoothZones.length >= MAX_ZONES) return;
-      smoothZones.push({ x: rz.x, y: rz.y, strength: rz.strength, missTicks: 0, history: [{ x: rz.x, y: rz.y }] });
-    });
-    smoothZones = smoothZones.filter(function (sz) { return sz.missTicks <= ZONE_MAX_MISS; });
-    return smoothZones;
-  }
 
   function startLivePreview() {
     stopLivePreview();
     previewPrevGray = null;
-    smoothZones = [];
+    recentFrames = [];
     if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "aperçu : démarrage…"; }
     var waitTicks = 0;
     previewTimer = setInterval(function () {
@@ -1990,19 +1944,15 @@
         previewCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
         const img = previewCtx.getImageData(0, 0, WORK_W, WORK_H);
         const R = window.SensorielleSignRecognizer;
-        if (R && R.detectMotionVisual) {
-          const visual = R.detectMotionVisual(img, previewPrevGray, WORK_W, WORK_H);
+        if (R && R.detectMotionPoints) {
+          const visual = R.detectMotionPoints(img, previewPrevGray, WORK_W, WORK_H);
           previewPrevGray = visual.gray;
-          const zones = blendActivity(visual.points);
-          renderOverlay(zones);
-          // Diagnostic visible (David, 2026-11-15 : "y a plus de lignes du
-          // tout qui me suivent") -- pour savoir, au prochain essai, si
-          // c'est "0% de l'image bouge" (seuil pixel trop strict, voir
-          // buildMasks) ou "ça bouge mais jamais groupé" (seuil/fusion
-          // par cellule) au lieu de deviner encore à l'aveugle.
+          recentFrames.push(visual.points);
+          if (recentFrames.length > TRAIL_FRAMES) recentFrames.shift();
+          renderOverlay(recentFrames);
           if (previewDiag && visual.diag) {
             const pct = visual.diag.totalPixels ? ((visual.diag.motionPixels / visual.diag.totalPixels) * 100).toFixed(1) : "0.0";
-            previewDiag.textContent = "aperçu : " + pct + "% de l'image bouge · " + visual.diag.cellsFound + " cellules actives · " + zones.length + " zone(s) affichée(s)";
+            previewDiag.textContent = "aperçu : " + pct + "% de l'image bouge · " + visual.diag.pointsShown + " points affichés";
           }
         }
       } catch (e) {
@@ -2014,7 +1964,7 @@
     if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
     if (previewDiag) { previewDiag.hidden = true; previewDiag.textContent = ""; }
     previewPrevGray = null;
-    smoothZones = [];
+    recentFrames = [];
   }
 
   function pickFrenchVoice() {

@@ -179,99 +179,47 @@
     return result;
   }
 
-  // ---- Repere visuel : densite de MOUVEMENT pur, sur toute l'image.
-  // 3e strategie, encore differente des deux precedentes. -------------
-  // David, 2026-11-15, apres le 2e essai encore rate : "suis le
-  // mouvement des mains ET du visage ET des bras" -- en clair, arreter
-  // d'essayer de deviner ce qui est une "main" (couleur de peau, boite
-  // d'exclusion du visage a position fixe) et juste suivre TOUT ce qui
-  // bouge, partout dans l'image. Deux sources d'erreur disparaissent
-  // d'un coup avec ce recentrage :
-  //  1) rgbToSkin() (seuils Cr/Cb) est sensible a l'eclairage et au
-  //     teint -- il pouvait rater la main ou accrocher autre chose selon
-  //     la lumiere chez David. Le mouvement (difference de gris entre
-  //     deux images) ne depend d'aucune couleur.
-  //  2) fixedFaceRef() suppose le visage a une position/taille FIXE
-  //     (fractions de l'image) -- si son cadrage reel differe de cette
-  //     hypothese, la boite d'exclusion tombe au mauvais endroit et
-  //     fausse tout ce qui en depend. Le mouvement pur n'a besoin
-  //     d'aucune hypothese de cadrage : visage, mains ET bras qui
-  //     bougent ressortent tous, tels quels, sans boite a positionner.
-  // On garde la meme mecanique de groupement que la version precedente
-  // (densite par cellules -> fusion des cellules actives voisines en
-  // zones), juste appliquee au mouvement seul sur l'image complete, et
-  // jusqu'a 3 zones au lieu de 2 (mains + visage + bras peuvent bouger
-  // independamment). Le lissage dans le temps (blendActivity, cote
-  // index.html) reste inchange.
-  function detectMotionVisual(imgData, prevGray, w, h) {
+  // ---- Repere visuel : nuage de points sur le mouvement brut, sans
+  // regroupement ni lissage par "identite". 4e strategie. -------------
+  // David, 2026-11-15 : des points/lignes sont enfin apparus (la
+  // reparation de video.videoWidth a marche) mais "ca ne suit pas du
+  // tout les mouvements -- change de strategie, ca doit pas etre dur,
+  // c'est comme un filtre mais avec les mains et les bras en plus."
+  //
+  // Le vrai bug de la version precedente (detectActivityVisual/zones) :
+  // elle groupait le mouvement en 1-3 "zones", puis essayait de les
+  // suivre d'une image a l'autre en les appariant a la zone precedente
+  // la plus proche (voir blendActivity, cote index.html) -- et rejetait
+  // tout mouvement trop loin de la position actuelle comme un "rate"
+  // plutot que de bouger. Resultat : des que le mouvement reel allait
+  // plus vite/plus loin que ce seuil, le repere restait fige sur sa
+  // derniere position au lieu de suivre -- exactement "ca ne suit pas
+  // du tout".
+  //
+  // Nouvelle strategie, beaucoup plus simple ("comme un filtre") :
+  // aucune identite a suivre d'une image a l'autre, aucun seuil de
+  // "trop loin pour etre le meme". On prend juste TOUS les pixels de
+  // mouvement de l'image courante (sur-echantillonnes a intervalles
+  // reguliers pour rester leger) et on les affiche tels quels, options
+  // visage/mains/bras compris -- un nuage de points qui EST la forme du
+  // mouvement de cette image, pas une estimation lissee de son centre.
+  // index.html garde juste 2-3 images recentes pour un effet de traine
+  // qui s'estompe, sans aucune logique d'appariement.
+  function detectMotionPoints(imgData, prevGray, w, h) {
     var masks = buildMasks(imgData, prevGray, w, h);
-    var face = fixedFaceRef(w, h); // garde seulement pour reference/diagnostic, plus pour exclure quoi que ce soit ici
-
-    var cols = Math.max(4, Math.round(w / 14));
-    var rows = Math.max(4, Math.round(h / 14));
-    var cellW = w / cols, cellH = h / rows;
-    var score = new Float32Array(cols * rows);
+    var stride = Math.max(2, Math.round(Math.min(w, h) / 36)); // ~36 echantillons par cote au plus -> leger
+    var pts = [];
     var motionPixels = 0;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         var idx = y * w + x;
         if (!masks.motion[idx]) continue;
         motionPixels++;
-        var ci = Math.min(cols - 1, Math.floor(x / cellW));
-        var cj = Math.min(rows - 1, Math.floor(y / cellH));
-        score[cj * cols + ci] += 1;
+        if ((x % stride) === 0 && (y % stride) === 0) pts.push({ x: x, y: y });
       }
     }
-
-    // David, 2026-11-15, apres ce 3e essai : "y a plus de lignes du tout
-    // qui me suivent" -- plus rien ne s'affiche jamais, donc le seuil par
-    // cellule etait probablement trop strict pour l'amplitude de
-    // mouvement reelle captee par SA camera (compression, bas niveau de
-    // lumiere, etc. -- on ne peut pas le savoir sans donnees reelles).
-    // Seuil de cellule abaisse (0.05 -> 0.02) ; le seuil de mouvement
-    // pixel par pixel (masks.motion, dans buildMasks) n'est PAS touche
-    // ici car il est partage avec createExtractor/pushFrame (la vraie
-    // reconnaissance, deja validee hors-ligne) -- le changer risquerait
-    // de modifier la reconnaissance elle-meme sans nouvelle validation.
-    // diag.motionPixels / diag.cellsFound sont renvoyes pour etre
-    // affiches a l'ecran (voir index.html) : si David revoit "rien" avec
-    // ce build, ces chiffres diront directement si c'est "aucun pixel ne
-    // bouge assez" (probleme de seuil pixel, dans buildMasks) ou "des
-    // pixels bougent mais jamais assez groupes" (probleme de seuil/
-    // regroupement par cellule, ici) -- au lieu de deviner une 4e fois.
-    var cellArea = cellW * cellH;
-    var cells = [];
-    for (var k = 0; k < score.length; k++) {
-      var s = score[k] / cellArea;
-      if (s > 0.02) {
-        cells.push({ x: (k % cols + 0.5) * cellW, y: (Math.floor(k / cols) + 0.5) * cellH, s: s });
-      }
-    }
-    var diag = { motionPixels: motionPixels, totalPixels: w * h, cellsFound: cells.length };
-    if (!cells.length) return { face: face, points: [], gray: masks.gray, signal: "aucun", diag: diag };
-    cells.sort(function (a, b) { return b.s - a.s; });
-
-    // Regroupe les cellules actives voisines en au plus 3 zones (mains +
-    // visage/bras) : glouton -- on part de la cellule la plus active, on
-    // absorbe toute cellule proche dans la meme zone, et on recommence
-    // avec ce qui reste.
-    var mergeDist = Math.max(cellW, cellH) * 1.7;
-    var used = new Array(cells.length).fill(false);
-    var zones = [];
-    for (var ci2 = 0; ci2 < cells.length && zones.length < 3; ci2++) {
-      if (used[ci2]) continue;
-      var sx = 0, sy = 0, sw = 0, n = 0;
-      for (var cj2 = 0; cj2 < cells.length; cj2++) {
-        if (used[cj2]) continue;
-        var dx = cells[cj2].x - cells[ci2].x, dy = cells[cj2].y - cells[ci2].y;
-        if (Math.sqrt(dx * dx + dy * dy) <= mergeDist) {
-          used[cj2] = true;
-          sx += cells[cj2].x * cells[cj2].s; sy += cells[cj2].y * cells[cj2].s; sw += cells[cj2].s; n++;
-        }
-      }
-      if (sw > 0) zones.push({ x: sx / sw, y: sy / sw, strength: sw, cellCount: n });
-    }
-    return { face: face, points: zones, gray: masks.gray, signal: zones.length ? "mouvement" : "aucun", diag: diag };
+    var diag = { motionPixels: motionPixels, totalPixels: w * h, pointsShown: pts.length };
+    return { points: pts, gray: masks.gray, signal: pts.length ? "mouvement" : "aucun", diag: diag };
   }
 
   // ---- Extracteur d'etat, un objet par enregistrement en cours ---------
@@ -393,7 +341,7 @@
     loadSignatures: loadSignatures,
     createExtractor: createExtractor,
     recognize: recognize,
-    detectMotionVisual: detectMotionVisual,
+    detectMotionPoints: detectMotionPoints,
     FACE_CX_FRAC: FACE_CX_FRAC,
     FACE_CY_FRAC: FACE_CY_FRAC,
     FACE_H_FRAC: FACE_H_FRAC,
