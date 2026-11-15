@@ -107,7 +107,10 @@
   }
 
   // Composantes connexes (union-find a deux passes) -> plus gros blob.
-  function largestBlob(mask, w, h, minArea) {
+  // opts.points demande aussi un contour approche (min/max x par ligne
+  // du plus gros blob) pour l'aperçu visuel (voir detectHandVisual) --
+  // jamais utilise par pushFrame, qui n'en a pas besoin.
+  function largestBlob(mask, w, h, minArea, opts) {
     var n = w * h;
     var label = new Int32Array(n);
     var parent = [];
@@ -148,11 +151,117 @@
     if (best === null) return null;
     var w_ = maxX[best] - minX[best] + 1;
     var h_ = maxY[best] - minY[best] + 1;
-    return {
+    var result = {
       area: area[best],
       cx: sumX[best] / area[best],
       cy: sumY[best] / area[best],
       aspect: h_ > 0 ? w_ / h_ : 0,
+    };
+    if (opts && opts.points) {
+      var pts = [];
+      for (var yy = minY[best]; yy <= maxY[best]; yy++) {
+        var rowMinX = -1, rowMaxX = -1;
+        var base = yy * w;
+        for (var xx = minX[best]; xx <= maxX[best]; xx++) {
+          var ii = base + xx;
+          if (label[ii] && find(label[ii]) === Number(best)) {
+            if (rowMinX === -1) rowMinX = xx;
+            rowMaxX = xx;
+          }
+        }
+        if (rowMinX !== -1) {
+          pts.push({ x: rowMinX, y: yy });
+          if (rowMaxX !== rowMinX) pts.push({ x: rowMaxX, y: yy });
+        }
+      }
+      result.points = pts;
+    }
+    return result;
+  }
+
+  // ---- Repere visuel "mini squelette" (David, 2026-11-15 : un retour
+  // visuel qui suit le visage, les mouvements et les "doigts") ----------
+  // Enveloppe convexe (monotone chain) du contour approche du blob, puis
+  // on choisit jusqu'a 5 points de l'enveloppe les plus eloignes du
+  // centre et suffisamment espaces entre eux -- une approximation
+  // classique "defauts de convexite" des bouts de doigts, sans modele.
+  function convexHull(points) {
+    if (points.length < 3) return points.slice();
+    var pts = points.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; });
+    function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+    var lower = [];
+    for (var i = 0; i < pts.length; i++) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
+      lower.push(pts[i]);
+    }
+    var upper = [];
+    for (var j = pts.length - 1; j >= 0; j--) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[j]) <= 0) upper.pop();
+      upper.push(pts[j]);
+    }
+    upper.pop(); lower.pop();
+    return lower.concat(upper);
+  }
+
+  function pickTips(hull, cx, cy, maxTips, minSep) {
+    var scored = hull.map(function (p) {
+      var dx = p.x - cx, dy = p.y - cy;
+      return { p: p, d: Math.sqrt(dx * dx + dy * dy) };
+    }).sort(function (a, b) { return b.d - a.d; });
+    var picked = [];
+    for (var i = 0; i < scored.length && picked.length < maxTips; i++) {
+      var cand = scored[i].p;
+      var ok = true;
+      for (var j = 0; j < picked.length; j++) {
+        var dx = cand.x - picked[j].x, dy = cand.y - picked[j].y;
+        if (Math.sqrt(dx * dx + dy * dy) < minSep) { ok = false; break; }
+      }
+      if (ok) picked.push(cand);
+    }
+    return picked;
+  }
+
+  // Detection "a l'affichage seulement" (jamais utilisee pour la
+  // reconnaissance elle-meme) : reutilise exactement la meme chaine de
+  // repli peau+mouvement / mouvement / peau que pushFrame, pour que ce
+  // qu'on affiche corresponde a ce qui est vraiment capte pendant un
+  // enregistrement. prevGray est fourni par l'appelant (boucle d'aperçu
+  // continue, separee de l'enregistrement).
+  function detectHandVisual(imgData, prevGray, w, h) {
+    var masks = buildMasks(imgData, prevGray, w, h);
+    var face = fixedFaceRef(w, h);
+    var fx = face.cx, fy = face.cy, fhh = face.h;
+    var bx0 = Math.max(0, Math.round(fx - 0.85 * fhh));
+    var bx1 = Math.min(w, Math.round(fx + 0.85 * fhh));
+    var by0 = Math.max(0, Math.round(fy - 0.9 * fhh));
+    var by1 = Math.min(h, Math.round(fy + 1.6 * fhh));
+    function outsideFace(x, y) { return !(y >= by0 && y < by1 && x >= bx0 && x < bx1); }
+
+    var skinMotion = new Uint8Array(w * h);
+    var motionOnly = new Uint8Array(w * h);
+    var skinOnly = new Uint8Array(w * h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var idx = y * w + x;
+        if (!outsideFace(x, y)) continue;
+        if (masks.skin[idx] && masks.motion[idx]) skinMotion[idx] = 1;
+        if (masks.motion[idx]) motionOnly[idx] = 1;
+        if (masks.skin[idx]) skinOnly[idx] = 1;
+      }
+    }
+    var hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 8, { points: true });
+    var signal = "peau+mouvement";
+    if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 18, { points: true }); signal = "mouvement"; }
+    if (!hand) { hand = largestBlob(skinOnly, w, h, 14, { points: true }); signal = "peau"; }
+    if (!hand) return { face: face, hand: null, gray: masks.gray, signal: "aucun" };
+
+    var hull = convexHull(hand.points);
+    var tips = pickTips(hull, hand.cx, hand.cy, 5, Math.max(4, fhh * 0.12));
+    return {
+      face: face,
+      hand: { cx: hand.cx, cy: hand.cy, tips: tips },
+      gray: masks.gray,
+      signal: signal,
     };
   }
 
@@ -275,6 +384,7 @@
     loadSignatures: loadSignatures,
     createExtractor: createExtractor,
     recognize: recognize,
+    detectHandVisual: detectHandVisual,
     FACE_CX_FRAC: FACE_CX_FRAC,
     FACE_CY_FRAC: FACE_CY_FRAC,
     FACE_H_FRAC: FACE_H_FRAC,

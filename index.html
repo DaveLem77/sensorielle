@@ -151,6 +151,10 @@
   .stage { position: fixed; inset: 0; height: 100dvh; width: 100vw; overflow: hidden; background: #000; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
   .stage.mirror video { transform: scaleX(-1); }
+  /* Sans cette regle, le squelette main/doigts (asymetrique) dessine sur
+     #overlay apparaîtrait du mauvais côté en caméra avant, alors que le
+     repère visage (symétrique) ne le laissait jamais voir avant. */
+  .stage.mirror #overlay { transform: scaleX(-1); }
   #overlay { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
   #overlay[hidden] { display: none; }
   .scrim-top, .scrim-bottom { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2; }
@@ -1832,7 +1836,14 @@
     overlay.width = window.innerWidth;
     overlay.height = window.innerHeight;
   }
-  function drawGuide() {
+  // renderOverlay dessine le repère visage (fixe) et, si on lui passe une
+  // main détectée (voir startLivePreview), un mini squelette léger —
+  // centre de la main + traits fins vers les bouts "doigts" approchés —
+  // juste pour le retour visuel ; ça ne change rien à la reconnaissance
+  // elle-même (qui passe par createExtractor().pushFrame, séparément).
+  // Le CSS (.stage.mirror #overlay) gère tout seul le miroir en caméra
+  // avant : on dessine toujours dans le repère "écran non-inversé".
+  function renderOverlay(hand) {
     if (!overlay || !overlayCtx) return;
     var vw = video.videoWidth, vh = video.videoHeight;
     var cw = overlay.width, ch = overlay.height;
@@ -1855,8 +1866,73 @@
     overlayCtx.ellipse(gx, gy, gw / 2, gh / 2, 0, 0, Math.PI * 2);
     overlayCtx.stroke();
     overlayCtx.restore();
+
+    if (hand && WORK_W && WORK_H) {
+      // Les coordonnées de hand sont dans l'espace du canvas de travail
+      // (WORK_W x WORK_H), qui garde le même ratio que la vidéo brute ->
+      // même transformation "cover" que le repère visage, juste remise à
+      // l'échelle de WORK_W/WORK_H vers vw/vh d'abord.
+      var kx = vw / WORK_W, ky = vh / WORK_H;
+      var toScreen = function (px, py) {
+        return { x: offX + px * kx * scale, y: offY + py * ky * scale };
+      };
+      var center = toScreen(hand.cx, hand.cy);
+      overlayCtx.save();
+      overlayCtx.strokeStyle = "rgba(100,220,255,0.95)";
+      overlayCtx.fillStyle = "rgba(100,220,255,0.95)";
+      overlayCtx.lineWidth = 2;
+      (hand.tips || []).forEach(function (tip) {
+        var p = toScreen(tip.x, tip.y);
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(center.x, center.y);
+        overlayCtx.lineTo(p.x, p.y);
+        overlayCtx.stroke();
+        overlayCtx.beginPath();
+        overlayCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        overlayCtx.fill();
+      });
+      overlayCtx.beginPath();
+      overlayCtx.arc(center.x, center.y, 5, 0, Math.PI * 2);
+      overlayCtx.fill();
+      overlayCtx.restore();
+    }
   }
+  function drawGuide() { renderOverlay(null); }
   window.addEventListener("resize", function () { if (stage.classList.contains("live")) { resizeOverlay(); drawGuide(); } });
+
+  // Aperçu continu léger (visuel seulement, jamais utilisé pour la
+  // reconnaissance) : détecte la main à l'affichage pendant que la caméra
+  // est ouverte -- avant, pendant et après un enregistrement -- pour
+  // montrer en direct ce que le système "voit" (David, 2026-11-15 :
+  // retour visuel qui suit le visage, les mouvements et les doigts,
+  // "comme un mini squelette").
+  let previewTimer = null;
+  let previewPrevGray = null;
+  const previewCanvas = document.createElement("canvas");
+  const previewCtx = previewCanvas.getContext("2d", { willReadFrequently: true });
+  function startLivePreview() {
+    stopLivePreview();
+    previewPrevGray = null;
+    previewTimer = setInterval(function () {
+      if (!video.videoWidth || !WORK_W || !WORK_H) return;
+      if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
+      if (previewCanvas.height !== WORK_H) previewCanvas.height = WORK_H;
+      try {
+        previewCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
+        const img = previewCtx.getImageData(0, 0, WORK_W, WORK_H);
+        const R = window.SensorielleSignRecognizer;
+        if (R && R.detectHandVisual) {
+          const visual = R.detectHandVisual(img, previewPrevGray, WORK_W, WORK_H);
+          previewPrevGray = visual.gray;
+          renderOverlay(visual.hand);
+        }
+      } catch (e) { /* aperçu seulement, jamais bloquant pour l'enregistrement */ }
+    }, 110);
+  }
+  function stopLivePreview() {
+    if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+    previewPrevGray = null;
+  }
 
   function pickFrenchVoice() {
     if (!("speechSynthesis" in window)) return;
@@ -1930,6 +2006,7 @@
       resizeOverlay();
       overlay.hidden = false;
       drawGuide();
+      startLivePreview();
       SensorielleSignRecognizer.loadSignatures().catch(function () {});
     } catch (err) {
       mainBtn.disabled = false;
@@ -1948,6 +2025,7 @@
 
   function stopCamera() {
     stopRecording(true);
+    stopLivePreview();
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     video.srcObject = null;
