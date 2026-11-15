@@ -227,6 +227,22 @@
   // qu'on affiche corresponde a ce qui est vraiment capte pendant un
   // enregistrement. prevGray est fourni par l'appelant (boucle d'aperçu
   // continue, separee de l'enregistrement).
+  // Affichage seulement (jamais utilisee pour la reconnaissance -- voir
+  // createExtractor/pushFrame pour ca, qui reste inchange). David,
+  // 2026-11-15, apres le premier essai : "il met les lignes du corps
+  // n'importe ou, ca bouge full les lignes" -- la detection brute d'une
+  // seule image est trop permissive pour etre montree telle quelle :
+  // elle accroche sur un bras, un vetement, l'arriere-plan. Pour le
+  // visuel seulement (la reconnaissance elle-meme garde ses 3 paliers de
+  // repli tel quel, voir plus bas) :
+  //  - on laisse tomber le palier "peau seule" (le plus permissif, celui
+  //    le plus susceptible d'accrocher n'importe quelle zone de peau
+  //    hors de la main -- cou, bras, avant-bras) ;
+  //  - on rejette un blob trop petit (bruit) OU trop grand (un bras, une
+  //    manche, un pan de vetement -- pas une main) par rapport a la
+  //    taille du visage ;
+  //  - le lissage dans le temps (voir blendHand cote index.html) fait le
+  //    reste pour eviter que le repere ne teleporte d'une image a l'autre.
   function detectHandVisual(imgData, prevGray, w, h) {
     var masks = buildMasks(imgData, prevGray, w, h);
     var face = fixedFaceRef(w, h);
@@ -239,24 +255,24 @@
 
     var skinMotion = new Uint8Array(w * h);
     var motionOnly = new Uint8Array(w * h);
-    var skinOnly = new Uint8Array(w * h);
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         var idx = y * w + x;
         if (!outsideFace(x, y)) continue;
         if (masks.skin[idx] && masks.motion[idx]) skinMotion[idx] = 1;
         if (masks.motion[idx]) motionOnly[idx] = 1;
-        if (masks.skin[idx]) skinOnly[idx] = 1;
       }
     }
-    var hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 8, { points: true });
+    var maxArea = fhh * fhh * 2.0; // plus gros qu'une main plausible -> rejete
+    var hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 14, { points: true });
     var signal = "peau+mouvement";
-    if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 18, { points: true }); signal = "mouvement"; }
-    if (!hand) { hand = largestBlob(skinOnly, w, h, 14, { points: true }); signal = "peau"; }
-    if (!hand) return { face: face, hand: null, gray: masks.gray, signal: "aucun" };
+    if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 28, { points: true }); signal = "mouvement"; }
+    if (!hand || hand.area > maxArea) {
+      return { face: face, hand: null, gray: masks.gray, signal: hand ? "trop_grand" : "aucun" };
+    }
 
     var hull = convexHull(hand.points);
-    var tips = pickTips(hull, hand.cx, hand.cy, 5, Math.max(4, fhh * 0.12));
+    var tips = pickTips(hull, hand.cx, hand.cy, 3, Math.max(7, fhh * 0.18));
     return {
       face: face,
       hand: { cx: hand.cx, cy: hand.cy, tips: tips },

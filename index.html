@@ -1836,66 +1836,52 @@
     overlay.width = window.innerWidth;
     overlay.height = window.innerHeight;
   }
-  // renderOverlay dessine le repère visage (fixe) et, si on lui passe une
-  // main détectée (voir startLivePreview), un mini squelette léger —
-  // centre de la main + traits fins vers les bouts "doigts" approchés —
-  // juste pour le retour visuel ; ça ne change rien à la reconnaissance
-  // elle-même (qui passe par createExtractor().pushFrame, séparément).
-  // Le CSS (.stage.mirror #overlay) gère tout seul le miroir en caméra
-  // avant : on dessine toujours dans le repère "écran non-inversé".
+  // renderOverlay dessine, si on lui passe une main détectée (voir
+  // startLivePreview), un mini squelette léger -- centre de la main +
+  // traits fins vers les bouts "doigts" approchés -- juste pour le
+  // retour visuel ; ça ne change rien à la reconnaissance elle-même (qui
+  // passe par createExtractor().pushFrame, séparément). Le repère ovale
+  // pour le visage a été retiré (David, 2026-11-15 : "c'est laid") --
+  // la zone visage reste utilisée en interne pour exclure le visage de
+  // la détection de main, elle n'est juste plus dessinée. Le CSS
+  // (.stage.mirror #overlay) gère tout seul le miroir en caméra avant :
+  // on dessine toujours dans le repère "écran non-inversé".
   function renderOverlay(hand) {
     if (!overlay || !overlayCtx) return;
     var vw = video.videoWidth, vh = video.videoHeight;
     var cw = overlay.width, ch = overlay.height;
     overlayCtx.clearRect(0, 0, cw, ch);
-    if (!vw || !vh || !cw || !ch) return;
-    var R = window.SensorielleSignRecognizer;
-    var cxFrac = R ? R.FACE_CX_FRAC : 0.5, cyFrac = R ? R.FACE_CY_FRAC : 0.34, hFrac = R ? R.FACE_H_FRAC : 0.30;
+    if (!vw || !vh || !cw || !ch || !hand || !WORK_W || !WORK_H) return;
     var scale = Math.max(cw / vw, ch / vh);
     var offX = (cw - vw * scale) / 2;
     var offY = (ch - vh * scale) / 2;
-    var gx = offX + vw * cxFrac * scale;
-    var gy = offY + vh * cyFrac * scale;
-    var gh = vh * hFrac * scale;
-    var gw = gh * 0.78;
+    // Les coordonnées de hand sont dans l'espace du canvas de travail
+    // (WORK_W x WORK_H), qui garde le même ratio que la vidéo brute ->
+    // même transformation "cover", juste remise à l'échelle de
+    // WORK_W/WORK_H vers vw/vh d'abord.
+    var kx = vw / WORK_W, ky = vh / WORK_H;
+    var toScreen = function (px, py) {
+      return { x: offX + px * kx * scale, y: offY + py * ky * scale };
+    };
+    var center = toScreen(hand.cx, hand.cy);
     overlayCtx.save();
-    overlayCtx.strokeStyle = "rgba(255,255,255,0.85)";
-    overlayCtx.lineWidth = 2.5;
-    overlayCtx.setLineDash([6, 6]);
-    overlayCtx.beginPath();
-    overlayCtx.ellipse(gx, gy, gw / 2, gh / 2, 0, 0, Math.PI * 2);
-    overlayCtx.stroke();
-    overlayCtx.restore();
-
-    if (hand && WORK_W && WORK_H) {
-      // Les coordonnées de hand sont dans l'espace du canvas de travail
-      // (WORK_W x WORK_H), qui garde le même ratio que la vidéo brute ->
-      // même transformation "cover" que le repère visage, juste remise à
-      // l'échelle de WORK_W/WORK_H vers vw/vh d'abord.
-      var kx = vw / WORK_W, ky = vh / WORK_H;
-      var toScreen = function (px, py) {
-        return { x: offX + px * kx * scale, y: offY + py * ky * scale };
-      };
-      var center = toScreen(hand.cx, hand.cy);
-      overlayCtx.save();
-      overlayCtx.strokeStyle = "rgba(100,220,255,0.95)";
-      overlayCtx.fillStyle = "rgba(100,220,255,0.95)";
-      overlayCtx.lineWidth = 2;
-      (hand.tips || []).forEach(function (tip) {
-        var p = toScreen(tip.x, tip.y);
-        overlayCtx.beginPath();
-        overlayCtx.moveTo(center.x, center.y);
-        overlayCtx.lineTo(p.x, p.y);
-        overlayCtx.stroke();
-        overlayCtx.beginPath();
-        overlayCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-        overlayCtx.fill();
-      });
+    overlayCtx.strokeStyle = "rgba(100,220,255,0.95)";
+    overlayCtx.fillStyle = "rgba(100,220,255,0.95)";
+    overlayCtx.lineWidth = 2;
+    (hand.tips || []).forEach(function (tip) {
+      var p = toScreen(tip.x, tip.y);
       overlayCtx.beginPath();
-      overlayCtx.arc(center.x, center.y, 5, 0, Math.PI * 2);
+      overlayCtx.moveTo(center.x, center.y);
+      overlayCtx.lineTo(p.x, p.y);
+      overlayCtx.stroke();
+      overlayCtx.beginPath();
+      overlayCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
       overlayCtx.fill();
-      overlayCtx.restore();
-    }
+    });
+    overlayCtx.beginPath();
+    overlayCtx.arc(center.x, center.y, 5, 0, Math.PI * 2);
+    overlayCtx.fill();
+    overlayCtx.restore();
   }
   function drawGuide() { renderOverlay(null); }
   window.addEventListener("resize", function () { if (stage.classList.contains("live")) { resizeOverlay(); drawGuide(); } });
@@ -1903,16 +1889,68 @@
   // Aperçu continu léger (visuel seulement, jamais utilisé pour la
   // reconnaissance) : détecte la main à l'affichage pendant que la caméra
   // est ouverte -- avant, pendant et après un enregistrement -- pour
-  // montrer en direct ce que le système "voit" (David, 2026-11-15 :
-  // retour visuel qui suit le visage, les mouvements et les doigts,
-  // "comme un mini squelette").
+  // montrer en direct ce que le système "voit".
+  //
+  // David, 2026-11-15, après le premier essai : "il met les lignes du
+  // corps n'importe où, ça bouge full les lignes, ça ne marche pas du
+  // tout" -- la détection brute, affichée telle quelle image par image,
+  // saute d'un faux positif à l'autre (vêtement, bras, arrière-plan).
+  // Deux correctifs : (1) côté sign-recognizer.js, detectHandVisual est
+  // maintenant plus strict (rejette les détections trop grandes/trop
+  // petites pour être une main) ; (2) ici, blendHand() lisse la position
+  // dans le temps (moyenne mobile) au lieu d'afficher la détection brute
+  // d'une seule image, et tolère quelques ratés avant de faire
+  // disparaître le repère, pour que ça suive vraiment la main au lieu de
+  // téléporter les lignes partout à chaque image.
   let previewTimer = null;
   let previewPrevGray = null;
+  let smoothHand = null; // { cx, cy, tips:[{x,y}...] } déjà lissé, espace WORK
+  let missTicks = 0;
+  const SMOOTH_ALPHA = 0.28;
+  const MAX_MISS_TICKS = 5; // ~0.5s de tolérance avant de faire disparaître le repère
   const previewCanvas = document.createElement("canvas");
   const previewCtx = previewCanvas.getContext("2d", { willReadFrequently: true });
+
+  function blendHand(raw) {
+    if (!raw) {
+      missTicks++;
+      if (missTicks > MAX_MISS_TICKS) smoothHand = null;
+      return smoothHand;
+    }
+    missTicks = 0;
+    if (!smoothHand) { smoothHand = { cx: raw.cx, cy: raw.cy, tips: (raw.tips || []).map(function (t) { return { x: t.x, y: t.y }; }) }; return smoothHand; }
+    smoothHand.cx += (raw.cx - smoothHand.cx) * SMOOTH_ALPHA;
+    smoothHand.cy += (raw.cy - smoothHand.cy) * SMOOTH_ALPHA;
+    var prevTips = smoothHand.tips, rawTips = raw.tips || [];
+    var used = new Array(prevTips.length).fill(false);
+    var nextTips = [];
+    rawTips.forEach(function (rt) {
+      var bestI = -1, bestD = Infinity;
+      for (var i = 0; i < prevTips.length; i++) {
+        if (used[i]) continue;
+        var dx = rt.x - prevTips[i].x, dy = rt.y - prevTips[i].y;
+        var d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; bestI = i; }
+      }
+      if (bestI !== -1 && bestD < 1600) { // ~40px de tolérance d'appariement
+        used[bestI] = true;
+        nextTips.push({
+          x: prevTips[bestI].x + (rt.x - prevTips[bestI].x) * SMOOTH_ALPHA,
+          y: prevTips[bestI].y + (rt.y - prevTips[bestI].y) * SMOOTH_ALPHA,
+        });
+      } else {
+        nextTips.push({ x: rt.x, y: rt.y });
+      }
+    });
+    smoothHand.tips = nextTips;
+    return smoothHand;
+  }
+
   function startLivePreview() {
     stopLivePreview();
     previewPrevGray = null;
+    smoothHand = null;
+    missTicks = 0;
     previewTimer = setInterval(function () {
       if (!video.videoWidth || !WORK_W || !WORK_H) return;
       if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
@@ -1924,7 +1962,7 @@
         if (R && R.detectHandVisual) {
           const visual = R.detectHandVisual(img, previewPrevGray, WORK_W, WORK_H);
           previewPrevGray = visual.gray;
-          renderOverlay(visual.hand);
+          renderOverlay(blendHand(visual.hand));
         }
       } catch (e) { /* aperçu seulement, jamais bloquant pour l'enregistrement */ }
     }, 110);
@@ -1932,6 +1970,8 @@
   function stopLivePreview() {
     if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
     previewPrevGray = null;
+    smoothHand = null;
+    missTicks = 0;
   }
 
   function pickFrenchVoice() {
