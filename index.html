@@ -2883,17 +2883,45 @@
       // gardant 99.6% de précision parmi ce qui est affiché (une seule
       // fausse annonce possible sur 231) -- un bien meilleur compromis,
       // mesuré, pas juste une intuition.
-      if (pct < 30) { afterAnalysis(); return; }
+      // David, 2026-11-16 (encore plus tard) : "ca ne m'affiche meme pas
+      // d'essai de traduction [...] le probleme c'est pas que c'est pas
+      // bon, c'est qu'il traduit rien". Avant, sous le seuil de 30%, on
+      // ne changeait RIEN a l'affichage (silence total, retour direct a
+      // "Appuie sur Démarrer") alors qu'il y a pourtant TOUJOURS un
+      // meilleur candidat DTW a ce stade (result.ranked[0], juste
+      // au-dessus) -- on se contentait de le cacher. Le commentaire
+      // plus haut qui justifiait un filtre strict visait le mode
+      // continu en arriere-plan (bruit ambiant capté en permanence) ;
+      // avec le bouton + décompte explicite d'aujourd'hui, la personne
+      // signe volontairement PENDANT cette fenêtre précise, donc ce
+      // risque de faux positif ambiant ne s'applique plus de la même
+      // façon. On affiche donc maintenant le meilleur candidat même
+      // sous 30%, mais explicitement comme une HYPOTHÈSE incertaine
+      // (étiquette "pas sûr", barre grise au lieu de verte) -- et on ne
+      // le prononce JAMAIS à voix haute dans ce cas : on ne déclare pas
+      // à voix haute un résultat qu'on sait peu fiable comme s'il était
+      // confirmé. Honnêteté mesurée (stress_test_v2_corpus.py, seuil
+      // 30 vs pas de seuil) : sous 30%, la précision du 1er choix chute
+      // nettement -- ce "pas sûr" n'est donc pas un simple détail de
+      // texte, c'est l'avertissement qui rend cet affichage honnête.
+      const confident = pct >= 30;
       afterAnalysis(function () {
-        const alts = result.ranked.slice(1, 4).map(function (r) { return labelFor(r.word); });
         smartSentence.textContent = labelFor(top.word);
-        captionLabel.textContent = "mot reconnu";
-        captionLabel.classList.add("confident");
+        if (confident) {
+          const alts = result.ranked.slice(1, 4).map(function (r) { return labelFor(r.word); });
+          captionLabel.textContent = "mot reconnu";
+          captionLabel.classList.add("confident");
+          confBar.style.background = "var(--good)";
+          statusLine.textContent = alts.length ? "Sinon peut-être : " + alts.join(", ") + "." : "";
+          speak(labelFor(top.word));
+        } else {
+          captionLabel.textContent = "pas sûr, peut-être…";
+          captionLabel.classList.remove("confident");
+          confBar.style.background = "var(--bad)";
+          statusLine.textContent = "Pas assez net pour être sûr — réessaie si ce n'est pas ça.";
+        }
         confBar.style.width = pct + "%";
-        confBar.style.background = "var(--good)";
         if (confPct) confPct.textContent = pct + "%";
-        statusLine.textContent = alts.length ? "Sinon peut-être : " + alts.join(", ") + "." : "";
-        speak(labelFor(top.word));
       });
     }).catch(function () {
       afterAnalysis();
