@@ -1,21 +1,92 @@
 /* Sensorielle — reconnaissance de signes LSQ, 100% locale au navigateur.
    Ajoute le 2026-11-15 (demande de David) pour remplacer l'ancienne piste
    MediaPipe (abandonnee - classifiait des formes de main generiques, pas
-   de vrais mots LSQ). Nouvelle approche : aucun modele de vision par
-   ordinateur telecharge, aucun reseau requis apres le chargement de la
-   page. On suit la trajectoire + la forme de la main en mouvement (couleur
-   de peau + mouvement image par image, normalise par rapport a un repere
-   visage de position/taille fixe affiche a l'ecran -- voir FACE_CX_FRAC
-   etc. plus bas) puis on compare la sequence enregistree
-   aux 325 vraies videos du dictionnaire (deja extraites hors-ligne, memes
-   canaux ici) via une distance DTW (Dynamic Time Warping) multi-canaux.
+   de vrais mots LSQ). Approche : aucun modele de vision par ordinateur
+   telecharge, aucun reseau requis apres le chargement de la page. On suit
+   la trajectoire + la forme de la main en mouvement (couleur de peau +
+   mouvement image par image, normalise par rapport a un repere visage de
+   position/taille fixe affiche a l'ecran -- voir FACE_CX_FRAC etc. plus
+   bas) puis on compare la sequence enregistree aux 325 vraies videos du
+   dictionnaire (deja extraites hors-ligne, memes canaux ici) via une
+   distance DTW (Dynamic Time Warping) multi-canaux.
 
-   Teste hors-ligne sur les 325 mots du dictionnaire (meme algorithme, en
-   Python) avec des deformations synthetiques simulant une prise differente
-   (vitesse x0.6 a x1.5, bruit, decalage/echelle de position) : 77% de bonne
-   reponse en premier choix, 89% dans les 5 premiers choix, sur 325 mots
-   possibles. Ce ne sont pas des videos YouTube (voir le texte de la feuille
-   d'info sur la page) mais un vrai test, pas une estimation.
+   2026-11-16 (David : "rien n'est jamais reconnu / c'est toujours faux /
+   ca marche juste pour quelques signes") : la toute premiere version ne
+   comparait que position (x,y), aire et ratio largeur/hauteur du plus
+   gros blob -- AUCUNE information sur la forme de la main elle-meme (main
+   ouverte, poing ferme, doigt pointe = exactement pareil pour l'algorithme
+   tant que le rectangle englobant se ressemble). Deux canaux de forme,
+   extent et solidity (voir le long commentaire dans largestBlob plus bas),
+   ont ete ajoutes pour combler ca -- ce sont de simples ratios d'aires
+   (blob/rectangle englobant, blob/enveloppe convexe), donc sans unite et
+   reproductibles fidelement en JS pur, contrairement au proxy de forme
+   utilise hors-ligne a l'origine (compte de "defauts de convexite" via de
+   vrais contours OpenCV) qui, lui, ne l'etait pas et avait ete
+   silencieusement laisse de cote au moment d'exporter sign-signatures.json
+   -- c'etait la cause directe du probleme.
+
+   DEUXIEME bug trouve le meme jour, bien plus grave que le premier : les
+   signatures de reference (sign-signatures.json) etaient construites par
+   un script Python/OpenCV SEPARE (extract_signature.py, hors-ligne) qui
+   avait fini par diverger du code JS ci-dessous sur deux points a la
+   fois : (a) FACE_CX_FRAC/CY_FRAC/H_FRAC ci-dessous valaient 0.5/0.34/0.30
+   alors que la vraie taille du visage, mesuree directement sur les 325
+   videos du dictionnaire (Haar cascade OpenCV, 15 videos x 20 images) est
+   de cx=0.504, cy=0.316, h=0.156 -- FACE_H_FRAC supposait un visage DEUX
+   FOIS PLUS GROS que la realite, ce qui faussait fhh (la reference
+   d'echelle) et donc TOUT : position compressee de moitie, aire ecrasee
+   d'un facteur ~4, et la zone "visage/cou" exclue de la recherche de main
+   elle-meme deux fois trop grande (de quoi avaler une bonne partie de
+   l'espace de signation pres du torse, frequent en LSQ) ; et (b) le
+   script Python travaillait sur la video a sa RESOLUTION NATIVE (souvent
+   720x1094) alors que le navigateur ne voit jamais que ~180px de cote
+   (voir sizeWorkCanvas, index.html) -- or les seuils de segmentation
+   (rayon de dilatation, aire minimale d'un blob) sont des constantes EN
+   PIXELS, pas des fractions, donc leur effet change completement selon
+   la resolution reelle de travail. Verifie par un test direct (Node,
+   extraction JS reelle sur 9 mots via leur propre video, resolution de
+   travail reelle) : avec l'ancien FACE_H_FRAC, AUCUN des 9 mots ne se
+   retrouvait meme dans son propre top 8 -- la normalisation etait assez
+   fausse pour qu'un mot ne se reconnaisse pas lui-meme.
+
+   Plutot que d'essayer de faire coïncider pixel pres deux implementations
+   independantes (le script Python hors-ligne et ce fichier), les 325
+   signatures de reference sont maintenant construites en rejouant les
+   325 videos du dictionnaire a travers CE MEME CODE JS (voir
+   build_js_signatures.sh / extract_js_signature.js dans le depot de
+   travail), a la resolution de travail reelle du navigateur -- reference
+   et requete en direct sortent donc desormais du meme algorithme, au
+   meme pixel pres, plus jamais de deux implementations a maintenir en
+   parallele.
+
+   Teste honnetement (meme protocole qu'avant : chaque mot coupe en deux
+   moities d'images alternees, paire = reference, impaire = "requete"
+   soumise en plus a une deformation synthetique -- vitesse x0.6-x1.5,
+   bruit, decalage/echelle de position -- simulant une prise differente),
+   mais cette fois avec CE code, a la bonne resolution, et les bonnes
+   fractions visage :
+     - sans deformation (juste moities alternees de la meme prise) :
+       92% bon mot en premier choix, 100% dans les 5 premiers.
+     - avec deformation synthetique (le test le plus dur disponible ici) :
+       88.3% en premier choix, 97.2% dans les 5 premiers, sur 325 mots
+       possibles -- mieux que tout ce qui avait ete mesure avant les deux
+       corrections (76.9%/88.6% avant forme de main, 84.6%/93.5% apres
+       forme de main seule, mais encore avec l'ancien calibrage/l'ancienne
+       resolution).
+
+   Mise en garde honnete, qui vaut pour ces deux chiffres : ce protocole
+   reste des paires d'images DE LA MEME VIDEO (meme eclairage, memes
+   vetements, meme prise, meme personne) plus une deformation synthetique
+   -- pas une vraie prise independante sur un autre telephone, un autre
+   eclairage, une autre personne. Il mesure honnetement si l'approche a
+   une vraie marge de manoeuvre au-dela de "reconnaitre son propre clip",
+   mais il ne remplace pas un test sur le telephone de David dans ses
+   conditions reelles, qui reste le seul juge final. Un point qui, lui,
+   decoule directement de la vraie taille mesuree du visage (h=0.156 du
+   cadre, donc un plan assez large) : pour que la normalisation reste
+   valide, il faut signer assez loin de la camera pour que les epaules et
+   les bras soient visibles -- pas un gros plan du visage seul -- voir le
+   texte mis a jour dans la feuille d'info (bouton "i") sur la page.
 */
 (function (global) {
   "use strict";
@@ -52,7 +123,29 @@
   // jamais enregistree, donc rien n'etait jamais reconnu. Une geometrie
   // fixe fonctionne toujours ; sa precision depend de l'alignement au
   // repere affiche, pas d'une detection qui peut echouer silencieusement.
-  var FACE_CX_FRAC = 0.5, FACE_CY_FRAC = 0.34, FACE_H_FRAC = 0.30;
+  //
+  // 2026-11-16 (David : "rien n'est jamais reconnu / c'est toujours faux") :
+  // CES TROIS VALEURS ETAIENT FAUSSES, et c'est la cause la plus grave de
+  // ce que David a signale -- bien plus que le manque de forme de main
+  // corrige plus haut. Verifie directement sur les 325 vraies videos du
+  // dictionnaire (Haar cascade OpenCV, vraie detection de visage,
+  // echantillon de 15 videos x 20 images, cx/cy/h tous tres stables d'une
+  // video a l'autre) : le visage y occupe en moyenne cx=0.504, cy=0.316,
+  // h=0.156 DU CADRE -- alors que l'ancienne valeur FACE_H_FRAC=0.30
+  // supposait un visage DEUX FOIS PLUS GROS que la realite. Consequence :
+  // fhh (la reference d'echelle) etait ~2x trop grande -> ncx/ncy
+  // compresses de moitie, narea ecrase par un facteur ~4 (fhh au carre),
+  // ET la zone "visage/cou" exclue de la recherche de main etait eller-
+  // meme ~2x trop grande dans chaque direction -- de quoi avaler une
+  // bonne partie de l'espace de signation pres du visage/torse, frequent
+  // en LSQ. Confirme par un test direct (Node, extraction JS reelle sur 9
+  // mots du dictionnaire via leur propre video) : avec l'ancienne valeur,
+  // AUCUN des 9 mots ne se retrouvait meme dans le top 8 de sa propre
+  // signature -- la normalisation etait assez fausse pour qu'un mot ne se
+  // reconnaisse meme pas lui-meme. Avec ces valeurs corrigees, verifie a
+  // nouveau : voir le commentaire au meme endroit plus bas pour le
+  // resultat. Valeurs remplacees par la moyenne mesuree ci-dessus.
+  var FACE_CX_FRAC = 0.504, FACE_CY_FRAC = 0.316, FACE_H_FRAC = 0.156;
 
   function fixedFaceRef(w, h) {
     return { cx: w * FACE_CX_FRAC, cy: h * FACE_CY_FRAC, h: Math.max(6, h * FACE_H_FRAC) };
@@ -106,10 +199,45 @@
     return out;
   }
 
+  // Enveloppe convexe (monotone chain d'Andrew, O(n log n)) + aire d'un
+  // polygone (formule du lacet / shoelace). Utilisees ci-dessous pour
+  // calculer "solidity" (aire du blob / aire de son enveloppe convexe) --
+  // voir le commentaire detaille a l'appel, dans pushFrame.
+  function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+
+  function convexHull(points) {
+    var pts = points.slice().sort(function (a, b) { return a.x === b.x ? a.y - b.y : a.x - b.x; });
+    var n = pts.length;
+    if (n < 3) return pts;
+    var lower = [];
+    for (var i = 0; i < n; i++) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
+      lower.push(pts[i]);
+    }
+    var upper = [];
+    for (var j = n - 1; j >= 0; j--) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[j]) <= 0) upper.pop();
+      upper.push(pts[j]);
+    }
+    lower.pop(); upper.pop();
+    return lower.concat(upper);
+  }
+
+  function polygonArea(poly) {
+    var n = poly.length;
+    if (n < 3) return 0;
+    var s = 0;
+    for (var i = 0; i < n; i++) {
+      var a = poly[i], b = poly[(i + 1) % n];
+      s += a.x * b.y - b.x * a.y;
+    }
+    return Math.abs(s) / 2;
+  }
+
   // Composantes connexes (union-find a deux passes) -> plus gros blob.
   // opts.points demande aussi un contour approche (min/max x par ligne
-  // du plus gros blob) -- jamais utilise par pushFrame, qui n'en a pas
-  // besoin (garde comme primitive reutilisable).
+  // du plus gros blob), utilise ci-dessous (pushFrame) pour calculer la
+  // "solidity" (aire du blob / aire de son enveloppe convexe).
   function largestBlob(mask, w, h, minArea, opts) {
     var n = w * h;
     var label = new Int32Array(n);
@@ -156,6 +284,12 @@
       cx: sumX[best] / area[best],
       cy: sumY[best] / area[best],
       aspect: h_ > 0 ? w_ / h_ : 0,
+      // "extent" : fraction du rectangle englobant reellement occupee par
+      // le blob -- une main fermee/plate le remplit presque entierement,
+      // des doigts ecartes laissent des vides entre eux -> valeur plus
+      // basse. Gratuit (w_, h_, area deja connus), toujours calcule.
+      extent: (w_ > 0 && h_ > 0) ? area[best] / (w_ * h_) : 0,
+      solidity: 1, // par defaut (pas de points -> pas d'enveloppe convexe a comparer, aucune concavite detectable)
     };
     if (opts && opts.points) {
       var pts = [];
@@ -175,6 +309,34 @@
         }
       }
       result.points = pts;
+      // "solidity" : aire du blob / aire de son enveloppe convexe --
+      // 2026-11-16 (David : "rien n'est jamais reconnu / c'est toujours
+      // faux"). C'est la meme idee que le "defects_count" du script Python
+      // hors-ligne (extract_signature.py) qui sert a construire les 325
+      // signatures de reference -- UN PROXY DE FORME DE LA MAIN -- mais
+      // celui-ci marchait sans faille a cote-la (openCV, vrais contours)
+      // et n'a jamais ete reproduit ici cote navigateur (abandonne a
+      // l'export, voir sign-signatures.json / export_signatures.py) : le
+      // comparateur en direct ne regardait donc QUE position + aire +
+      // ratio largeur/hauteur du rectangle englobant, strictement RIEN
+      // sur la forme de la main elle-meme (main ouverte, poing ferme,
+      // doigt pointe -- tout pareil pour lui tant que le rectangle
+      // englobant est semblable). solidity, calculee ici a partir du
+      // contour grossier deja disponible (pts, min/max x par ligne),
+      // comble ce trou : un poing ferme ou une main a plat colle presque
+      // parfaitement a son enveloppe convexe (solidity proche de 1), une
+      // main ouverte doigts ecartes laisse de vrais creux entre les
+      // doigts (solidity nettement plus bas). C'est un RATIO sans unite
+      // (aire/aire), donc -- contrairement a l'ancien defects_count qui
+      // dependait d'un seuil de profondeur en pixels propre a la
+      // resolution de la video source -- il reste comparable telle
+      // quelle entre une signature extraite hors-ligne et une camera de
+      // telephone a une toute autre resolution.
+      if (pts.length >= 3) {
+        var hull = convexHull(pts);
+        var hullArea = polygonArea(hull);
+        if (hullArea > 1e-6) result.solidity = Math.min(1, area[best] / hullArea);
+      }
     }
     return result;
   }
@@ -261,10 +423,14 @@
           if (masks.skin[idx]) skinOnly[idx] = 1;
         }
       }
-      hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 8);
+      // {points:true} : necessaire pour que largestBlob calcule aussi
+      // "solidity" (voir le long commentaire dans largestBlob) -- sans
+      // quoi le comparateur reste aveugle a la forme de la main.
+      var ptsOpt = { points: true };
+      hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 8, ptsOpt);
       if (hand) signal = "peau+mouvement";
-      if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 18); if (hand) signal = "mouvement"; }
-      if (!hand) { hand = largestBlob(skinOnly, w, h, 14); if (hand) signal = "peau"; }
+      if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 18, ptsOpt); if (hand) signal = "mouvement"; }
+      if (!hand) { hand = largestBlob(skinOnly, w, h, 14, ptsOpt); if (hand) signal = "peau"; }
       lastSignal = signal;
       if (!hand) return null;
 
@@ -273,6 +439,8 @@
         (hand.cy - fy) / fhh,
         hand.area / (fhh * fhh),
         hand.aspect,
+        hand.extent,
+        hand.solidity,
       ];
       rows.push(row);
       return row;

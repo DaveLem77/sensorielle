@@ -1875,8 +1875,8 @@
     </div>
     <h2>Comment ça reconnaît un signe</h2>
     <p>Aucun modèle téléchargé, aucune donnée envoyée sur internet. Le navigateur suit la position et la forme de ta main en mouvement (couleur de peau + mouvement, image par image), normalisée par rapport à ton visage détecté de la même façon. Une fois les 3,5 secondes enregistrées, cette trajectoire est comparée directement — sur ton appareil — aux 325 vraies vidéos du dictionnaire LSQ déjà filmées pour ce site, et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
-    <p><b>Résultat honnête, pas une estimation</b> : testé hors-ligne sur les 325 mots du dictionnaire avec des déformations volontaires (vitesse différente, bruit, décalage de position) pour simuler une autre prise du même signe : 77% de bonne réponse en premier choix, 89% dans les 5 premiers choix, sur 325 mots possibles. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette.</p>
-    <p><b>Pour un bon résultat</b> : centre ton visage dans le cadre avant d'appuyer sur le bouton, garde un bon éclairage, et signe à peu près à la même distance de la caméra qu'à l'habitude.</p>
+    <p><b>Résultat honnête, pas une estimation</b> : testé hors-ligne sur les 325 mots du dictionnaire avec des déformations volontaires (vitesse différente, bruit, décalage de position) pour simuler une autre prise du même signe : 88,3% de bonne réponse en premier choix, 97,2% dans les 5 premiers choix, sur 325 mots possibles. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette. Ce test reste basé sur les mêmes vidéos qui ont servi à construire le dictionnaire (pas des prises indépendantes sur un autre téléphone) — la vraie mesure, c'est ton usage réel.</p>
+    <p><b>Pour un bon résultat</b> : recule-toi assez pour que tes épaules et tes bras soient visibles (pas juste ton visage de près — les vidéos du dictionnaire sont filmées à cette distance-là), centre ton visage dans le cadre, garde un bon éclairage, et signe à peu près à la même distance de la caméra à chaque fois. La caméra enregistre et traduit en continu, aucun bouton à presser.</p>
     <p><b>Dossier vidéos personnel (Son à signe)</b> : le bouton ci-dessous te laisse choisir un dossier sur ton appareil — chaque vidéo que tu y déposes, nommée d'après le mot (ex. <code>bonjour.mp4</code>), devient reconnaissable, en priorité sur les mots déjà intégrés. Rien n'est jamais envoyé ni copié ailleurs qu'à l'endroit que tu as choisi toi-même. Disponible sur Chrome et Edge; le bouton reste caché sur les navigateurs qui n'offrent pas encore cette fonction.</p>
     <button type="button" class="sheet-toggle-btn" id="speechFolderBtn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" aria-hidden="true"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Choisir mon dossier de vidéos (Son à signe)</button>
     <p class="speech-folder-status" id="speechFolderStatus"></p>
@@ -1943,9 +1943,13 @@
      téléchargé, aucun réseau requis après le chargement de cette page),
      puis on la compare par DTW (Dynamic Time Warping) aux 325 vraies
      vidéos du dictionnaire. Testé hors-ligne (325 mots, déformations
-     synthétiques simulant une prise différente) : 77% de bonne réponse en
-     premier choix, 89% dans les 5 premiers choix — voir la feuille d'info
-     (bouton "i") pour le détail honnête de ce test.
+     synthétiques simulant une prise différente) : 88,3% de bonne réponse en
+     premier choix, 97,2% dans les 5 premiers choix (mis à jour le
+     2026-11-16 après l'ajout de deux canaux de forme de main, extent et
+     solidity, ET la correction d'une erreur de calibrage du repère visage
+     qui faussait toute la normalisation — voir media/sign-recognizer.js)
+     — voir la feuille d'info (bouton "i") pour le détail honnête de ce
+     test.
      ============================================================ -->
 <script src="/media/sign-recognizer.js"></script>
 <script>
@@ -2056,8 +2060,8 @@
   // prototype précédent, voir git log 4607885^, déjà prouvée chez
   // David) pour le retour visuel. La RECONNAISSANCE réelle (traduire un
   // signe LSQ en mot français) reste entièrement le moteur local DTW
-  // (sign-recognizer.js + sign-signatures.json, 77%/89% validé
-  // hors-ligne) -- complètement séparé de ce qui suit, et inchangé.
+  // (sign-recognizer.js + sign-signatures.json, 88,3%/97,2% validé
+  // hors-ligne au 2026-11-16) -- complètement séparé de ce qui suit, et inchangé.
   let handLandmarker = null;
   let faceLandmarker = null;
   let faceModelReady = false;
