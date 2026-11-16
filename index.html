@@ -1031,6 +1031,40 @@
   .caption-info-btn { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.14); }
 
   /* =======================================================================
+     LIVE CAMERA — restyle v8 (2026-11-16, David) : "enlève le bouton
+     enregistrer en bas, il ne sert à rien [...] redescend tout la
+     traduction et la traduction en direct, grossis en conséquence la
+     zone de traduction". L'enregistrement démarre et boucle tout seul
+     (voir autoLoopActive dans le script plus bas) -- plus besoin d'un
+     bouton à presser, donc .controls-bar (qui ne contient plus que le
+     #shutterBtn caché, #infoBtn a déménagé dans la barre du haut) est
+     masquée pour de bon. Le panneau de traduction descend vers le bas
+     de l'écran et grossit pour occuper l'espace ainsi libéré. */
+
+  /* !important nécessaire : startCamera()/stopCamera() posent
+     style.display="flex"/"none" en JS à chaque appel (style en ligne,
+     plus prioritaire qu'une règle de feuille de style normale) --
+     purement visuel, aucune des deux fonctions n'est modifiée. */
+  .controls-bar { display: none !important; }
+
+  .caption-wrap {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 26px);
+    gap: 14px;
+  }
+  .caption-card {
+    max-width: 560px; padding: 22px 24px 24px; border-radius: 26px;
+  }
+  .caption-card .caption-word {
+    font-size: clamp(24px, 7.6vw, 36px); line-height: 1.28;
+  }
+  .caption-eyebrow { font-size: 12.5px; }
+
+  /* la zone de visée reprend l'espace libéré par le bouton disparu --
+     le panneau agrandi occupe maintenant plus de place en bas, donc les
+     coins remontent un peu moins loin pour ne pas le chevaucher. */
+  .viewfinder { inset: 13% 8% calc(env(safe-area-inset-bottom, 0px) + 225px) 8%; }
+
+  /* =======================================================================
      Son à signe (parole → vidéo signée) — mode séparé, volontairement
      minimaliste : un fond sombre uni, une seule vidéo à la fois, un simple
      indicateur d'écoute (rien à presser), une ligne de sous-titres.
@@ -1777,6 +1811,14 @@
            seulement). Règle CSS .lang-pill laissée en place, inutilisée
            (même convention que v6 plus haut dans ce fichier). -->
       <div class="topbar-row-right">
+      <!-- David, 2026-11-16 : le bouton rond du bas est retiré (plus
+           besoin, l'enregistrement est continu -- voir autoLoopActive
+           plus bas) ; #infoBtn (seul moyen d'ouvrir le panneau de
+           réglages) déménage donc ici, en petite icône discrète, pour
+           ne rien perdre. Même id, même écouteur JS -- juste déplacé. -->
+      <button class="cam-flip-btn" id="infoBtn" aria-label="Plus d'options">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg>
+      </button>
       <button class="cam-flip-btn" id="camToggle" aria-label="Changer de caméra">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0113.66-5.66M20 12a8 8 0 01-13.66 5.66" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17.5 3.5v3.5h-3.5M6.5 20.5v-3.5h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -1810,12 +1852,16 @@
     </div>
   </div>
 
+  <!-- David, 2026-11-16 : "enlève le bouton enregistrer en bas, il ne
+       sert à rien" -- #shutterBtn reste dans le DOM (startRecording /
+       stopRecording et son écouteur de clic l'utilisent encore, retirer
+       l'élément casserait ces fonctions) mais .controls-bar est
+       maintenant forcée invisible en CSS (display:none !important,
+       plus fort que le style.display="flex" posé par startCamera()) --
+       purement visuel, rien n'est supprimé côté logique. -->
   <div class="controls-bar" id="controlsBar" style="display:none;">
     <button class="shutter-btn" id="shutterBtn" aria-label="Enregistrer mon signe (3,5 secondes)">
       <span class="shutter-icon" aria-hidden="true"></span>
-    </button>
-    <button class="caption-info-btn" id="infoBtn" aria-label="Plus d'options">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg>
     </button>
   </div>
 
@@ -1934,7 +1980,10 @@
   const voiceBtn = document.getElementById("voiceBtn");
   if (!stage || !video || !mainBtn || !shutterBtn) return;
 
-  const IDLE_TEXT = "Prête à enregistrer";
+  // David, 2026-11-16 : "doit commencer immédiatement à enregistrer,
+  // tout le temps traduire" -- il n'y a plus de bouton à presser, donc
+  // "Prête à enregistrer" n'avait plus de sens.
+  const IDLE_TEXT = "En écoute…";
   const RECORD_MS = 3500;
   // Dimensions de travail recalculees une fois la camera ouverte (voir
   // sizeWorkCanvas) pour garder le vrai ratio largeur/hauteur de la video —
@@ -1948,6 +1997,7 @@
   let frenchVoice = null;
   let speechUnlocked = false;
   let recording = false;
+  let autoLoopActive = false; // true tant que la caméra est ouverte : enregistre et traduit sans bouton, en boucle
   let extractor = null;
   let recordTimer = null;
   let sampleTimer = null;
@@ -2015,22 +2065,31 @@
   let poseModelReady = false;
   let visionLoadStarted = false;
 
+  // David, 2026-11-16 : "rend les lignes sur le corps plus belles, que
+  // ce soit vraiment délicat mais impressionnant". Les segments de main
+  // portent maintenant chacun leur propre épaisseur (ÉPAISSEUR[2]) --
+  // plus marquée près de la paume, plus fine vers le bout du doigt --
+  // pour un rendu effilé plutôt qu'un trait uniforme.
   const HAND_CONNECTIONS = [
-    [0, 1], [1, 2], [2, 3], [3, 4],
-    [0, 5], [5, 6], [6, 7], [7, 8],
-    [0, 9], [9, 10], [10, 11], [11, 12],
-    [0, 13], [13, 14], [14, 15], [15, 16],
-    [0, 17], [17, 18], [18, 19], [19, 20],
-    [5, 9], [9, 13], [13, 17],
+    [0, 1, 1.7], [0, 5, 1.7], [0, 9, 1.7], [0, 13, 1.7], [0, 17, 1.7], [5, 9, 1.6], [9, 13, 1.6], [13, 17, 1.6],
+    [1, 2, 1.5], [5, 6, 1.5], [9, 10, 1.5], [13, 14, 1.5], [17, 18, 1.5],
+    [2, 3, 1.15], [6, 7, 1.15], [10, 11, 1.15], [14, 15, 1.15], [18, 19, 1.15],
+    [3, 4, 0.85], [7, 8, 0.85], [11, 12, 0.85], [15, 16, 0.85], [19, 20, 0.85],
   ];
-  const FACE_LIPS_CONNECTIONS = [
-    [61, 146], [146, 91], [91, 181], [181, 84], [84, 17], [17, 314], [314, 405], [405, 321], [321, 375], [375, 291],
-    [61, 185], [185, 40], [40, 39], [39, 37], [37, 0], [0, 267], [267, 269], [269, 270], [270, 409], [409, 291],
-    [78, 95], [95, 88], [88, 178], [178, 87], [87, 14], [14, 317], [317, 402], [402, 318], [318, 324], [324, 308],
-    [78, 191], [191, 80], [80, 81], [81, 82], [82, 13], [13, 312], [312, 311], [311, 310], [310, 415], [415, 308],
+  // Chaque chaîne est une séquence ORDONNÉE de repères -- pas de simples
+  // paires -- pour pouvoir tracer une courbe lissée (voir
+  // strokeSmoothChain) plutôt que des segments droits qui, sur un
+  // visage, donnent un contour anguleux et peu soigné.
+  const FACE_LIPS_CHAINS = [
+    [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291],
+    [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291],
+    [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308],
+    [78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308],
   ];
-  const FACE_LEFT_EYEBROW_CONNECTIONS = [[276, 283], [283, 282], [282, 295], [295, 285], [300, 293], [293, 334], [334, 296], [296, 336]];
-  const FACE_RIGHT_EYEBROW_CONNECTIONS = [[46, 53], [53, 52], [52, 65], [65, 55], [70, 63], [63, 105], [105, 66], [66, 107]];
+  const FACE_EYEBROW_CHAINS = [
+    [276, 283, 282, 295, 285], [300, 293, 334, 296, 336],
+    [46, 53, 52, 65, 55], [70, 63, 105, 66, 107],
+  ];
   const FACE_ACCENT_POINTS = [1, 33, 263, 105, 159, 334, 386];
   const HAND_TIP_IDX = [4, 8, 12, 16, 20];
   // Repères de pose (33 points) : seulement les bras nous intéressent
@@ -2071,37 +2130,88 @@
   // Style unique, partagé par les mains, le visage et les bras : blanc
   // pâle, délicat, minimaliste (David, 2026-11-16 : "pas en mauve mais
   // très délicat blanc pâle minimaliste") -- plus aucune couleur mauve
-  // nulle part dans le rendu.
-  var TRACE_LINE = "rgba(255,255,255,0.3)";
-  var TRACE_DOT = "rgba(255,255,255,0.5)";
-  var TRACE_ACCENT = "rgba(255,255,255,0.85)";
-  var TRACE_GLOW = "rgba(255,255,255,0.35)";
+  // nulle part dans le rendu. David, le même jour, un peu plus tard :
+  // "rend les lignes sur le corps plus belles, que ce soit vraiment
+  // délicat mais impressionnant" -- on garde exactement cette même
+  // palette (toujours blanc pâle, un seul niveau d'intensité), mais
+  // chaque trait porte maintenant une fine aura (ombre portée légère
+  // directement sur le trait, via shadowBlur) pour un rendu plus soigné
+  // sans jamais verser dans le néon (le flou reste petit, l'opacité
+  // reste faible).
+  var TRACE_LINE = "rgba(255,255,255,0.34)";
+  var TRACE_DOT = "rgba(255,255,255,0.55)";
+  var TRACE_ACCENT = "rgba(255,255,255,0.92)";
+  var TRACE_GLOW = "rgba(255,255,255,0.4)";
+
+  // Dessine une courbe lissée à travers une séquence ordonnée de repères
+  // (quadratiques passant par le MILIEU de chaque paire de points
+  // consécutifs -- technique classique pour qu'un contour fait de
+  // points discrets ait l'air d'un vrai trait dessiné à la main plutôt
+  // que des segments droits anguleux). Utilisé pour les lèvres et les
+  // sourcils, dont chaque chaîne est déjà une séquence continue (voir
+  // FACE_LIPS_CHAINS / FACE_EYEBROW_CHAINS plus haut) -- jamais pour les
+  // mains ni les bras, où les segments sont de vrais os droits : les
+  // lisser les ferait paraître mous et inexacts.
+  function strokeSmoothChain(toScreen, chain) {
+    if (chain.length < 2) return;
+    var pts = chain.map(toScreen);
+    overlayCtx.moveTo(pts[0].x, pts[0].y);
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p0 = pts[i], p1 = pts[i + 1];
+      var mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
+      overlayCtx.quadraticCurveTo(p0.x, p0.y, mx, my);
+    }
+    var last = pts[pts.length - 1];
+    overlayCtx.lineTo(last.x, last.y);
+  }
 
   function drawHandSkeleton(lm) {
     var toScreen = makeToScreen();
-    overlayCtx.lineWidth = 1.3;
     overlayCtx.lineCap = "round";
     overlayCtx.lineJoin = "round";
     overlayCtx.strokeStyle = TRACE_LINE;
-    overlayCtx.beginPath();
+    overlayCtx.shadowColor = TRACE_GLOW;
+    overlayCtx.shadowBlur = 2.5;
+    // Un appel stroke() par épaisseur (quatre groupes : paume, base,
+    // milieu, bout de doigt) -- le trait s'effile du poignet vers le
+    // bout des doigts au lieu d'un trait uniforme.
+    var byWidth = {};
     HAND_CONNECTIONS.forEach(function (c) {
-      var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
-      overlayCtx.moveTo(p1.x, p1.y);
-      overlayCtx.lineTo(p2.x, p2.y);
+      var w = c[2];
+      (byWidth[w] = byWidth[w] || []).push(c);
     });
-    overlayCtx.stroke();
+    Object.keys(byWidth).forEach(function (w) {
+      overlayCtx.lineWidth = parseFloat(w);
+      overlayCtx.beginPath();
+      byWidth[w].forEach(function (c) {
+        var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
+        overlayCtx.moveTo(p1.x, p1.y);
+        overlayCtx.lineTo(p2.x, p2.y);
+      });
+      overlayCtx.stroke();
+    });
+    overlayCtx.shadowBlur = 0;
     lm.forEach(function (p, i) {
       var sp = toScreen(p);
       var isTip = HAND_TIP_IDX.indexOf(i) >= 0;
-      overlayCtx.beginPath();
-      overlayCtx.arc(sp.x, sp.y, isTip ? 3.2 : 1.7, 0, Math.PI * 2);
       if (isTip) {
+        // Anneau discret + point plein par-dessus : un peu plus
+        // "précieux" qu'un simple rond, tout en restant minuscule.
+        overlayCtx.beginPath();
+        overlayCtx.arc(sp.x, sp.y, 5, 0, Math.PI * 2);
+        overlayCtx.strokeStyle = "rgba(255,255,255,0.3)";
+        overlayCtx.lineWidth = 1;
+        overlayCtx.stroke();
+        overlayCtx.beginPath();
+        overlayCtx.arc(sp.x, sp.y, 3, 0, Math.PI * 2);
         overlayCtx.shadowColor = TRACE_GLOW;
         overlayCtx.shadowBlur = 4;
         overlayCtx.fillStyle = TRACE_ACCENT;
         overlayCtx.fill();
         overlayCtx.shadowBlur = 0;
       } else {
+        overlayCtx.beginPath();
+        overlayCtx.arc(sp.x, sp.y, 1.6, 0, Math.PI * 2);
         overlayCtx.fillStyle = TRACE_DOT;
         overlayCtx.fill();
       }
@@ -2110,30 +2220,25 @@
 
   function drawFaceSkeleton(lm) {
     var toScreen = makeToScreen();
-    overlayCtx.lineWidth = 1;
+    overlayCtx.lineWidth = 1.1;
     overlayCtx.lineCap = "round";
     overlayCtx.lineJoin = "round";
     overlayCtx.strokeStyle = TRACE_LINE;
+    overlayCtx.shadowColor = TRACE_GLOW;
+    overlayCtx.shadowBlur = 2;
     overlayCtx.beginPath();
-    FACE_LIPS_CONNECTIONS.forEach(function (c) {
-      var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
-      overlayCtx.moveTo(p1.x, p1.y);
-      overlayCtx.lineTo(p2.x, p2.y);
-    });
+    FACE_LIPS_CHAINS.forEach(function (chain) { strokeSmoothChain(toScreen, chain.map(function (i) { return lm[i]; })); });
     overlayCtx.stroke();
     overlayCtx.beginPath();
-    FACE_LEFT_EYEBROW_CONNECTIONS.concat(FACE_RIGHT_EYEBROW_CONNECTIONS).forEach(function (c) {
-      var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
-      overlayCtx.moveTo(p1.x, p1.y);
-      overlayCtx.lineTo(p2.x, p2.y);
-    });
+    FACE_EYEBROW_CHAINS.forEach(function (chain) { strokeSmoothChain(toScreen, chain.map(function (i) { return lm[i]; })); });
     overlayCtx.stroke();
+    overlayCtx.shadowBlur = 0;
     FACE_ACCENT_POINTS.forEach(function (idx) {
       var sp = toScreen(lm[idx]);
       overlayCtx.beginPath();
-      overlayCtx.arc(sp.x, sp.y, 1.8, 0, Math.PI * 2);
+      overlayCtx.arc(sp.x, sp.y, 1.9, 0, Math.PI * 2);
       overlayCtx.shadowColor = TRACE_GLOW;
-      overlayCtx.shadowBlur = 3;
+      overlayCtx.shadowBlur = 3.5;
       overlayCtx.fillStyle = TRACE_ACCENT;
       overlayCtx.fill();
       overlayCtx.shadowBlur = 0;
@@ -2142,13 +2247,16 @@
 
   // Bras (épaule -> coude -> poignet), via le modèle de pose -- immobile
   // par nature (on ne dessine que le squelette tel qu'il est CETTE
-  // image, pas de traînée), même style délicat que mains/visage.
+  // image, pas de traînée), même style délicat que mains/visage, avec
+  // la même aura légère.
   function drawArmSkeleton(lm) {
     var toScreen = makeToScreen();
-    overlayCtx.lineWidth = 1.3;
+    overlayCtx.lineWidth = 1.5;
     overlayCtx.lineCap = "round";
     overlayCtx.lineJoin = "round";
     overlayCtx.strokeStyle = TRACE_LINE;
+    overlayCtx.shadowColor = TRACE_GLOW;
+    overlayCtx.shadowBlur = 2.5;
     overlayCtx.beginPath();
     POSE_LEFT_ARM.concat(POSE_RIGHT_ARM).forEach(function (c) {
       var a = lm[c[0]], b = lm[c[1]];
@@ -2158,12 +2266,13 @@
       overlayCtx.lineTo(p2.x, p2.y);
     });
     overlayCtx.stroke();
+    overlayCtx.shadowBlur = 0;
     POSE_ARM_POINTS.forEach(function (idx) {
       var p = lm[idx];
       if (!p || (p.visibility != null && p.visibility < 0.4)) return;
       var sp = toScreen(p);
       overlayCtx.beginPath();
-      overlayCtx.arc(sp.x, sp.y, 2.1, 0, Math.PI * 2);
+      overlayCtx.arc(sp.x, sp.y, 2.2, 0, Math.PI * 2);
       overlayCtx.fillStyle = TRACE_DOT;
       overlayCtx.fill();
     });
@@ -2371,6 +2480,16 @@
     if (livePillText) livePillText.textContent = on ? "Analyse en cours" : "Traduction en direct";
   }
 
+  // David, 2026-11-16 : "doit commencer immédiatement à enregistrer,
+  // tout le temps traduire" -- plus de bouton, donc chaque fin de cycle
+  // (court ou long, réussi ou non) relance le suivant tout seul, tant
+  // que la caméra est ouverte. stopCamera() coupe autoLoopActive AVANT
+  // d'annuler l'enregistrement en cours, donc rien ne relance après une
+  // fermeture volontaire.
+  function maybeContinueLoop() {
+    if (autoLoopActive && stage.classList.contains("live")) startRecording();
+  }
+
   // Apparition douce à chaque nouvelle traduction (David, 2026-11-16).
   // Observe #smartSentence au lieu d'intercepter chaque endroit du code
   // qui écrit dedans (il y en a plusieurs, dont un module séparé plus
@@ -2429,6 +2548,13 @@
       drawGuide();
       startLivePreview();
       SensorielleSignRecognizer.loadSignatures().catch(function () {});
+
+      // David, 2026-11-16 : "doit commencer immédiatement à enregistrer,
+      // tout le temps traduire" -- plus besoin d'appuyer sur un bouton ;
+      // maybeContinueLoop() relance ensuite automatiquement chaque
+      // cycle (voir stopRecording plus bas).
+      autoLoopActive = true;
+      startRecording();
     } catch (err) {
       mainBtn.disabled = false;
       mainBtnLabel.textContent = "Activer la caméra";
@@ -2445,6 +2571,7 @@
   }
 
   function stopCamera() {
+    autoLoopActive = false; // avant stopRecording(true), sinon rien n'empêcherait une relance
     stopRecording(true);
     stopLivePreview();
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
@@ -2475,15 +2602,24 @@
       // Avant, ce cas ne faisait RIEN du tout (bouton qui semble mort,
       // sans aucun message) -- voir le même symptôme suspecté côté
       // aperçu live (David, 2026-11-15 : "démarrage… et puis rien").
+      // En continu, on retente tout seul un peu plus tard plutôt que de
+      // rester bloqué sur une erreur qu'il n'y a plus personne pour lire
+      // et réessayer manuellement.
+      if (autoLoopActive) { setTimeout(maybeContinueLoop, 400); return; }
       showError("La caméra n'a pas encore fourni d'image (vidéo pas prête) — attends une seconde et réessaie.");
       return;
     }
     recording = true;
-    extractor = SensorielleSignRecognizer.createExtractor(); // signature vierge pour cet essai
+    extractor = SensorielleSignRecognizer.createExtractor(); // signature vierge pour ce cycle
     diagTicks = 0; diagHits = 0; diagLastErr = null;
     shutterBtn.disabled = true;
     shutterBtn.classList.add("is-recording");
-    resetCaption();
+    // Ici, PAS de resetCaption() : en continu, la dernière traduction
+    // affichée doit rester visible jusqu'à ce qu'une nouvelle soit
+    // confirmée (voir stopRecording plus bas) -- sinon le texte
+    // clignoterait vers un espace vide plusieurs fois par minute, même
+    // sans raison (David ne l'a pas demandé, mais rien dans sa demande
+    // n'implique non plus de faire disparaître la traduction en continu).
     const startedAt = Date.now();
     statusLine.textContent = "Enregistrement… signe maintenant.";
     sampleTimer = setInterval(function () {
@@ -2512,16 +2648,20 @@
     if (cancelled) return;
     const rows = extractor.finish();
     const lastSignal = extractor.getLastSignal ? extractor.getLastSignal() : "?";
-    extractor = SensorielleSignRecognizer.createExtractor(); // prêt pour le prochain essai
+    extractor = SensorielleSignRecognizer.createExtractor(); // prêt pour le prochain cycle
     if (!rows || rows.length < 6) {
-      let diag = diagHits + "/" + diagTicks + " images, signal: " + lastSignal;
-      if (diagLastErr) diag += ", erreur: " + diagLastErr;
-      statusLine.textContent = "Signe trop court ou main non détectée — réessaie, bien dans le cadre. (" + diag + ")";
-      smartSentence.textContent = IDLE_TEXT;
+      // Rien de significatif capté ce cycle-ci (mains pas encore dans le
+      // cadre, pause entre deux signes, etc.) -- en continu, c'est l'état
+      // NORMAL la plupart du temps, pas une erreur : on ne montre donc
+      // rien d'alarmant, on ne touche pas à la traduction déjà affichée,
+      // et on relance tout de suite. Le diagnostic détaillé (utile pour
+      // déboguer un vrai problème) va dans la console plutôt que dans
+      // l'interface.
+      if (diagLastErr) console.debug("[sensorielle] erreur de capture :", diagLastErr);
+      else console.debug("[sensorielle] rien capté ce cycle :", diagHits + "/" + diagTicks, "signal:", lastSignal);
+      maybeContinueLoop();
       return;
     }
-    statusLine.textContent = "Analyse…";
-    smartSentence.textContent = "Analyse…";
     setAnalyzing(true);
     // La reconnaissance locale (DTW) est déjà très rapide -- souvent
     // quelques millisecondes -- donc sans plancher, "Analyse en cours"
@@ -2536,37 +2676,43 @@
     const MIN_ANALYZING_MS = 380;
     function afterAnalysis(fn) {
       const wait = Math.max(0, MIN_ANALYZING_MS - (Date.now() - analyzeStartedAt));
-      setTimeout(function () { setAnalyzing(false); fn(); }, wait);
+      setTimeout(function () { setAnalyzing(false); if (fn) fn(); maybeContinueLoop(); }, wait);
     }
     SensorielleSignRecognizer.recognize(rows).then(function (result) {
+      if (!result.ok || !result.ranked.length) { afterAnalysis(); return; }
+      const top = result.ranked[0];
+      // Score de confiance relatif : l'écart entre le 1er et le 2e choix,
+      // pas une vraie probabilité calibrée — mais un bon indice honnête de
+      // netteté de la réponse (gros écart = réponse nette, petit écart =
+      // hésitation entre deux mots).
+      const gap = result.ranked.length > 1 ? (result.ranked[1].dist - top.dist) / Math.max(0.05, result.ranked[1].dist) : 1;
+      const pct = Math.max(8, Math.min(97, Math.round(gap * 220)));
+      // David, 2026-11-16 : plus personne n'appuie sur un bouton pour
+      // "viser" son signe -- en continu, la plupart des cycles tombent
+      // pendant un moment où la personne NE signe pas (elle attend,
+      // parle, bouge les mains sans but). Le moteur DTW répond TOUJOURS
+      // avec le mot le plus proche, même pour du bruit (voir recognize()
+      // dans sign-recognizer.js : aucun seuil de rejet). Sans ce filtre,
+      // Sensorielle annoncerait et PRONONCERAIT à voix haute un faux mot
+      // toutes les ~4 secondes -- l'exact genre de fausse affirmation que
+      // ce projet s'est engagé à ne jamais présenter comme une vraie
+      // reconnaissance. On ne déclare donc un résultat (affichage + voix)
+      // que lorsque le même seuil déjà utilisé pour la barre verte/orange
+      // (55%) est atteint ; sinon on reste en écoute, sans rien inventer.
+      if (pct < 55) { afterAnalysis(); return; }
       afterAnalysis(function () {
-        if (!result.ok || !result.ranked.length) {
-          statusLine.textContent = "Signe non reconnu — réessaie.";
-          smartSentence.textContent = IDLE_TEXT;
-          return;
-        }
-        const top = result.ranked[0];
         const alts = result.ranked.slice(1, 4).map(function (r) { return labelFor(r.word); });
         smartSentence.textContent = labelFor(top.word);
         captionLabel.textContent = "mot reconnu";
         captionLabel.classList.add("confident");
-        // Score de confiance relatif : l'écart entre le 1er et le 2e choix,
-        // pas une vraie probabilité calibrée — mais un bon indice honnête de
-        // netteté de la réponse (gros écart = réponse nette, petit écart =
-        // hésitation entre deux mots).
-        const gap = result.ranked.length > 1 ? (result.ranked[1].dist - top.dist) / Math.max(0.05, result.ranked[1].dist) : 1;
-        const pct = Math.max(8, Math.min(97, Math.round(gap * 220)));
         confBar.style.width = pct + "%";
-        confBar.style.background = pct > 55 ? "var(--good)" : "var(--warn)";
+        confBar.style.background = "var(--good)";
         if (confPct) confPct.textContent = pct + "%";
         statusLine.textContent = alts.length ? "Sinon peut-être : " + alts.join(", ") + "." : "";
         speak(labelFor(top.word));
       });
     }).catch(function () {
-      afterAnalysis(function () {
-        statusLine.textContent = "Erreur pendant l'analyse — réessaie.";
-        smartSentence.textContent = IDLE_TEXT;
-      });
+      afterAnalysis();
     });
   }
 
@@ -2920,7 +3066,20 @@ if (typeof document !== "undefined") {
       if (cycleTimer) return;
       silenceInstantVoiceOnce();
       buffer = [];
-      smartSentence.textContent = IDLE_TEXT;
+      // David, 2026-11-16 : ce module suppose qu'un <span class="chip">
+      // apparaît dans #transcriptRow à chaque signe confirmé (voir le
+      // commentaire plus haut) -- mais le moteur actuel (DTW local dans
+      // stopRecording(), plus haut dans ce fichier) n'écrit plus jamais de
+      // chip là-dedans ; il parle directement à #smartSentence. Ce module
+      // est donc resté inerte (buffer toujours vide, processWindow()
+      // ressort toujours au premier test), SAUF pour cette ligne, qui
+      // écrasait #smartSentence avec "Analyse en cours…" à chaque
+      // ouverture de caméra et y restait coincé pour de bon -- en
+      // contradiction avec le nouveau texte d'attente honnête ("En
+      // écoute…") et avec la légende "collante" du mode continu. Retirée
+      // pour cette raison ; le reste du module (minuteur, buffer, IA
+      // désactivée) reste intact et inoffensif si jamais #transcriptRow
+      // recommence un jour à recevoir de vrais chips.
       cycleTimer = setInterval(processWindow, WINDOW_MS);
     }
 
@@ -2929,7 +3088,8 @@ if (typeof document !== "undefined") {
       clearInterval(cycleTimer);
       cycleTimer = null;
       buffer = [];
-      smartSentence.textContent = IDLE_TEXT;
+      // Voir le commentaire dans startCycle() : ne plus écraser
+      // #smartSentence, ce module n'a plus rien de fiable à y mettre.
     }
 
     // La caméra bascule stage.classList "live" au démarrage/arrêt (déjà
