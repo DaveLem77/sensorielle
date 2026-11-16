@@ -1041,11 +1041,19 @@
      masquée pour de bon. Le panneau de traduction descend vers le bas
      de l'écran et grossit pour occuper l'espace ainsi libéré. */
 
-  /* !important nécessaire : startCamera()/stopCamera() posent
-     style.display="flex"/"none" en JS à chaque appel (style en ligne,
-     plus prioritaire qu'une règle de feuille de style normale) --
-     purement visuel, aucune des deux fonctions n'est modifiée. */
-  .controls-bar { display: none !important; }
+  /* Règle devenue obsolète avec le retour du bouton en v9 plus bas (voir
+     ce commentaire) -- VOLONTAIREMENT retirée (pas juste commentée) le
+     2026-11-16 (bug signalé par David : "le bouton enregistrer ne
+     devrait pas être visible, là y'a un bug" -- le !important d'ici
+     entrait en conflit avec celui de v9 et le résultat dépendait juste
+     de l'ordre d'arrivée dans la feuille de style, PAS de l'état réel
+     de la caméra). Le contrôle de visibilité repose maintenant
+     uniquement sur style.display="flex"/"none" posé en JS par
+     startCamera()/stopCamera() (style en ligne = toujours prioritaire
+     sur une règle de feuille de style SANS !important, voir la règle de
+     base .controls-bar plus haut qui, elle, n'a jamais eu !important) --
+     exactement le comportement normal d'avant v8/v9, qui n'a jamais eu
+     besoin d'être forcé par CSS. */
 
   .caption-wrap {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 26px);
@@ -1073,11 +1081,23 @@
      fenêtre d'enregistrement de 3,5s avait lieu, donc elle ne signait
      presque jamais pendant qu'elle était ouverte -- d'où "jamais rien
      traduire". Un bouton + décompte redonne ce contrôle : on sait
-     exactement quand se préparer et quand signer. Même convention que
-     v7/v8 plus haut : on ajoute une règle après plutôt que de modifier
-     celle qui cachait le bouton (v8, display:none !important) --
-     !important plus fort gagne par ordre d'arrivée à spécificité égale. */
-  .controls-bar { display: flex !important; }
+     exactement quand se préparer et quand signer.
+
+     CORRECTIF 2026-11-16 (bug signalé par David : "le bouton enregistrer
+     ne devrait pas être visible, [...] ne devrait pas être sur le site
+     principal, là y'a un bug") : la version précédente de cette règle
+     forçait `display: flex !important`, pensant devoir "gagner" contre
+     le !important de v8 (juste au-dessus) qui forçait `display: none`.
+     Résultat réel : le bouton restait affiché EN PERMANENCE, même avant
+     d'ouvrir la caméra -- !important ignore totalement le style en
+     ligne que startCamera()/stopCamera() posent (style.display =
+     "flex"/"none"), donc le bouton ne suivait plus du tout l'état réel
+     de la caméra. La bonne correction n'était pas d'ajouter un
+     !important plus fort, mais de retirer les deux (celui-ci ET celui
+     de v8, voir son commentaire juste au-dessus) : sans eux, c'est de
+     nouveau le style en ligne géré en JS qui décide, exactement comme
+     avant l'ajout de v8/v9 -- cette règle n'a donc plus besoin
+     d'exister du tout. */
 
   /* Le panneau de traduction redescend un peu moins bas pour laisser la
      place au bouton qui revient (taille et position du panneau
