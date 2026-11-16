@@ -151,10 +151,10 @@
   .stage { position: fixed; inset: 0; height: 100dvh; width: 100vw; overflow: hidden; background: #000; }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
   .stage.mirror video { transform: scaleX(-1); }
-  /* Sans cette regle, le squelette main/doigts (asymetrique) dessine sur
-     #overlay apparaîtrait du mauvais côté en caméra avant, alors que le
-     repère visage (symétrique) ne le laissait jamais voir avant. */
-  .stage.mirror #overlay { transform: scaleX(-1); }
+  /* #overlay n'est PAS inversé par CSS ici : le suivi par repères (voir
+     makeToScreen dans le script plus bas) inverse déjà les coordonnées
+     lui-même en JS pour chaque point dessiné -- une double inversion
+     (CSS + JS) remettrait tout à l'envers. */
   #overlay { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
   #overlay[hidden] { display: none; }
   /* Diagnostic de l'apercu live (David, 2026-11-15 : "y a plus de lignes
@@ -1850,47 +1850,210 @@
   // repere dessine tombe exactement sur les fractions FACE_CX_FRAC/
   // FACE_CY_FRAC/FACE_H_FRAC utilisees cote analyse.
   function resizeOverlay() {
-    if (!overlay) return;
-    overlay.width = window.innerWidth;
-    overlay.height = window.innerHeight;
+    if (!overlay || !stage) return;
+    var rect = stage.getBoundingClientRect();
+    overlay.width = Math.round(rect.width);
+    overlay.height = Math.round(rect.height);
   }
-  // renderOverlay dessine un nuage de points directement sur le
-  // mouvement brut de quelques images récentes (les plus vieilles plus
-  // transparentes, pour une traînée qui s'estompe) -- AUCUN
-  // regroupement en "zones", AUCUNE identité à suivre d'une image à
-  // l'autre. Le repère ovale pour le visage a été retiré (David,
-  // 2026-11-15 : "c'est laid"). Le CSS (.stage.mirror #overlay) gère
-  // tout seul le miroir en caméra avant : on dessine toujours dans le
-  // repère "écran non-inversé".
+  function drawGuide() { if (overlay && overlayCtx) overlayCtx.clearRect(0, 0, overlay.width, overlay.height); }
+  window.addEventListener("resize", function () { if (stage.classList.contains("live")) { resizeOverlay(); drawGuide(); } });
+
+  // ---- Suivi visuel par repères (mains + visage), via MediaPipe -------
+  // David, 2026-11-15 : "au début du projet tu avais fait des lignes qui
+  // suivaient chaque doigt précisément et très bien mon visage... et là
+  // ça n'arrive pas." Rappel important, et il a raison : AVANT cette
+  // session, ce site avait déjà un prototype qui faisait exactement ça
+  // (suivi précis main/visage par repères), via MediaPipe Tasks Vision
+  // de Google -- retiré plus tôt dans cette session parce que la
+  // RECONNAISSANCE qui s'appuyait dessus n'était pas assez fiable, pas
+  // parce que le suivi visuel lui-même ne marchait pas. Mes 4 tentatives
+  // suivantes en vision classique (couleur de peau, puis mouvement brut)
+  // tentaient de réinventer, moins bien, ce que ce suivi par repères
+  // faisait déjà très bien.
   //
-  // David, 2026-11-15 : "ça ne suit pas du tout les mouvements, change
-  // de stratégie, c'est comme un filtre mais avec les mains et les bras
-  // en plus." Le vrai bug de la version précédente (zones groupées +
-  // appariées d'une image à l'autre, voir l'historique git) : tout
-  // mouvement trop loin de la position actuelle du repère était rejeté
-  // comme un "raté" plutôt que suivi -- donc dès qu'on bougeait
-  // vraiment, le repère restait figé. Cette version-ci n'a plus cette
-  // logique du tout : chaque image affiche directement où est le
-  // mouvement CETTE image, sans décider si "c'est la même main qu'avant".
-  function renderOverlay(frames) {
+  // On ramène donc ici UNIQUEMENT la partie suivi + dessin (reprise du
+  // prototype précédent, voir git log 4607885^, déjà prouvée chez
+  // David) pour le retour visuel. La RECONNAISSANCE réelle (traduire un
+  // signe LSQ en mot français) reste entièrement le moteur local DTW
+  // (sign-recognizer.js + sign-signatures.json, 77%/89% validé
+  // hors-ligne) -- complètement séparé de ce qui suit, et inchangé.
+  let handLandmarker = null;
+  let faceLandmarker = null;
+  let faceModelReady = false;
+  let visionLoadStarted = false;
+
+  const HAND_CONNECTIONS = [
+    [0, 1], [1, 2], [2, 3], [3, 4],
+    [0, 5], [5, 6], [6, 7], [7, 8],
+    [0, 9], [9, 10], [10, 11], [11, 12],
+    [0, 13], [13, 14], [14, 15], [15, 16],
+    [0, 17], [17, 18], [18, 19], [19, 20],
+    [5, 9], [9, 13], [13, 17],
+  ];
+  const FACE_LIPS_CONNECTIONS = [
+    [61, 146], [146, 91], [91, 181], [181, 84], [84, 17], [17, 314], [314, 405], [405, 321], [321, 375], [375, 291],
+    [61, 185], [185, 40], [40, 39], [39, 37], [37, 0], [0, 267], [267, 269], [269, 270], [270, 409], [409, 291],
+    [78, 95], [95, 88], [88, 178], [178, 87], [87, 14], [14, 317], [317, 402], [402, 318], [318, 324], [324, 308],
+    [78, 191], [191, 80], [80, 81], [81, 82], [82, 13], [13, 312], [312, 311], [311, 310], [310, 415], [415, 308],
+  ];
+  const FACE_LEFT_EYEBROW_CONNECTIONS = [[276, 283], [283, 282], [282, 295], [295, 285], [300, 293], [293, 334], [334, 296], [296, 336]];
+  const FACE_RIGHT_EYEBROW_CONNECTIONS = [[46, 53], [53, 52], [52, 65], [65, 55], [70, 63], [63, 105], [105, 66], [66, 107]];
+  const FACE_ACCENT_POINTS = [1, 33, 263, 105, 159, 334, 386];
+  const HAND_TIP_IDX = [4, 8, 12, 16, 20];
+
+  // Mapping écran partagé pour tout ce qui est dessiné sur #overlay --
+  // mains ET visage subissent le même recadrage "object-fit: cover" que
+  // la vidéo (les repères sont normalisés sur l'image COMPLÈTE de la
+  // caméra, pas sur la zone visible rognée), et le miroir en caméra
+  // avant est appliqué ici, en JS, sur chaque point -- #overlay lui
+  // n'est pas inversé par CSS (voir la règle .stage.mirror plus haut
+  // dans ce fichier).
+  function makeToScreen() {
+    var rect = video.getBoundingClientRect();
+    var stageRect = stage.getBoundingClientRect();
+    var mirrored = stage.classList.contains("mirror");
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var renderW = rect.width, renderH = rect.height, cropX = 0, cropY = 0;
+    if (vw && vh && rect.width && rect.height) {
+      var videoAspect = vw / vh, boxAspect = rect.width / rect.height;
+      if (videoAspect > boxAspect) { renderH = rect.height; renderW = renderH * videoAspect; cropX = (renderW - rect.width) / 2; }
+      else { renderW = rect.width; renderH = renderW / videoAspect; cropY = (renderH - rect.height) / 2; }
+    }
+    return function (p) {
+      var x = p.x * renderW - cropX;
+      var y = p.y * renderH - cropY + (rect.top - stageRect.top);
+      if (mirrored) x = rect.width - x;
+      x += rect.left - stageRect.left;
+      return { x: x, y: y };
+    };
+  }
+
+  function drawHandSkeleton(lm) {
+    var toScreen = makeToScreen();
+    var wrist = toScreen(lm[0]), mid = toScreen(lm[12]);
+    var grad = overlayCtx.createLinearGradient(wrist.x, wrist.y, mid.x, mid.y);
+    grad.addColorStop(0, "rgba(113,87,245,0.78)");
+    grad.addColorStop(1, "rgba(185,79,228,0.78)");
+    overlayCtx.lineWidth = 2;
+    overlayCtx.lineCap = "round";
+    overlayCtx.lineJoin = "round";
+    overlayCtx.strokeStyle = grad;
+    overlayCtx.beginPath();
+    HAND_CONNECTIONS.forEach(function (c) {
+      var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
+      overlayCtx.moveTo(p1.x, p1.y);
+      overlayCtx.lineTo(p2.x, p2.y);
+    });
+    overlayCtx.stroke();
+    lm.forEach(function (p, i) {
+      var sp = toScreen(p);
+      var isTip = HAND_TIP_IDX.indexOf(i) >= 0;
+      overlayCtx.beginPath();
+      overlayCtx.arc(sp.x, sp.y, isTip ? 4.5 : 2.2, 0, Math.PI * 2);
+      if (isTip) {
+        overlayCtx.shadowColor = "rgba(185,79,228,0.5)";
+        overlayCtx.shadowBlur = 5;
+        overlayCtx.fillStyle = "#B94FE4";
+        overlayCtx.fill();
+        overlayCtx.shadowBlur = 0;
+      } else {
+        overlayCtx.fillStyle = "rgba(255,255,255,0.7)";
+        overlayCtx.fill();
+      }
+    });
+  }
+
+  function drawFaceSkeleton(lm) {
+    var toScreen = makeToScreen();
+    overlayCtx.lineWidth = 1.6;
+    overlayCtx.lineCap = "round";
+    overlayCtx.lineJoin = "round";
+    overlayCtx.strokeStyle = "rgba(151,138,255,0.6)";
+    overlayCtx.beginPath();
+    FACE_LIPS_CONNECTIONS.forEach(function (c) {
+      var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
+      overlayCtx.moveTo(p1.x, p1.y);
+      overlayCtx.lineTo(p2.x, p2.y);
+    });
+    overlayCtx.stroke();
+    overlayCtx.strokeStyle = "rgba(185,79,228,0.65)";
+    overlayCtx.beginPath();
+    FACE_LEFT_EYEBROW_CONNECTIONS.concat(FACE_RIGHT_EYEBROW_CONNECTIONS).forEach(function (c) {
+      var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
+      overlayCtx.moveTo(p1.x, p1.y);
+      overlayCtx.lineTo(p2.x, p2.y);
+    });
+    overlayCtx.stroke();
+    FACE_ACCENT_POINTS.forEach(function (idx) {
+      var sp = toScreen(lm[idx]);
+      overlayCtx.beginPath();
+      overlayCtx.arc(sp.x, sp.y, 3, 0, Math.PI * 2);
+      overlayCtx.shadowColor = "rgba(185,79,228,0.45)";
+      overlayCtx.shadowBlur = 4;
+      overlayCtx.fillStyle = "#B94FE4";
+      overlayCtx.fill();
+      overlayCtx.shadowBlur = 0;
+    });
+  }
+
+  // Chargement en arrière-plan, démarré immédiatement (pas besoin
+  // d'attendre que la caméra soit ouverte, comme avant) -- deux
+  // fichiers de quelques Mo depuis des CDN publics (cdn.jsdelivr.net,
+  // storage.googleapis.com) : ça peut prendre quelques secondes, ou
+  // échouer sur un réseau qui bloque ces domaines. Pendant ce temps (ou
+  // si ça échoue), l'aperçu retombe sur le nuage de points par
+  // mouvement brut (voir previewTick plus bas) -- jamais un écran vide.
+  function loadVisionModels() {
+    if (visionLoadStarted) return;
+    visionLoadStarted = true;
+    (async function () {
+      try {
+        const mod = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
+        const vision = await mod.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+        handLandmarker = await mod.HandLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", delegate: "CPU" },
+          runningMode: "VIDEO",
+          numHands: 2,
+        });
+        // Le visage est une amélioration optionnelle chargée à part : si
+        // ça échoue, le suivi des mains marche quand même tout seul.
+        try {
+          faceLandmarker = await mod.FaceLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "CPU" },
+            runningMode: "VIDEO",
+            numFaces: 1,
+          });
+          faceModelReady = true;
+        } catch (e) { faceLandmarker = null; faceModelReady = false; }
+      } catch (err) {
+        handLandmarker = null;
+        if (previewDiag && stage.classList.contains("live")) {
+          previewDiag.hidden = false;
+          previewDiag.textContent = "suivi visuel : échec du chargement (" + ((err && err.message) ? err.message : "réseau bloqué ?") + ") — repère de secours actif";
+        }
+      }
+    })();
+  }
+  loadVisionModels();
+
+  // Repli tant que le suivi par repères n'est pas encore prêt (ou a
+  // échoué) : l'ancien nuage de points par mouvement brut (voir
+  // detectMotionPoints, sign-recognizer.js) -- pour ne jamais laisser
+  // l'écran vide pendant le chargement.
+  function renderFallbackCloud(frames) {
     if (!overlay || !overlayCtx) return;
     var vw = video.videoWidth, vh = video.videoHeight;
     var cw = overlay.width, ch = overlay.height;
-    overlayCtx.clearRect(0, 0, cw, ch);
     if (!vw || !vh || !cw || !ch || !frames || !frames.length || !WORK_W || !WORK_H) return;
     var scale = Math.max(cw / vw, ch / vh);
     var offX = (cw - vw * scale) / 2;
     var offY = (ch - vh * scale) / 2;
-    // Les coordonnées des points sont dans l'espace du canvas de travail
-    // (WORK_W x WORK_H), qui garde le même ratio que la vidéo brute ->
-    // même transformation "cover", juste remise à l'échelle de
-    // WORK_W/WORK_H vers vw/vh d'abord.
     var kx = vw / WORK_W, ky = vh / WORK_H;
     var toScreen = function (px, py) { return { x: offX + px * kx * scale, y: offY + py * ky * scale }; };
     overlayCtx.save();
     var n = frames.length;
     frames.forEach(function (pts, i) {
-      var alpha = 0.12 + 0.75 * ((i + 1) / n); // plus vieux = plus transparent, plus récent = presque plein
+      var alpha = 0.12 + 0.75 * ((i + 1) / n);
       var r = 2.6 + 2 * ((i + 1) / n);
       overlayCtx.fillStyle = "rgba(130,230,255," + alpha.toFixed(2) + ")";
       for (var k = 0; k < pts.length; k++) {
@@ -1902,66 +2065,74 @@
     });
     overlayCtx.restore();
   }
-  function drawGuide() { renderOverlay(null); }
-  window.addEventListener("resize", function () { if (stage.classList.contains("live")) { resizeOverlay(); drawGuide(); } });
 
-  // Aperçu continu léger (visuel seulement, jamais utilisé pour la
-  // reconnaissance) : pendant que la caméra est ouverte -- avant,
-  // pendant et après un enregistrement -- montre en direct ce que le
-  // système "voit". 4e stratégie (voir detectMotionPoints,
-  // sign-recognizer.js, et le commentaire sur renderOverlay ci-dessus) :
-  // plus de regroupement en zones ni de lissage/appariement d'une image
-  // à l'autre -- on garde juste les quelques dernières images de points
-  // de mouvement bruts pour une traînée qui s'estompe.
-  let previewTimer = null;
+  let previewRafId = null;
   let previewPrevGray = null;
-  let recentFrames = []; // [[{x,y}...], ...], la plus récente en dernier
+  let recentFrames = [];
+  let lastPreviewVideoTime = -1;
   const TRAIL_FRAMES = 3;
   const previewCanvas = document.createElement("canvas");
   const previewCtx = previewCanvas.getContext("2d", { willReadFrequently: true });
+
+  function previewTick() {
+    previewRafId = requestAnimationFrame(previewTick);
+    if (!video.videoWidth) return;
+
+    if (handLandmarker) {
+      // Même image que la précédente (vidéo pas encore avancée) : rien
+      // de neuf à analyser, on attend la prochaine image réelle.
+      if (video.currentTime === lastPreviewVideoTime) return;
+      lastPreviewVideoTime = video.currentTime;
+      try {
+        var now = performance.now();
+        var result = handLandmarker.detectForVideo(video, now);
+        var faceLm = null;
+        if (faceModelReady && faceLandmarker) {
+          try {
+            var faceResult = faceLandmarker.detectForVideo(video, now);
+            if (faceResult.faceLandmarks && faceResult.faceLandmarks.length) faceLm = faceResult.faceLandmarks[0];
+          } catch (e) { faceModelReady = false; faceLandmarker = null; }
+        }
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+        (result.landmarks || []).forEach(function (lm) { drawHandSkeleton(lm); });
+        if (faceLm) drawFaceSkeleton(faceLm);
+        if (previewDiag && !previewDiag.hidden) previewDiag.hidden = true; // suivi reel actif, plus besoin du diagnostic
+      } catch (e) {
+        if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "suivi visuel : erreur — " + ((e && e.message) ? e.message : String(e)); }
+      }
+      return;
+    }
+
+    if (!WORK_W || !WORK_H) return;
+    if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
+    if (previewCanvas.height !== WORK_H) previewCanvas.height = WORK_H;
+    try {
+      previewCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
+      var img = previewCtx.getImageData(0, 0, WORK_W, WORK_H);
+      var R = window.SensorielleSignRecognizer;
+      if (R && R.detectMotionPoints) {
+        var visual = R.detectMotionPoints(img, previewPrevGray, WORK_W, WORK_H);
+        previewPrevGray = visual.gray;
+        recentFrames.push(visual.points);
+        if (recentFrames.length > TRAIL_FRAMES) recentFrames.shift();
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+        renderFallbackCloud(recentFrames);
+        if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "suivi visuel : chargement… (repère de secours actif)"; }
+      }
+    } catch (e) { /* repli seulement, jamais bloquant */ }
+  }
 
   function startLivePreview() {
     stopLivePreview();
     previewPrevGray = null;
     recentFrames = [];
-    if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "aperçu : démarrage…"; }
-    var waitTicks = 0;
-    previewTimer = setInterval(function () {
-      if (!video.videoWidth || !WORK_W || !WORK_H) {
-        // Ne reste JAMAIS bloqué sur "démarrage…" sans explication (voir
-        // David, 2026-11-15) : on dit explicitement ce qu'on attend, avec
-        // les vraies valeurs, pour voir si ça se débloque après quelques
-        // images ou si ça reste coincé pour de bon.
-        waitTicks++;
-        if (previewDiag) {
-          previewDiag.textContent = "aperçu : en attente de la vidéo (videoWidth=" + video.videoWidth + ", readyState=" + video.readyState + ", tentative " + waitTicks + ")";
-        }
-        return;
-      }
-      if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
-      if (previewCanvas.height !== WORK_H) previewCanvas.height = WORK_H;
-      try {
-        previewCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
-        const img = previewCtx.getImageData(0, 0, WORK_W, WORK_H);
-        const R = window.SensorielleSignRecognizer;
-        if (R && R.detectMotionPoints) {
-          const visual = R.detectMotionPoints(img, previewPrevGray, WORK_W, WORK_H);
-          previewPrevGray = visual.gray;
-          recentFrames.push(visual.points);
-          if (recentFrames.length > TRAIL_FRAMES) recentFrames.shift();
-          renderOverlay(recentFrames);
-          if (previewDiag && visual.diag) {
-            const pct = visual.diag.totalPixels ? ((visual.diag.motionPixels / visual.diag.totalPixels) * 100).toFixed(1) : "0.0";
-            previewDiag.textContent = "aperçu : " + pct + "% de l'image bouge · " + visual.diag.pointsShown + " points affichés";
-          }
-        }
-      } catch (e) {
-        if (previewDiag) previewDiag.textContent = "aperçu : erreur — " + ((e && e.message) ? e.message : String(e));
-      }
-    }, 110);
+    lastPreviewVideoTime = -1;
+    if (!handLandmarker && previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "suivi visuel : démarrage…"; }
+    previewRafId = requestAnimationFrame(previewTick);
   }
   function stopLivePreview() {
-    if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
+    if (previewRafId) { cancelAnimationFrame(previewRafId); previewRafId = null; }
+    if (overlay && overlayCtx) overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
     if (previewDiag) { previewDiag.hidden = true; previewDiag.textContent = ""; }
     previewPrevGray = null;
     recentFrames = [];
