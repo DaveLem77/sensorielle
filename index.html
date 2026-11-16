@@ -1966,7 +1966,7 @@
       <button class="sheet-toggle-btn active" id="voiceBtn" aria-label="Couper la voix">Son</button>
     </div>
     <h2>Comment ça reconnaît un signe</h2>
-    <p>Aucun modèle téléchargé, aucune donnée envoyée sur internet. Le navigateur suit la position et la forme de ta main en mouvement (couleur de peau + mouvement, image par image), normalisée par rapport à ton visage détecté de la même façon. Une fois les 3,5 secondes enregistrées, cette trajectoire est comparée directement — sur ton appareil — aux 325 vraies vidéos du dictionnaire LSQ déjà filmées pour ce site, et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
+    <p>Aucun modèle téléchargé, aucune donnée envoyée sur internet. Le navigateur suit la position et la forme de ta main en mouvement (couleur de peau + mouvement, image par image), normalisée par rapport à ton visage détecté de la même façon. Une fois les 6 secondes enregistrées, cette trajectoire est comparée directement — sur ton appareil — aux 325 vraies vidéos du dictionnaire LSQ déjà filmées pour ce site, et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
     <p><b>Résultat honnête, pas une estimation</b> : testé hors-ligne sur les 325 mots du dictionnaire avec des déformations volontaires (vitesse différente, bruit, décalage de position) pour simuler une autre prise du même signe : 88,3% de bonne réponse en premier choix, 97,2% dans les 5 premiers choix, sur 325 mots possibles. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette. Ce test reste basé sur les mêmes vidéos qui ont servi à construire le dictionnaire (pas des prises indépendantes sur un autre téléphone) — la vraie mesure, c'est ton usage réel.</p>
     <p><b>Pour un bon résultat</b> : recule-toi assez pour que tes épaules et tes bras soient visibles (pas juste ton visage de près — les vidéos du dictionnaire sont filmées à cette distance-là), centre ton visage dans le cadre, garde un bon éclairage, et signe à peu près à la même distance de la caméra à chaque fois. La caméra enregistre et traduit en continu, aucun bouton à presser.</p>
     <p><b>Dossier vidéos personnel (Son à signe)</b> : le bouton ci-dessous te laisse choisir un dossier sur ton appareil — chaque vidéo que tu y déposes, nommée d'après le mot (ex. <code>bonjour.mp4</code>), devient reconnaissable, en priorité sur les mots déjà intégrés. Rien n'est jamais envoyé ni copié ailleurs qu'à l'endroit que tu as choisi toi-même. Disponible sur Chrome et Edge; le bouton reste caché sur les navigateurs qui n'offrent pas encore cette fonction.</p>
@@ -2639,7 +2639,7 @@
     confBar.style.width = "0%";
     confBar.style.background = "var(--bad)";
     if (confPct) confPct.textContent = "—";
-    statusLine.textContent = "Centre ton visage, puis appuie sur le bouton pour enregistrer ton signe (3,5 secondes).";
+    statusLine.textContent = "Centre ton visage, puis appuie sur le bouton pour enregistrer ton signe (6 secondes).";
     setAnalyzing(false);
   }
 
