@@ -1880,6 +1880,8 @@
   let handLandmarker = null;
   let faceLandmarker = null;
   let faceModelReady = false;
+  let poseLandmarker = null;
+  let poseModelReady = false;
   let visionLoadStarted = false;
 
   const HAND_CONNECTIONS = [
@@ -1900,6 +1902,13 @@
   const FACE_RIGHT_EYEBROW_CONNECTIONS = [[46, 53], [53, 52], [52, 65], [65, 55], [70, 63], [63, 105], [105, 66], [66, 107]];
   const FACE_ACCENT_POINTS = [1, 33, 263, 105, 159, 334, 386];
   const HAND_TIP_IDX = [4, 8, 12, 16, 20];
+  // Repères de pose (33 points) : seulement les bras nous intéressent
+  // ici (épaule -> coude -> poignet), le reste du corps n'est pas
+  // dessiné. David, 2026-11-16 : veut aussi le visage et les bras,
+  // "pas en mauve mais très délicat blanc pâle minimaliste".
+  const POSE_LEFT_ARM = [[11, 13], [13, 15]];
+  const POSE_RIGHT_ARM = [[12, 14], [14, 16]];
+  const POSE_ARM_POINTS = [11, 12, 13, 14, 15, 16];
 
   // Mapping écran partagé pour tout ce qui est dessiné sur #overlay --
   // mains ET visage subissent le même recadrage "object-fit: cover" que
@@ -1928,16 +1937,21 @@
     };
   }
 
+  // Style unique, partagé par les mains, le visage et les bras : blanc
+  // pâle, délicat, minimaliste (David, 2026-11-16 : "pas en mauve mais
+  // très délicat blanc pâle minimaliste") -- plus aucune couleur mauve
+  // nulle part dans le rendu.
+  var TRACE_LINE = "rgba(255,255,255,0.3)";
+  var TRACE_DOT = "rgba(255,255,255,0.5)";
+  var TRACE_ACCENT = "rgba(255,255,255,0.85)";
+  var TRACE_GLOW = "rgba(255,255,255,0.35)";
+
   function drawHandSkeleton(lm) {
     var toScreen = makeToScreen();
-    var wrist = toScreen(lm[0]), mid = toScreen(lm[12]);
-    var grad = overlayCtx.createLinearGradient(wrist.x, wrist.y, mid.x, mid.y);
-    grad.addColorStop(0, "rgba(113,87,245,0.78)");
-    grad.addColorStop(1, "rgba(185,79,228,0.78)");
-    overlayCtx.lineWidth = 2;
+    overlayCtx.lineWidth = 1.3;
     overlayCtx.lineCap = "round";
     overlayCtx.lineJoin = "round";
-    overlayCtx.strokeStyle = grad;
+    overlayCtx.strokeStyle = TRACE_LINE;
     overlayCtx.beginPath();
     HAND_CONNECTIONS.forEach(function (c) {
       var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
@@ -1949,15 +1963,15 @@
       var sp = toScreen(p);
       var isTip = HAND_TIP_IDX.indexOf(i) >= 0;
       overlayCtx.beginPath();
-      overlayCtx.arc(sp.x, sp.y, isTip ? 4.5 : 2.2, 0, Math.PI * 2);
+      overlayCtx.arc(sp.x, sp.y, isTip ? 3.2 : 1.7, 0, Math.PI * 2);
       if (isTip) {
-        overlayCtx.shadowColor = "rgba(185,79,228,0.5)";
-        overlayCtx.shadowBlur = 5;
-        overlayCtx.fillStyle = "#B94FE4";
+        overlayCtx.shadowColor = TRACE_GLOW;
+        overlayCtx.shadowBlur = 4;
+        overlayCtx.fillStyle = TRACE_ACCENT;
         overlayCtx.fill();
         overlayCtx.shadowBlur = 0;
       } else {
-        overlayCtx.fillStyle = "rgba(255,255,255,0.7)";
+        overlayCtx.fillStyle = TRACE_DOT;
         overlayCtx.fill();
       }
     });
@@ -1965,10 +1979,10 @@
 
   function drawFaceSkeleton(lm) {
     var toScreen = makeToScreen();
-    overlayCtx.lineWidth = 1.6;
+    overlayCtx.lineWidth = 1;
     overlayCtx.lineCap = "round";
     overlayCtx.lineJoin = "round";
-    overlayCtx.strokeStyle = "rgba(151,138,255,0.6)";
+    overlayCtx.strokeStyle = TRACE_LINE;
     overlayCtx.beginPath();
     FACE_LIPS_CONNECTIONS.forEach(function (c) {
       var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
@@ -1976,7 +1990,6 @@
       overlayCtx.lineTo(p2.x, p2.y);
     });
     overlayCtx.stroke();
-    overlayCtx.strokeStyle = "rgba(185,79,228,0.65)";
     overlayCtx.beginPath();
     FACE_LEFT_EYEBROW_CONNECTIONS.concat(FACE_RIGHT_EYEBROW_CONNECTIONS).forEach(function (c) {
       var p1 = toScreen(lm[c[0]]), p2 = toScreen(lm[c[1]]);
@@ -1987,12 +2000,41 @@
     FACE_ACCENT_POINTS.forEach(function (idx) {
       var sp = toScreen(lm[idx]);
       overlayCtx.beginPath();
-      overlayCtx.arc(sp.x, sp.y, 3, 0, Math.PI * 2);
-      overlayCtx.shadowColor = "rgba(185,79,228,0.45)";
-      overlayCtx.shadowBlur = 4;
-      overlayCtx.fillStyle = "#B94FE4";
+      overlayCtx.arc(sp.x, sp.y, 1.8, 0, Math.PI * 2);
+      overlayCtx.shadowColor = TRACE_GLOW;
+      overlayCtx.shadowBlur = 3;
+      overlayCtx.fillStyle = TRACE_ACCENT;
       overlayCtx.fill();
       overlayCtx.shadowBlur = 0;
+    });
+  }
+
+  // Bras (épaule -> coude -> poignet), via le modèle de pose -- immobile
+  // par nature (on ne dessine que le squelette tel qu'il est CETTE
+  // image, pas de traînée), même style délicat que mains/visage.
+  function drawArmSkeleton(lm) {
+    var toScreen = makeToScreen();
+    overlayCtx.lineWidth = 1.3;
+    overlayCtx.lineCap = "round";
+    overlayCtx.lineJoin = "round";
+    overlayCtx.strokeStyle = TRACE_LINE;
+    overlayCtx.beginPath();
+    POSE_LEFT_ARM.concat(POSE_RIGHT_ARM).forEach(function (c) {
+      var a = lm[c[0]], b = lm[c[1]];
+      if (!a || !b || (a.visibility != null && a.visibility < 0.4) || (b.visibility != null && b.visibility < 0.4)) return;
+      var p1 = toScreen(a), p2 = toScreen(b);
+      overlayCtx.moveTo(p1.x, p1.y);
+      overlayCtx.lineTo(p2.x, p2.y);
+    });
+    overlayCtx.stroke();
+    POSE_ARM_POINTS.forEach(function (idx) {
+      var p = lm[idx];
+      if (!p || (p.visibility != null && p.visibility < 0.4)) return;
+      var sp = toScreen(p);
+      overlayCtx.beginPath();
+      overlayCtx.arc(sp.x, sp.y, 2.1, 0, Math.PI * 2);
+      overlayCtx.fillStyle = TRACE_DOT;
+      overlayCtx.fill();
     });
   }
 
@@ -2015,8 +2057,9 @@
           runningMode: "VIDEO",
           numHands: 2,
         });
-        // Le visage est une amélioration optionnelle chargée à part : si
-        // ça échoue, le suivi des mains marche quand même tout seul.
+        // Le visage et les bras (pose) sont des améliorations optionnelles
+        // chargées à part, chacune indépendamment : si l'une échoue, les
+        // autres marchent quand même.
         try {
           faceLandmarker = await mod.FaceLandmarker.createFromOptions(vision, {
             baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "CPU" },
@@ -2025,6 +2068,14 @@
           });
           faceModelReady = true;
         } catch (e) { faceLandmarker = null; faceModelReady = false; }
+        try {
+          poseLandmarker = await mod.PoseLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate: "CPU" },
+            runningMode: "VIDEO",
+            numPoses: 1,
+          });
+          poseModelReady = true;
+        } catch (e) { poseLandmarker = null; poseModelReady = false; }
       } catch (err) {
         handLandmarker = null;
         if (previewDiag && stage.classList.contains("live")) {
@@ -2093,9 +2144,17 @@
             if (faceResult.faceLandmarks && faceResult.faceLandmarks.length) faceLm = faceResult.faceLandmarks[0];
           } catch (e) { faceModelReady = false; faceLandmarker = null; }
         }
+        var poseLm = null;
+        if (poseModelReady && poseLandmarker) {
+          try {
+            var poseResult = poseLandmarker.detectForVideo(video, now);
+            if (poseResult.landmarks && poseResult.landmarks.length) poseLm = poseResult.landmarks[0];
+          } catch (e) { poseModelReady = false; poseLandmarker = null; }
+        }
         overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
         (result.landmarks || []).forEach(function (lm) { drawHandSkeleton(lm); });
         if (faceLm) drawFaceSkeleton(faceLm);
+        if (poseLm) drawArmSkeleton(poseLm);
         if (previewDiag && !previewDiag.hidden) previewDiag.hidden = true; // suivi reel actif, plus besoin du diagnostic
       } catch (e) {
         if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "suivi visuel : erreur — " + ((e && e.message) ? e.message : String(e)); }
