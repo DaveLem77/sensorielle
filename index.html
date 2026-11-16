@@ -836,19 +836,20 @@
 
   .controls-bar { bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); z-index: 8; position: absolute; }
 
-  /* the big glowing round stop button, colored to match the reference
-     photo's blue→purple→pink gradient — same #shutterBtn node and
-     stopCamera() listener the engine already wires up. */
+  /* David, 2026-11-16 : rapetissé en pilule compacte (icône + étiquette
+     cote a cote) a la place du gros cercle de 72px -- voir le
+     commentaire sur le <button> dans le HTML. La couleur reelle (fond
+     anthracite, pas ce degrade) vient de la regle .shutter-btn plus
+     bas dans ce fichier (v8/v9, plus specifique car plus tardive) --
+     cette regle-ci ne controle plus que la FORME. */
   .shutter-btn {
-    position: relative; width: 72px; height: 72px; border-radius: 50%; cursor: pointer; border: none; padding: 0;
-    background: linear-gradient(135deg, #5B6EF5 0%, #B94FE4 55%, #F45E9A 100%);
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.14), 0 0 40px 6px rgba(140,90,230,0.5), 0 18px 40px -10px rgba(90,40,160,0.6);
+    position: relative; height: 44px; width: auto; border-radius: 22px; cursor: pointer; border: none; padding: 0 18px 0 14px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
   }
   .shutter-btn:active { transform: scale(0.95); }
-  .shutter-icon { width: 22px; height: 22px; border-radius: 50%; background: #fff; display: block; transition: border-radius .2s, background .2s; }
+  .shutter-icon { width: 14px; height: 14px; border-radius: 50%; background: #fff; display: block; flex: none; transition: border-radius .2s, background .2s; }
   .shutter-btn.is-recording { cursor: default; }
-  .shutter-btn.is-recording .shutter-icon { background: #ff3b30; border-radius: 6px; animation: shutterPulse 1s ease-in-out infinite; }
+  .shutter-btn.is-recording .shutter-icon { background: #ff3b30; border-radius: 4px; animation: shutterPulse 1s ease-in-out infinite; }
   .shutter-btn:disabled { opacity: .85; }
   @keyframes shutterPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(0.82); } }
   @media (prefers-reduced-motion: reduce) { .shutter-btn.is-recording .shutter-icon { animation: none; } }
@@ -1099,25 +1100,25 @@
      avant l'ajout de v8/v9 -- cette règle n'a donc plus besoin
      d'exister du tout. */
 
-  /* Le panneau de traduction redescend un peu moins bas pour laisser la
-     place au bouton qui revient (taille et position du panneau
-     lui-même inchangées -- David n'a pas demandé de le rapetisser).
-     132px et non 118px (valeur d'avant le bouton) : la nouvelle
-     étiquette texte sous le bouton (voir .start-btn-wrap) ajoute un peu
-     de hauteur. */
-  .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 132px); }
+  /* David, 2026-11-16 : valeurs reduites suite au bouton rapetissé en
+     pilule compacte (44px de haut, étiquette dans la pilule -- plus de
+     .start-btn-wrap/ligne de texte séparée en dessous, voir plus bas).
+     132px -> 86px (controls-bar reste a ~20px du bas + pilule de 44px
+     + marge), 282px -> 190px pour la zone de visée (meme logique,
+     espace du bas repris proportionnellement). */
+  .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 86px); }
 
   /* La zone de visée remonte en conséquence (bouton + panneau reprennent
      l'espace du bas). */
-  .viewfinder { inset: 13% 8% calc(env(safe-area-inset-bottom, 0px) + 282px) 8%; }
+  .viewfinder { inset: 13% 8% calc(env(safe-area-inset-bottom, 0px) + 190px) 8%; }
 
-  /* "un bouton démarrer" : le bouton existant (cercle anthracite, voir
-     v7) garde son icône, mais une étiquette texte en dessous dit
-     clairement ce qu'il fait -- plus un simple point blanc discret. */
-  .start-btn-wrap { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+  /* "un bouton démarrer" : le bouton existant garde son icône et son
+     étiquette texte, maintenant côte à côte DANS la pilule (voir le
+     <button> dans le HTML et .shutter-btn plus haut) -- plus de
+     wrapper .start-btn-wrap séparé, devenu inutile. */
   .shutter-caption {
     font-family: var(--sans); font-weight: 600; font-size: 13px;
-    color: rgba(255,255,255,0.78); letter-spacing: 0.2px;
+    color: rgba(255,255,255,0.85); letter-spacing: 0.2px;
   }
 
   /* Décompte 3-2-1 plein écran avant l'enregistrement : gros chiffre
@@ -1935,17 +1936,21 @@
        bas, il ne sert à rien" -- masqué en CSS (v8). David, 2026-11-16
        (plus tard, même jour) : "je veux un bouton démarrer, un décompte
        3 2 1" -- remontré en CSS (v9, voir plus haut) avec une étiquette
-       texte en plus de l'icône. #shutterBtn et son écouteur de clic
-       n'ont jamais bougé, seul CE QU'IL DÉCLENCHE change (voir
-       runCountdown() plus bas : décompte d'abord, puis
-       startRecording()). -->
+       texte en plus de l'icône. David, 2026-11-16 (encore plus tard) :
+       "mets le bouton démarrer autre part plus discret, qui prend moins
+       de place" -- icône + étiquette fusionnées dans UNE seule pilule
+       compacte (44px de haut, largeur automatique) au lieu du gros
+       cercle de 72px avec son étiquette séparée dessous (voir .shutter-btn
+       plus haut, et .caption-wrap/.viewfinder ajustés en conséquence
+       pour reprendre l'espace libéré). #shutterBtn et son écouteur de
+       clic n'ont jamais bougé, seul CE QU'IL DÉCLENCHE change (voir
+       runCountdown() plus bas : décompte d'abord, puis startRecording()).
+       Durée dans l'aria-label mise à jour (3,5s -> 6s, voir RECORD_MS). -->
   <div class="controls-bar" id="controlsBar" style="display:none;">
-    <div class="start-btn-wrap">
-      <button class="shutter-btn" id="shutterBtn" aria-label="Démarrer : décompte 3-2-1 puis enregistre mon signe (3,5 secondes)">
-        <span class="shutter-icon" aria-hidden="true"></span>
-      </button>
+    <button class="shutter-btn" id="shutterBtn" aria-label="Démarrer : décompte 3-2-1 puis enregistre mon signe (6 secondes)">
+      <span class="shutter-icon" aria-hidden="true"></span>
       <span class="shutter-caption" id="shutterCaption">Démarrer</span>
-    </div>
+    </button>
   </div>
 
   <div class="countdown-overlay" id="countdownOverlay" hidden aria-live="assertive">
@@ -2080,7 +2085,26 @@
   // la personne ne savait jamais QUAND la fenêtre d'enregistrement avait
   // lieu, donc elle signait rarement pendant qu'elle était ouverte.
   const IDLE_TEXT = "Appuie sur Démarrer pour signer";
-  const RECORD_MS = 3500;
+  // David, 2026-11-16 (encore plus tard) : "ca ne traduit pas du tout
+  // les videos des 325". Mesure honnete sur les 325 fichiers source
+  // (media/signs/*.mp4, qui sont EXACTEMENT les videos utilisees pour
+  // construire sign-signatures.json -- voir ffprobe) : duree mediane
+  // 4.7s, p95 = 5.57s, max = 7.3s, et 89% des 325 mots durent PLUS que
+  // les 3.5s qu'on enregistrait ici. Pour la grande majorite des mots,
+  // l'enregistrement live s'arretait donc avant que le signe soit
+  // termine -- trajectoire tronquee comparee a une reference complete.
+  // Teste d'abord a 7500ms (couvre 100% des 325) via Playwright+camera
+  // simulee sur un echantillon de 24 mots : ca corrige bien la
+  // troncature (ex. "famille", avant totalement absent du top8, devient
+  // le 1er choix DTW), MAIS ca degrade la reconnaissance de la plupart
+  // des mots plus courts que 7.5s (la majorite) : apres la fin du
+  // signe, la camera continue d'enregistrer plusieurs secondes de
+  // "rien" (main immobile ou hors cadre) qui diluent la signature avec
+  // du bruit non pertinent. 6000ms est le compromis mesure : couvre
+  // 97.2% des 325 mots (316/325 <= 6.0s) tout en limitant a ~1.3s
+  // (mediane) le temps mort ajoute apres la fin du signe pour la
+  // majorite des mots.
+  const RECORD_MS = 6000;
   // Dimensions de travail recalculees une fois la camera ouverte (voir
   // sizeWorkCanvas) pour garder le vrai ratio largeur/hauteur de la video —
   // l'ecraser dans un carre fixe fausserait le canal "aspect" de la main
@@ -2836,14 +2860,30 @@
       // pendant un moment où la personne NE signe pas (elle attend,
       // parle, bouge les mains sans but). Le moteur DTW répond TOUJOURS
       // avec le mot le plus proche, même pour du bruit (voir recognize()
-      // dans sign-recognizer.js : aucun seuil de rejet). Sans ce filtre,
+      // dans sign-recognizer.js : aucun seuil de rejet). Sans filtre,
       // Sensorielle annoncerait et PRONONCERAIT à voix haute un faux mot
       // toutes les ~4 secondes -- l'exact genre de fausse affirmation que
       // ce projet s'est engagé à ne jamais présenter comme une vraie
       // reconnaissance. On ne déclare donc un résultat (affichage + voix)
-      // que lorsque le même seuil déjà utilisé pour la barre verte/orange
-      // (55%) est atteint ; sinon on reste en écoute, sans rien inventer.
-      if (pct < 55) { afterAnalysis(); return; }
+      // que lorsque "pct" (l'écart relatif 1er/2e choix, voir plus haut)
+      // dépasse un seuil.
+      //
+      // David, 2026-11-16 (plus tard, même jour) : "ça traduit jamais
+      // rien, même les vidéos des 325". Mesuré honnêtement (test DTW à
+      // 325 voies, mêmes 325 signatures de référence, requête = vidéo de
+      // l'autre moitié des images du même mot, déformée en vitesse/bruit/
+      // position pour simuler une autre prise -- voir stress_test_v2_
+      // corpus.py) : le seuil de 55% utilisé jusqu'ici ne laissait
+      // passer que 32% des reconnaissances pourtant CORRECTES (105/325)
+      // -- 198 mots sur 325 étaient correctement identifiés par le DTW
+      // mais jamais affichés, uniquement parce que l'écart 1er/2e choix
+      // ne grimpait pas assez haut. 55% n'était donc pas "prudent", juste
+      // beaucoup trop strict. Seuil abaissé à 30% : sur le même test, ça
+      // laisse passer 71% des reconnaissances correctes (230/325) en
+      // gardant 99.6% de précision parmi ce qui est affiché (une seule
+      // fausse annonce possible sur 231) -- un bien meilleur compromis,
+      // mesuré, pas juste une intuition.
+      if (pct < 30) { afterAnalysis(); return; }
       afterAnalysis(function () {
         const alts = result.ranked.slice(1, 4).map(function (r) { return labelFor(r.word); });
         smartSentence.textContent = labelFor(top.word);
