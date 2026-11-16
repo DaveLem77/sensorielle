@@ -190,3 +190,85 @@ b. ENSUITE, dans une NOUVELLE requete SQL Editor, remplace l'adresse par
 c. Important : connecte-toi sur sensorielle.ca avec ce compte admin
    AVANT d'ouvrir /dashboard/ - le tableau de bord réutilise la session
    déjà ouverte sur le site, il ne redemande pas de mot de passe.
+
+
+6) Dictionnaire communautaire qui grandit seul (/contributions/index.html)
+---------------------------------------------------------------------------
+
+Reponse concrete a "trouve une maniere que ca s'ameliore sans mon
+travail" (2026-11-16). Honnetement : aucun systeme ne peut deviner le
+sens d'un signe que personne n'a jamais etiquete - mais celui-ci evite
+que CE SOIT TOI qui doives filmer/extraire/reconstruire le fichier JSON
+et redeployer le site a chaque nouveau mot. Le circuit complet :
+quelqu'un filme un mot sur /collector/ (deja en place) -> toi (ou un
+autre admin) ouvre /contributions/, regarde la video, clique
+"Approuver" -> le mot est reconnaissable PARTOUT sur le site, tout de
+suite, sans toucher au depot git. Zero etape manuelle de ton cote a
+part ce clic.
+
+Necessite la SECTION 5 ci-dessus deja faite (is_admin(), profiles) -
+fais-la d'abord si ce n'est pas encore le cas.
+
+a. Supabase > SQL Editor > New query > colle TOUT le bloc SQL ci-dessous
+   > Run.
+
+   -- debut du bloc a copier --
+
+   create table if not exists public.community_signs (
+     id uuid primary key default gen_random_uuid(),
+     word text not null unique,
+     rows jsonb not null,
+     contribution_id uuid references public.contributions(id) on delete set null,
+     created_at timestamptz not null default now()
+   );
+
+   alter table public.community_signs enable row level security;
+
+   drop policy if exists "community_signs: lecture publique" on public.community_signs;
+   create policy "community_signs: lecture publique"
+     on public.community_signs for select
+     using (true);
+
+   drop policy if exists "community_signs: ecriture admin" on public.community_signs;
+   create policy "community_signs: ecriture admin"
+     on public.community_signs for insert
+     with check (public.is_admin());
+
+   drop policy if exists "community_signs: mise a jour admin" on public.community_signs;
+   create policy "community_signs: mise a jour admin"
+     on public.community_signs for update
+     using (public.is_admin());
+
+   drop policy if exists "contributions: lecture admin" on public.contributions;
+   create policy "contributions: lecture admin"
+     on public.contributions for select
+     using (public.is_admin());
+
+   drop policy if exists "contributions: mise a jour admin" on public.contributions;
+   create policy "contributions: mise a jour admin"
+     on public.contributions for update
+     using (public.is_admin());
+
+   drop policy if exists "contributions bucket: lecture admin" on storage.objects;
+   create policy "contributions bucket: lecture admin"
+     on storage.objects for select
+     using (bucket_id = 'contributions' and public.is_admin());
+
+   -- fin du bloc a copier --
+
+b. C'est tout - rien d'autre a faire a la main. Va ensuite sur
+   /contributions/ (connecte avec ton compte admin, comme pour
+   /dashboard/) : s'il y a deja des contributions en attente, elles
+   s'affichent, pretes a etre approuvees ou rejetees.
+
+c. Important, honnetement : l'extraction (le travail de "comprendre" la
+   video) se fait DANS TON NAVIGATEUR au moment ou tu cliques
+   "Approuver" - ca prend quelques secondes (la video se joue une fois,
+   en arriere-plan). Ouvre /contributions/ avec Chrome ou Edge (comme le
+   choix de dossier de /collector/) pour que ce soit fiable; un
+   navigateur sans "requestVideoFrameCallback" affichera un avertissement
+   et l'extraction sera moins precise.
+
+d. Une contribution rejetee n'est ajoutee nulle part - juste marquee
+   "rejected" dans la table, la video reste dans le stockage (pas
+   supprimee automatiquement, au cas ou tu changes d'avis).

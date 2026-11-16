@@ -95,6 +95,46 @@
   var sigData = null; // { channels, weights, mu, sd, words: {word: [[..],...]} }
   var loadingPromise = null;
 
+  // 2026-11-16 (David : "trouve une maniere [...] que ca s'ameliore [...]
+  // sans mon travail"). Le dictionnaire statique ci-dessus (325 mots, fixe,
+  // dans le depot git) reste la base, mais n'importe qui connaissant la LSQ
+  // peut proposer un nouveau mot via /collector/, qu'un admin approuve
+  // ensuite via /contributions/ (voir ce fichier pour le detail honnete de
+  // ce que ca fait vraiment -- CE N'EST PAS un systeme qui invente des mots
+  // tout seul, juste un systeme qui evite a David de devoir, pour CHAQUE
+  // nouveau mot, filmer/extraire/reconstruire ce fichier JSON et redeployer
+  // le site). Chaque mot approuve atterrit dans la table Supabase
+  // "community_signs" -- on la lit ici, en plus du fichier statique, et on
+  // fusionne les deux avant de reconnaitre quoi que ce soit.
+  //
+  // Exception HONNETE a la phrase d'en-tete de ce fichier ("aucun reseau
+  // requis apres le chargement de la page") : cette seule requete-ci part
+  // vers Supabase. Elle est volontairement best-effort -- un echec (hors
+  // ligne, Supabase pas configure, reseau bloque) ne bloque jamais la
+  // reconnaissance, qui continue avec le dictionnaire statique seul; voir
+  // le .catch plus bas et le delai limite (COMMUNITY_TIMEOUT_MS) pour ne
+  // jamais faire attendre l'utilisateur sur un reseau lent.
+  var COMMUNITY_URL = "https://frinlluqjbwgctkzqoea.supabase.co/rest/v1/community_signs?select=word,rows";
+  var COMMUNITY_KEY = "sb_publishable_HQ1zoBcHrmetRRIopwKxgA_t4DAaNJZ";
+  var COMMUNITY_TIMEOUT_MS = 4000;
+
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      var timer = setTimeout(function () { if (!done) { done = true; resolve(null); } }, ms);
+      promise.then(function (v) { if (!done) { done = true; clearTimeout(timer); resolve(v); } },
+        function () { if (!done) { done = true; clearTimeout(timer); resolve(null); } });
+    });
+  }
+
+  function fetchCommunitySigns() {
+    return withTimeout(
+      fetch(COMMUNITY_URL, { headers: { apikey: COMMUNITY_KEY, Authorization: "Bearer " + COMMUNITY_KEY } })
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }),
+      COMMUNITY_TIMEOUT_MS
+    ).catch(function () { return null; });
+  }
+
   function loadSignatures() {
     if (sigData) return Promise.resolve(sigData);
     if (loadingPromise) return loadingPromise;
@@ -104,8 +144,18 @@
         return r.json();
       })
       .then(function (json) {
-        sigData = json;
-        return json;
+        return fetchCommunitySigns().then(function (community) {
+          if (community && community.length) {
+            // Un mot communautaire du meme nom qu'un mot statique REMPLACE
+            // celui-ci (la contribution la plus recemment approuvee gagne --
+            // voir l'upsert sur "word" cote /contributions/index.html).
+            community.forEach(function (row) {
+              if (row && row.word && row.rows && row.rows.length) json.words[row.word] = row.rows;
+            });
+          }
+          sigData = json;
+          return json;
+        });
       });
     return loadingPromise;
   }

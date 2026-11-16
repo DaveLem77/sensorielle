@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revoir les contributions — Sensorielle</title>
+<meta name="description" content="Page admin : approuver ou rejeter les signes envoyes par la communaute.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f3f2f8">
+<link rel="icon" href="../media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --s-bg:#F8F9FF;--s-surface:#fff;--s-ink:#080D25;--s-ink-dim:#62677A;--s-ink-faint:#9b9eac;
+  --s-line:#080d2514;
+  --s-gradient:linear-gradient(100deg,#7157F5 0%,#B94FE4 38%,#F45E9A 68%,#FF8058 100%);
+  --s-display:'Geist','Inter',sans-serif;
+  --s-ok:#1f9d5c;--s-err:#e0485a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--s-bg);color:var(--s-ink);font:15px/1.6 'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{width:min(760px,92%);margin-inline:auto}
+header{padding:22px 0;border-bottom:1px solid var(--s-line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none}
+.brand img{height:30px;width:30px;object-fit:contain}
+.brand span{font-family:var(--s-display);font-weight:600;font-size:19px;letter-spacing:-.5px;color:var(--s-ink)}
+main{padding:40px 0 80px}
+.eyebrow{font-size:10px;letter-spacing:1.5px;color:#8a8ea0;font-weight:600;text-transform:uppercase;margin:0 0 14px}
+h1{font-family:var(--s-display);font-size:clamp(26px,4.4vw,34px);font-weight:600;letter-spacing:-.04em;line-height:1.15;margin:0 0 10px}
+.lead{font-size:14px;color:var(--s-ink-dim);line-height:1.7;margin:0 0 30px;max-width:62ch}
+.gate,.empty,.notice{background:var(--s-surface);border:1px solid var(--s-line);border-radius:16px;padding:26px;font-size:14px;color:var(--s-ink-dim)}
+.gate a,.notice a{color:#7c4dff;font-weight:600;text-decoration:none}
+.card{background:var(--s-surface);border:1px solid var(--s-line);border-radius:18px;padding:20px 22px;margin-bottom:16px}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.word{font-family:var(--s-display);font-weight:700;font-size:20px;letter-spacing:-.01em}
+.meta{font-size:12px;color:var(--s-ink-faint)}
+.note{font-size:13px;color:var(--s-ink-dim);margin:8px 0 0}
+video{width:100%;max-width:340px;border-radius:12px;background:#111;display:block;margin:14px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.btn{font:inherit;font-weight:600;font-size:13px;padding:10px 16px;border-radius:999px;border:1px solid var(--s-line);background:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.btn.primary{background:var(--s-gradient);color:#fff;border:none}
+.btn.danger{color:var(--s-err);border-color:#e0485a33}
+.btn:disabled{opacity:.55;cursor:default}
+.status{font-size:12.5px;margin-top:10px;min-height:1.2em}
+.status.ok{color:var(--s-ok)}
+.status.err{color:var(--s-err)}
+.card.is-done{opacity:.5}
+footer{padding:20px 0;color:var(--s-ink-faint);font-size:12px}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <a class="brand" href="/">
+    <img src="../media/favicon.png" alt="">
+    <span>Sensorielle</span>
+  </a>
+  <span class="meta" id="whoami"></span>
+</header>
+<main class="wrap">
+  <p class="eyebrow">Admin</p>
+  <h1>Contributions en attente</h1>
+  <p class="lead">
+    Chaque signe approuvé ici est extrait automatiquement (même code que la caméra en direct),
+    ajouté au dictionnaire communautaire, et devient reconnaissable sur le site <strong>sans
+    qu'aucun fichier n'ait besoin d'être redéployé</strong>. Rejeter une contribution ne l'ajoute
+    nulle part.
+  </p>
+
+  <div id="rvfcNotice" class="notice" style="margin-bottom:16px;" hidden>Ce navigateur ne supporte pas l'extraction précise (requestVideoFrameCallback) — ouvre cette page avec Chrome ou Edge pour approuver des contributions. L'échantillonnage de repli reste possible mais moins fiable.</div>
+  <div id="gate" class="gate">Vérification de la connexion…</div>
+  <div id="list"></div>
+</main>
+<footer class="wrap">
+  <a href="../index.html">← Retour au site</a>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Meme moteur de reconnaissance que la camera en direct -- l'extraction
+     d'une contribution DOIT utiliser exactement ce code pour que les
+     lignes produites soient comparables a celles du dictionnaire
+     statique (voir le commentaire d'en-tete de sign-recognizer.js sur
+     l'unification des pipelines). -->
+<script src="../media/sign-recognizer.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* =========================================================================
+     Page admin "Revoir les contributions" (2026-11-16, suite a la demande de
+     David : "trouve une maniere [...] que ca s'ameliore [...] sans mon
+     travail, genre tout seul").
+
+     Ce que ca fait VRAIMENT, honnetement : ca ne "devine" jamais un mot que
+     personne n'a jamais etiquete -- aucun systeme ne peut faire ca de
+     maniere fiable (voir l'explication donnee a David en conversation). Ce
+     que ca fait a la place : chaque personne qui connait la LSQ peut filmer
+     UN signe avec son mot (page /collector/, deja en place depuis le
+     2026-10-23), et au lieu que David doive, pour chaque nouveau mot,
+     filmer/extraire/reconstruire sign-signatures.json et redeployer le site
+     (tout le travail manuel qu'il voulait eviter), un admin n'a plus qu'a
+     cliquer "Approuver" ICI : l'extraction (meme code que la camera en
+     direct, voir plus bas) tourne dans le navigateur au moment du clic, le
+     resultat est insere dans la table Supabase "community_signs", et
+     sign-recognizer.js (voir loadSignatures() plus bas dans ce fichier-la)
+     va chercher cette table a CHAQUE chargement du site -- donc le nouveau
+     mot est reconnaissable PARTOUT, pour tout le monde, sans toucher au
+     depot git ni au dictionnaire statique. C'est la version honnete de
+     "ca s'ameliore tout seul" : la croissance est automatique, mais il faut
+     toujours qu'UNE personne ait demontre le signe une fois, et qu'UN admin
+     (toi) clique "Approuver" une fois -- zero fabrication de mots inconnus,
+     zero fausse reconnaissance presentee comme fiable.
+
+     Acces : reutilise le MEME compte/connexion Supabase que le reste du
+     site (meme URL/cle, meme session -- si tu es deja connecte sur la page
+     principale avec ton compte marque is_admin=true, cette page te
+     reconnait automatiquement). La vraie protection est cote serveur (RLS,
+     fonction is_admin()) -- voir SUPABASE-A-CONFIGURER.txt section 6, a
+     executer une seule fois dans Supabase (je n'ai pas acces a ce tableau
+     de bord depuis ici). Sans cette etape, cette page reste bloquee sur
+     "verification de la connexion" ou affiche une liste vide, proprement,
+     sans rien casser. */
+
+  var SUPABASE_URL = "https://frinlluqjbwgctkzqoea.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_HQ1zoBcHrmetRRIopwKxgA_t4DAaNJZ";
+  if (!window.supabase || !window.supabase.createClient) {
+    document.getElementById("gate").textContent = "La librairie Supabase n'a pas pu se charger (réseau ?). Recharge la page.";
+    return;
+  }
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var gateEl = document.getElementById("gate");
+  var listEl = document.getElementById("list");
+  var whoamiEl = document.getElementById("whoami");
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---- Extraction d'une video uploadee, avec le MEME moteur que la camera
+  // en direct (SensorielleSignRecognizer, voir media/sign-recognizer.js) --
+  // voir le long commentaire plus haut sur pourquoi c'est essentiel.
+  //
+  // sizeWorkCanvas() ci-dessous DOIT rester identique a sa jumelle dans
+  // index.html (meme maxDim=180) -- c'est elle qui fixe la resolution de
+  // travail a laquelle tout le dictionnaire (statique ET communautaire) est
+  // construit. Dupliquee ici plutot que partagee car ce n'est que 6 lignes
+  // et que sign-recognizer.js reste volontairement un module sans aucune
+  // dependance sur le DOM d'une page precise.
+  function workSize(vw, vh) {
+    var maxDim = 180;
+    if (vw >= vh) return { w: maxDim, h: Math.max(16, Math.round(maxDim * vh / vw)) };
+    return { h: maxDim, w: Math.max(16, Math.round(maxDim * vw / vh)) };
+  }
+
+  // Lecture reelle + requestVideoFrameCallback (rVFC), PAS une recherche
+  // image par image (video.currentTime = ...) : teste d'abord avec
+  // l'approche par "seek", qui semblait la plus logique (deterministe, pas
+  // liee a la vitesse de lecture) -- mais verification faite (Playwright,
+  // Chromium headless), video.currentTime restait bloque a 0 apres chaque
+  // seek malgre l'evenement "seeked" qui se declenchait bien : les 100
+  // "images" capturees etaient en realite 100 FOIS LA MEME premiere image.
+  // Un systeme qui ajoute un mot au dictionnaire a partir d'une signature
+  // bidon serait pire que de ne rien ajouter -- donc pas de raccourci ici.
+  // rVFC, lui, donne de vrais timestamps croissants et des images reelles
+  // (verifie : 120 images sur 4s a ~30 im/s, premiere a t=0, derniere a
+  // t=3.97) parce qu'il suit une VRAIE lecture plutot que de forcer le
+  // decodeur a sauter partout. Chrome/Edge seulement (comme le choix de
+  // dossier de /collector/) -- voir le repli plus bas sinon.
+  function extractFromVideoFile(blobUrl) {
+    return new Promise(function (resolve, reject) {
+      var video = document.createElement("video");
+      video.muted = true; video.playsInline = true; video.preload = "auto";
+      video.addEventListener("error", function () { reject(new Error("Vidéo illisible.")); });
+
+      video.addEventListener("loadedmetadata", function () {
+        var size = workSize(video.videoWidth || 1, video.videoHeight || 1);
+        var canvas = document.createElement("canvas");
+        canvas.width = size.w; canvas.height = size.h;
+        var ctx = canvas.getContext("2d", { willReadFrequently: true });
+        var extractor = SensorielleSignRecognizer.createExtractor();
+        var nFrames = 0;
+
+        function captureOneFrame() {
+          try {
+            ctx.drawImage(video, 0, 0, size.w, size.h);
+            var img = ctx.getImageData(0, 0, size.w, size.h);
+            extractor.pushFrame(img, size.w, size.h);
+            nFrames++;
+          } catch (e) { /* une trame illisible ne doit pas tout interrompre */ }
+        }
+
+        function finishUp() {
+          resolve(extractor.finish() || []);
+        }
+
+        if (video.requestVideoFrameCallback) {
+          function onFrame(now, metadata) {
+            captureOneFrame();
+            if (!video.ended && nFrames < 600) {
+              video.requestVideoFrameCallback(onFrame);
+            } else {
+              finishUp();
+            }
+          }
+          video.addEventListener("ended", finishUp, { once: true });
+          video.requestVideoFrameCallback(onFrame);
+          video.play().catch(function (e) { reject(new Error("Lecture vidéo impossible : " + e.message)); });
+        } else {
+          // Repli (navigateur sans rVFC) : echantillonnage approximatif en
+          // temps reel via timeupdate -- moins precis, mais fonctionne
+          // partout. Prevenu honnetement a l'ecran (voir plus bas) plutot
+          // que de pretendre une precision qu'on n'a pas.
+          video.addEventListener("timeupdate", captureOneFrame);
+          video.addEventListener("ended", finishUp, { once: true });
+          video.play().catch(function (e) { reject(new Error("Lecture vidéo impossible : " + e.message)); });
+        }
+      });
+
+      video.src = blobUrl;
+    });
+  }
+
+  var HAS_RVFC = !!document.createElement("video").requestVideoFrameCallback;
+  if (!HAS_RVFC) { var rvfcEl = document.getElementById("rvfcNotice"); if (rvfcEl) rvfcEl.hidden = false; }
+
+  // ---- Connexion / droits -------------------------------------------------
+  sb.auth.getSession().then(function (res) {
+    var session = res.data && res.data.session;
+    if (!session) {
+      gateEl.innerHTML = "Pas connecté. <a href=\"../index.html\">Connecte-toi sur le site principal</a> avec ton compte admin, puis reviens sur cette page (même session, pas besoin de te reconnecter ici).";
+      return;
+    }
+    whoamiEl.textContent = session.user.email || "";
+    return sb.from("profiles").select("is_admin").eq("id", session.user.id).single().then(function (res2) {
+      if (res2.error || !res2.data || !res2.data.is_admin) {
+        gateEl.innerHTML = "Connecté, mais ce compte n'est pas marqué admin. Voir SUPABASE-A-CONFIGURER.txt (section 5) pour marquer un compte admin.";
+        return;
+      }
+      gateEl.remove();
+      loadPending();
+    });
+  }).catch(function (err) {
+    gateEl.textContent = "Impossible de vérifier la connexion : " + (err && err.message ? err.message : String(err));
+  });
+
+  function fmtRelative(dateStr) {
+    var d = new Date(dateStr);
+    var mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return "à l'instant";
+    if (mins < 60) return "il y a " + mins + " min";
+    var hrs = Math.round(mins / 60);
+    if (hrs < 24) return "il y a " + hrs + " h";
+    return "il y a " + Math.round(hrs / 24) + " j";
+  }
+
+  function loadPending() {
+    sb.from("contributions").select("*").eq("status", "pending").order("created_at", { ascending: true })
+      .then(function (res) {
+        if (res.error) { listEl.innerHTML = "<div class=\"notice\">Erreur de lecture : " + escapeHtml(res.error.message) + "</div>"; return; }
+        var rows = res.data || [];
+        if (!rows.length) { listEl.innerHTML = "<div class=\"empty\">Aucune contribution en attente pour l'instant.</div>"; return; }
+        rows.forEach(renderCard);
+      });
+  }
+
+  function renderCard(contrib) {
+    var card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML =
+      "<div class=\"card-head\"><span class=\"word\">" + escapeHtml(contrib.word) + "</span>" +
+      "<span class=\"meta\">" + fmtRelative(contrib.created_at) + (contrib.email ? " · " + escapeHtml(contrib.email) : "") + "</span></div>" +
+      (contrib.note ? "<p class=\"note\">" + escapeHtml(contrib.note) + "</p>" : "") +
+      "<video controls playsinline></video>" +
+      "<div class=\"row\">" +
+      "<button type=\"button\" class=\"btn primary\" data-act=\"approve\">Approuver</button>" +
+      "<button type=\"button\" class=\"btn danger\" data-act=\"reject\">Rejeter</button>" +
+      "</div><p class=\"status\"></p>";
+    listEl.appendChild(card);
+
+    var videoEl = card.querySelector("video");
+    var statusEl = card.querySelector(".status");
+    var btnApprove = card.querySelector("[data-act=approve]");
+    var btnReject = card.querySelector("[data-act=reject]");
+
+    sb.storage.from("contributions").createSignedUrl(contrib.video_path, 120).then(function (res) {
+      if (res.error) { statusEl.textContent = "Vidéo introuvable : " + res.error.message; statusEl.className = "status err"; return; }
+      videoEl.src = res.data.signedUrl;
+    });
+
+    function setBusy(label) {
+      btnApprove.disabled = true; btnReject.disabled = true;
+      statusEl.textContent = label; statusEl.className = "status";
+    }
+    function finish(ok, label) {
+      statusEl.textContent = label; statusEl.className = "status " + (ok ? "ok" : "err");
+      if (ok) { card.classList.add("is-done"); btnApprove.remove(); btnReject.remove(); }
+      else { btnApprove.disabled = false; btnReject.disabled = false; }
+    }
+
+    btnReject.addEventListener("click", function () {
+      setBusy("Rejet en cours…");
+      sb.from("contributions").update({ status: "rejected" }).eq("id", contrib.id).then(function (res) {
+        if (res.error) { finish(false, "Erreur : " + res.error.message); return; }
+        finish(true, "Rejetée.");
+      });
+    });
+
+    btnApprove.addEventListener("click", function () {
+      setBusy("Extraction en cours (lecture de la vidéo)…");
+      var signedUrl = videoEl.src;
+      if (!signedUrl) { finish(false, "Vidéo pas encore chargée, réessaie dans un instant."); return; }
+      extractFromVideoFile(signedUrl)
+        .then(function (rows) {
+          if (!rows || rows.length < 6) {
+            finish(false, "Vidéo trop courte ou aucun mouvement détecté — pas ajoutée. Essaie de la rejeter ou demande une nouvelle prise.");
+            return;
+          }
+          var rounded = rows.map(function (row) { return row.map(function (x) { return Math.round(x * 10000) / 10000; }); });
+          setBusy("Ajout au dictionnaire communautaire…");
+          return sb.from("community_signs").upsert({
+            word: contrib.word.trim(),
+            rows: rounded,
+            contribution_id: contrib.id
+          }, { onConflict: "word" }).then(function (res) {
+            if (res.error) throw res.error;
+            return sb.from("contributions").update({ status: "approved" }).eq("id", contrib.id);
+          }).then(function (res) {
+            if (res.error) throw res.error;
+            finish(true, "Approuvée — « " + contrib.word.trim() + " » est maintenant reconnaissable sur le site (pas besoin de redéployer).");
+          });
+        })
+        .catch(function (err) {
+          finish(false, "Erreur : " + (err && err.message ? err.message : String(err)));
+        });
+    });
+  }
+})();
+</script>
+</body>
+</html>
