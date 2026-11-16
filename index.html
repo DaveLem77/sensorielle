@@ -1065,6 +1065,65 @@
   .viewfinder { inset: 13% 8% calc(env(safe-area-inset-bottom, 0px) + 225px) 8%; }
 
   /* =======================================================================
+     LIVE CAMERA — restyle v9 (2026-11-16, David) : "ça fait juste écrire
+     'à l'écoute' et jamais rien traduire, je veux un bouton démarrer, un
+     décompte 3 2 1 et après ça traduit tous les bons signes". Retour à un
+     déclenchement manuel (voir autoLoopActive désactivé dans le script
+     plus bas) : sans bouton, la personne ne savait jamais QUAND la
+     fenêtre d'enregistrement de 3,5s avait lieu, donc elle ne signait
+     presque jamais pendant qu'elle était ouverte -- d'où "jamais rien
+     traduire". Un bouton + décompte redonne ce contrôle : on sait
+     exactement quand se préparer et quand signer. Même convention que
+     v7/v8 plus haut : on ajoute une règle après plutôt que de modifier
+     celle qui cachait le bouton (v8, display:none !important) --
+     !important plus fort gagne par ordre d'arrivée à spécificité égale. */
+  .controls-bar { display: flex !important; }
+
+  /* Le panneau de traduction redescend un peu moins bas pour laisser la
+     place au bouton qui revient (taille et position du panneau
+     lui-même inchangées -- David n'a pas demandé de le rapetisser).
+     132px et non 118px (valeur d'avant le bouton) : la nouvelle
+     étiquette texte sous le bouton (voir .start-btn-wrap) ajoute un peu
+     de hauteur. */
+  .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 132px); }
+
+  /* La zone de visée remonte en conséquence (bouton + panneau reprennent
+     l'espace du bas). */
+  .viewfinder { inset: 13% 8% calc(env(safe-area-inset-bottom, 0px) + 282px) 8%; }
+
+  /* "un bouton démarrer" : le bouton existant (cercle anthracite, voir
+     v7) garde son icône, mais une étiquette texte en dessous dit
+     clairement ce qu'il fait -- plus un simple point blanc discret. */
+  .start-btn-wrap { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+  .shutter-caption {
+    font-family: var(--sans); font-weight: 600; font-size: 13px;
+    color: rgba(255,255,255,0.78); letter-spacing: 0.2px;
+  }
+
+  /* Décompte 3-2-1 plein écran avant l'enregistrement : gros chiffre
+     centré sur la zone caméra, qui pulse à chaque changement (voir
+     runCountdown() plus bas, même technique de reflow forcé que pour
+     #smartSentence plus haut dans ce fichier -- une animation CSS sur un
+     sélecteur permanent ne se rejoue pas toute seule à chaque frappe). */
+  .countdown-overlay {
+    position: absolute; inset: 0; z-index: 9; display: flex; align-items: center;
+    justify-content: center; pointer-events: none; background: rgba(0,0,0,0.18);
+  }
+  .countdown-overlay[hidden] { display: none; }
+  .countdown-num {
+    font-family: var(--sans); font-weight: 800; font-size: 150px; color: #fff;
+    text-shadow: 0 6px 40px rgba(0,0,0,0.55); line-height: 1;
+  }
+  .countdown-num.tick { animation: countdownTick 0.82s cubic-bezier(.2,.9,.3,1); }
+  @keyframes countdownTick {
+    0% { transform: scale(1.55); opacity: 0; }
+    18% { transform: scale(1); opacity: 1; }
+    80% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.88); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .countdown-num.tick { animation: none; } }
+
+  /* =======================================================================
      Son à signe (parole → vidéo signée) — mode séparé, volontairement
      minimaliste : un fond sombre uni, une seule vidéo à la fois, un simple
      indicateur d'écoute (rien à presser), une ligne de sous-titres.
@@ -1852,17 +1911,25 @@
     </div>
   </div>
 
-  <!-- David, 2026-11-16 : "enlève le bouton enregistrer en bas, il ne
-       sert à rien" -- #shutterBtn reste dans le DOM (startRecording /
-       stopRecording et son écouteur de clic l'utilisent encore, retirer
-       l'élément casserait ces fonctions) mais .controls-bar est
-       maintenant forcée invisible en CSS (display:none !important,
-       plus fort que le style.display="flex" posé par startCamera()) --
-       purement visuel, rien n'est supprimé côté logique. -->
+  <!-- David, 2026-11-16 (plus tôt) : "enlève le bouton enregistrer en
+       bas, il ne sert à rien" -- masqué en CSS (v8). David, 2026-11-16
+       (plus tard, même jour) : "je veux un bouton démarrer, un décompte
+       3 2 1" -- remontré en CSS (v9, voir plus haut) avec une étiquette
+       texte en plus de l'icône. #shutterBtn et son écouteur de clic
+       n'ont jamais bougé, seul CE QU'IL DÉCLENCHE change (voir
+       runCountdown() plus bas : décompte d'abord, puis
+       startRecording()). -->
   <div class="controls-bar" id="controlsBar" style="display:none;">
-    <button class="shutter-btn" id="shutterBtn" aria-label="Enregistrer mon signe (3,5 secondes)">
-      <span class="shutter-icon" aria-hidden="true"></span>
-    </button>
+    <div class="start-btn-wrap">
+      <button class="shutter-btn" id="shutterBtn" aria-label="Démarrer : décompte 3-2-1 puis enregistre mon signe (3,5 secondes)">
+        <span class="shutter-icon" aria-hidden="true"></span>
+      </button>
+      <span class="shutter-caption" id="shutterCaption">Démarrer</span>
+    </div>
+  </div>
+
+  <div class="countdown-overlay" id="countdownOverlay" hidden aria-live="assertive">
+    <span class="countdown-num" id="countdownNum">3</span>
   </div>
 
   <div class="error-toast" id="errorBox"></div>
@@ -1982,12 +2049,17 @@
   const sheetScrim = document.getElementById("sheetScrim");
   const closeSheet = document.getElementById("closeSheet");
   const voiceBtn = document.getElementById("voiceBtn");
+  const countdownOverlay = document.getElementById("countdownOverlay");
+  const countdownNum = document.getElementById("countdownNum");
+  const shutterCaption = document.getElementById("shutterCaption");
   if (!stage || !video || !mainBtn || !shutterBtn) return;
 
-  // David, 2026-11-16 : "doit commencer immédiatement à enregistrer,
-  // tout le temps traduire" -- il n'y a plus de bouton à presser, donc
-  // "Prête à enregistrer" n'avait plus de sens.
-  const IDLE_TEXT = "En écoute…";
+  // David, 2026-11-16 (plus tard, même jour) : "ça fait juste écrire à
+  // l'écoute et jamais rien traduire, je veux un bouton démarrer, un
+  // décompte 3 2 1" -- retour à un déclenchement manuel : sans bouton,
+  // la personne ne savait jamais QUAND la fenêtre d'enregistrement avait
+  // lieu, donc elle signait rarement pendant qu'elle était ouverte.
+  const IDLE_TEXT = "Appuie sur Démarrer pour signer";
   const RECORD_MS = 3500;
   // Dimensions de travail recalculees une fois la camera ouverte (voir
   // sizeWorkCanvas) pour garder le vrai ratio largeur/hauteur de la video —
@@ -2001,7 +2073,14 @@
   let frenchVoice = null;
   let speechUnlocked = false;
   let recording = false;
-  let autoLoopActive = false; // true tant que la caméra est ouverte : enregistre et traduit sans bouton, en boucle
+  // David, 2026-11-16 (plus tard, même jour) : retour au bouton -- reste
+  // désormais TOUJOURS false (plus jamais mis à true nulle part), ce qui
+  // rend maybeContinueLoop() ci-dessous inerte sans avoir à toucher à ses
+  // points d'appel dans startRecording()/stopRecording(). Gardé (plutôt
+  // que supprimé) pour que ces fonctions n'aient besoin d'aucun autre
+  // changement -- seul ce qui DÉCLENCHE startRecording() a changé (le
+  // clic sur #shutterBtn, via runCountdown(), plus bas).
+  let autoLoopActive = false;
   let extractor = null;
   let recordTimer = null;
   let sampleTimer = null;
@@ -2484,12 +2563,12 @@
     if (livePillText) livePillText.textContent = on ? "Analyse en cours" : "Traduction en direct";
   }
 
-  // David, 2026-11-16 : "doit commencer immédiatement à enregistrer,
-  // tout le temps traduire" -- plus de bouton, donc chaque fin de cycle
-  // (court ou long, réussi ou non) relance le suivant tout seul, tant
-  // que la caméra est ouverte. stopCamera() coupe autoLoopActive AVANT
-  // d'annuler l'enregistrement en cours, donc rien ne relance après une
-  // fermeture volontaire.
+  // David, 2026-11-16 (plus tôt) : boucle automatique sans bouton.
+  // David, 2026-11-16 (plus tard, même jour) : retour au bouton --
+  // autoLoopActive ne passe plus jamais à true nulle part (voir sa
+  // déclaration plus haut), donc cette fonction ne relance plus rien ;
+  // gardée telle quelle pour ne pas devoir toucher aux points d'appel
+  // existants dans startRecording()/stopRecording().
   function maybeContinueLoop() {
     if (autoLoopActive && stage.classList.contains("live")) startRecording();
   }
@@ -2553,12 +2632,13 @@
       startLivePreview();
       SensorielleSignRecognizer.loadSignatures().catch(function () {});
 
-      // David, 2026-11-16 : "doit commencer immédiatement à enregistrer,
-      // tout le temps traduire" -- plus besoin d'appuyer sur un bouton ;
-      // maybeContinueLoop() relance ensuite automatiquement chaque
-      // cycle (voir stopRecording plus bas).
-      autoLoopActive = true;
-      startRecording();
+      // David, 2026-11-16 (plus tard, même jour) : "je veux un bouton
+      // démarrer, un décompte 3 2 1" -- retour au déclenchement manuel.
+      // autoLoopActive reste donc à false ici (plus d'auto-démarrage ni
+      // de relance automatique -- maybeContinueLoop() devient inerte tant
+      // qu'il reste false) ; la caméra s'ouvre et ATTEND que la personne
+      // appuie sur #shutterBtn (voir son écouteur de clic plus bas, qui
+      // lance runCountdown() puis startRecording()).
     } catch (err) {
       mainBtn.disabled = false;
       mainBtnLabel.textContent = "Activer la caméra";
@@ -2600,6 +2680,44 @@
   // ou autre chose.
   let diagTicks = 0, diagHits = 0, diagLastErr = null;
 
+  // David, 2026-11-16 (plus tard, même jour) : "je veux un bouton
+  // démarrer, un décompte 3 2 1 et après ça traduit tous les bons
+  // signes". Décompte avant l'enregistrement : le bouton est désactivé
+  // pendant le décompte (pas de double-déclenchement), le chiffre
+  // utilise le même truc de reflow forcé que #smartSentence plus haut
+  // (retirer puis remettre la classe qui porte l'animation CSS, sinon
+  // elle ne rejoue qu'une fois) pour pulser à 3, 2 PUIS 1, puis
+  // startRecording() démarre exactement au moment où l'écran redevient
+  // net -- la personne sait précisément quand signer.
+  let countdownActive = false;
+  function runCountdown(onDone) {
+    if (countdownActive) return;
+    countdownActive = true;
+    shutterBtn.disabled = true;
+    if (shutterCaption) shutterCaption.textContent = "Prépare-toi…";
+    const steps = [3, 2, 1];
+    let i = 0;
+    function tick() {
+      if (i >= steps.length) {
+        countdownActive = false;
+        if (countdownOverlay) countdownOverlay.hidden = true;
+        if (shutterCaption) shutterCaption.textContent = "Démarrer";
+        onDone();
+        return;
+      }
+      if (countdownOverlay) countdownOverlay.hidden = false;
+      if (countdownNum) {
+        countdownNum.textContent = String(steps[i]);
+        countdownNum.classList.remove("tick");
+        void countdownNum.offsetWidth; // force le reflow, sinon l'animation ne rejoue pas d'un chiffre à l'autre
+        countdownNum.classList.add("tick");
+      }
+      i++;
+      setTimeout(tick, 820);
+    }
+    tick();
+  }
+
   function startRecording() {
     if (recording) return;
     if (!video.videoWidth) {
@@ -2618,6 +2736,7 @@
     diagTicks = 0; diagHits = 0; diagLastErr = null;
     shutterBtn.disabled = true;
     shutterBtn.classList.add("is-recording");
+    if (shutterCaption) shutterCaption.textContent = "Enregistrement…";
     // Ici, PAS de resetCaption() : en continu, la dernière traduction
     // affichée doit rester visible jusqu'à ce qu'une nouvelle soit
     // confirmée (voir stopRecording plus bas) -- sinon le texte
@@ -2649,6 +2768,7 @@
     if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
     shutterBtn.disabled = false;
     shutterBtn.classList.remove("is-recording");
+    if (shutterCaption) shutterCaption.textContent = "Démarrer";
     if (cancelled) return;
     const rows = extractor.finish();
     const lastSignal = extractor.getLastSignal ? extractor.getLastSignal() : "?";
@@ -2721,7 +2841,9 @@
   }
 
   mainBtn.addEventListener("click", () => { unlockSpeech(); startCamera(); });
-  shutterBtn.addEventListener("click", () => { unlockSpeech(); startRecording(); });
+  // David, 2026-11-16 (plus tard, même jour) : décompte 3-2-1 avant de
+  // vraiment démarrer l'enregistrement (voir runCountdown() plus haut).
+  shutterBtn.addEventListener("click", () => { unlockSpeech(); runCountdown(startRecording); });
   stageCloseBtn.addEventListener("click", stopCamera);
   camToggle.addEventListener("click", () => {
     currentFacing = currentFacing === "environment" ? "user" : "environment";
