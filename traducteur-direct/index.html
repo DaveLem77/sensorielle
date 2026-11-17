@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traducteur en direct — Sensorielle</title>
+<meta name="description" content="Traduction LSQ en direct, en incrustation par-dessus n'importe quelle autre fenêtre (PowerPoint, Zoom, etc.) — fonctionne aussi hors ligne, téléchargeable.">
+<link rel="icon" href="/media/favicon.png">
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:#0A0C14;color:#fff;font:15px/1.5 'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;min-height:100%}
+
+/* ---- écran d'accueil (avant la caméra) -------------------------- */
+#setup{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
+#setup h1{font-family:'Manrope',sans-serif;font-size:22px;font-weight:800;margin:0;letter-spacing:-.02em}
+#setup p{color:#9aa0b4;font-size:13.5px;max-width:46ch;margin:0;line-height:1.6}
+.big-btn{appearance:none;border:none;border-radius:999px;padding:16px 30px;font-size:16px;font-weight:700;font-family:'Manrope',sans-serif;cursor:pointer;background:linear-gradient(100deg,#7157F5,#F45E9A);color:#fff;box-shadow:0 10px 30px rgba(124,77,255,.35)}
+.big-btn:active{transform:translateY(1px)}
+.big-btn:disabled{opacity:.5;cursor:default}
+#err{color:#ff8a8a;font-size:13px;max-width:46ch;display:none}
+#dl-row{margin-top:10px;font-size:12.5px;color:#6b7190}
+#dl-row a{color:#b9a7ff;font-weight:600;text-decoration:none}
+#dl-row a:hover{color:#fff}
+
+/* ---- scène active (caméra + légende) ----------------------------- */
+#stage{flex:1;display:none;position:relative;background:#000}
+#stage.on{display:flex}
+#vid{width:100%;height:100%;object-fit:cover;display:block}
+#stage.mirror #vid{transform:scaleX(-1)}
+#caption{position:absolute;left:0;right:0;bottom:0;padding:18px 20px 22px;background:linear-gradient(to top, rgba(0,0,0,.82), rgba(0,0,0,0));text-align:center;pointer-events:none}
+#captionWord{font-family:'Manrope',sans-serif;font-weight:800;font-size:clamp(22px,6vw,40px);letter-spacing:-.02em;min-height:1.2em;text-shadow:0 2px 14px rgba(0,0,0,.6)}
+#captionWord.unsure{color:#c7cbe0;font-weight:600;font-size:clamp(16px,4vw,24px)}
+#captionSub{font-size:11.5px;letter-spacing:.3px;color:#9aa0b4;margin-top:4px;text-transform:uppercase;font-weight:600}
+
+#bar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;gap:8px}
+.chip-btn{appearance:none;border:1px solid rgba(255,255,255,.18);background:rgba(10,12,20,.55);backdrop-filter:blur(6px);color:#fff;font:600 12.5px/1 'Inter',sans-serif;padding:9px 13px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.chip-btn:hover{background:rgba(124,77,255,.35)}
+.chip-btn[hidden]{display:none}
+.dot{width:7px;height:7px;border-radius:50%;background:#ff5a5a;animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+#countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Manrope',sans-serif;font-weight:800;font-size:96px;background:rgba(0,0,0,.45)}
+#countdown[hidden]{display:none}
+
+/* ---- rendu minimal une fois en fenêtre flottante (PiP) ------------ */
+/* position:fixed, indépendant du flex du body d'origine : la fenêtre
+   PiP est un document tout neuf, on ne peut pas compter sur le
+   contexte flex de la page principale pour lui donner sa hauteur. */
+#stage.pip{position:fixed;inset:0;display:flex}
+.pip #bar{display:none}
+.pip #captionSub{display:none}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <h1>Traducteur LSQ en direct</h1>
+  <p>Une seule fenêtre : ta caméra + le mot reconnu en direct, rien d'autre. Pensée pour être mise en incrustation par-dessus un PowerPoint en plein écran pendant une présentation.</p>
+  <button id="startBtn" class="big-btn">Démarrer la caméra</button>
+  <div id="err"></div>
+  <div id="dl-row">Fonctionne aussi hors ligne : <a href="sensorielle-traducteur-direct.zip">télécharger la version à garder sur ton ordinateur</a></div>
+</div>
+
+<div id="stage">
+  <video id="vid" autoplay playsinline muted></video>
+  <div id="bar">
+    <span class="chip-btn" id="recDot" style="cursor:default"><span class="dot"></span> en direct</span>
+    <span style="display:flex;gap:8px">
+      <button class="chip-btn" id="pipBtn">Mettre par-dessus ↗</button>
+      <button class="chip-btn" id="stopBtn">Arrêter</button>
+    </span>
+  </div>
+  <div id="countdown" hidden></div>
+  <div id="caption">
+    <div id="captionWord">en écoute…</div>
+    <div id="captionSub">signe devant la caméra</div>
+  </div>
+</div>
+
+<script src="/media/sign-recognizer.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // Memes constantes mesurees que la page principale (index.html) --
+  // aucune reinvention : seul le DTW/Human deja en place est reutilise
+  // (media/sign-recognizer.js, non modifie), seule la boucle
+  // d'enregistrement continu ci-dessous est dupliquee pour cette page
+  // volontairement minimaliste (pas de phrase, pas de voix -- juste le
+  // mot reconnu, pense pour etre lu par une autre personne en incrustation).
+  var MIN_RECORD_MS = 2200;
+  var TARGET_ROWS = 10;
+  var MAX_RECORD_MS = 15000;
+  var MIN_USABLE_ROWS = 4;
+  var REF_ASPECT = 720 / 1094;
+
+  var setup = document.getElementById("setup");
+  var stage = document.getElementById("stage");
+  var startBtn = document.getElementById("startBtn");
+  var stopBtn = document.getElementById("stopBtn");
+  var pipBtn = document.getElementById("pipBtn");
+  var errEl = document.getElementById("err");
+  var video = document.getElementById("vid");
+  var captionWord = document.getElementById("captionWord");
+  var captionSub = document.getElementById("captionSub");
+  var countdownEl = document.getElementById("countdown");
+
+  var work = document.createElement("canvas");
+  var workCtx = work.getContext("2d", { willReadFrequently: true });
+  var WORK_W = 160, WORK_H = 160;
+  var cropSX = 0, cropSY = 0, cropSW = 0, cropSH = 0;
+  var workSizeWarmedUp = null;
+
+  function sizeWorkCanvas() {
+    var vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return;
+    var vAspect = vw / vh;
+    if (vAspect > REF_ASPECT) {
+      cropSH = vh; cropSW = vh * REF_ASPECT;
+      cropSY = 0; cropSX = (vw - cropSW) / 2;
+    } else {
+      cropSW = vw; cropSH = vw / REF_ASPECT;
+      cropSX = 0; cropSY = (vh - cropSH) / 2;
+    }
+    var maxDim = 180;
+    if (cropSW >= cropSH) { WORK_W = maxDim; WORK_H = Math.max(16, Math.round(maxDim * cropSH / cropSW)); }
+    else { WORK_H = maxDim; WORK_W = Math.max(16, Math.round(maxDim * cropSW / cropSH)); }
+    work.width = WORK_W; work.height = WORK_H;
+    var key = WORK_W + "x" + WORK_H;
+    if (workSizeWarmedUp !== key && window.SensorielleSignRecognizer && window.SensorielleSignRecognizer.warmupFor) {
+      workSizeWarmedUp = key;
+      window.SensorielleSignRecognizer.warmupFor(WORK_W, WORK_H);
+    }
+  }
+
+  var stream = null, recording = false, autoLoopActive = false;
+  var extractor = null, recordTimer = null, sampleTimer = null;
+
+  function showError(msg) {
+    errEl.textContent = msg;
+    errEl.style.display = "block";
+  }
+  function clearError() { errEl.style.display = "none"; errEl.textContent = ""; }
+
+  function setCaption(word, confident) {
+    captionWord.textContent = word;
+    captionWord.classList.toggle("unsure", !confident);
+    captionSub.textContent = confident ? "mot reconnu" : "signe devant la caméra";
+  }
+
+  function startRecording() {
+    if (recording) return;
+    if (!video.videoWidth) {
+      if (autoLoopActive) { setTimeout(maybeContinueLoop, 400); return; }
+      return;
+    }
+    recording = true;
+    extractor = window.SensorielleSignRecognizer.createExtractor();
+    var startedAt = Date.now();
+
+    function sampleLoop() {
+      if (!recording) return;
+      try {
+        workCtx.drawImage(video, cropSX, cropSY, cropSW, cropSH, 0, 0, WORK_W, WORK_H);
+        var img = workCtx.getImageData(0, 0, WORK_W, WORK_H);
+        extractor.pushFrame(img, WORK_W, WORK_H).then(afterPush).catch(afterPush);
+      } catch (e) {
+        afterPush(null);
+      }
+      function afterPush() {
+        if (!recording) return;
+        var elapsed = Date.now() - startedAt;
+        var rowsSoFar = extractor.getRowCount ? extractor.getRowCount() : 0;
+        var reachedTarget = elapsed >= MIN_RECORD_MS && rowsSoFar >= TARGET_ROWS;
+        var timedOut = elapsed >= MAX_RECORD_MS;
+        if (reachedTarget || timedOut) { stopRecording(false); return; }
+        sampleTimer = setTimeout(sampleLoop, 80);
+      }
+    }
+    sampleTimer = setTimeout(sampleLoop, 0);
+    recordTimer = setTimeout(function () { stopRecording(false); }, MAX_RECORD_MS + 500);
+  }
+
+  function stopRecording(cancelled) {
+    if (!recording) return;
+    recording = false;
+    if (recordTimer) { clearTimeout(recordTimer); recordTimer = null; }
+    if (sampleTimer) { clearTimeout(sampleTimer); sampleTimer = null; }
+    if (cancelled) return;
+    var rows = extractor.finish();
+    extractor = window.SensorielleSignRecognizer.createExtractor();
+    if (!rows || rows.length < MIN_USABLE_ROWS) { maybeContinueLoop(); return; }
+
+    window.SensorielleSignRecognizer.recognize(rows).then(function (result) {
+      if (!result.ok || !result.ranked.length) { maybeContinueLoop(); return; }
+      var top = result.ranked[0];
+      // Meme seuil, meme raisonnement mesure que la page principale
+      // (voir index.html, stopRecording) : un ecart relatif 1er/2e choix
+      // sous 30% est affiche comme hypothese incertaine ("pas sûr"),
+      // jamais comme un mot confirme.
+      var gap = result.ranked.length > 1 ? (result.ranked[1].dist - top.dist) / Math.max(0.05, result.ranked[1].dist) : 1;
+      var pct = Math.max(8, Math.min(97, Math.round(gap * 220)));
+      var confident = pct >= 30;
+      setCaption(top.word, confident);
+      maybeContinueLoop();
+    }).catch(function () { maybeContinueLoop(); });
+  }
+
+  function maybeContinueLoop() {
+    if (autoLoopActive && stage.classList.contains("on")) startRecording();
+  }
+
+  function runCountdown(onDone) {
+    countdownEl.hidden = false;
+    var steps = [3, 2, 1], i = 0;
+    (function tick() {
+      if (i >= steps.length) { countdownEl.hidden = true; onDone(); return; }
+      countdownEl.textContent = String(steps[i]);
+      i++;
+      setTimeout(tick, 700);
+    })();
+  }
+
+  async function startCamera() {
+    clearError();
+    startBtn.disabled = true;
+    startBtn.textContent = "Ouverture de la caméra…";
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "user" }, width: { ideal: 900 }, height: { ideal: 900 } },
+        audio: false,
+      });
+      video.srcObject = stream;
+      await video.play();
+      sizeWorkCanvas();
+      var track = stream.getVideoTracks()[0];
+      var settings = track.getSettings ? track.getSettings() : {};
+      stage.classList.toggle("mirror", settings.facingMode === "user" || true);
+      setup.style.display = "none";
+      stage.classList.add("on");
+      window.SensorielleSignRecognizer.loadSignatures().catch(function () {});
+      runCountdown(function () {
+        autoLoopActive = true;
+        startRecording();
+      });
+    } catch (err) {
+      startBtn.disabled = false;
+      startBtn.textContent = "Démarrer la caméra";
+      if (err && err.name === "NotAllowedError") {
+        showError("Accès à la caméra refusé. Autorise la caméra pour cette page, puis réessaie.");
+      } else if (err && err.name === "NotFoundError") {
+        showError("Aucune caméra détectée sur cet appareil.");
+      } else {
+        showError("Impossible d'accéder à la caméra (" + (err && err.message ? err.message : "erreur inconnue") + ").");
+      }
+    }
+  }
+
+  function stopCamera() {
+    autoLoopActive = false;
+    stopRecording(true);
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    video.srcObject = null;
+    stage.classList.remove("on");
+    setup.style.display = "flex";
+    startBtn.disabled = false;
+    startBtn.textContent = "Démarrer la caméra";
+    setCaption("en écoute…", false);
+  }
+
+  startBtn.addEventListener("click", startCamera);
+  stopBtn.addEventListener("click", stopCamera);
+
+  // ---- incrustation flottante (Document Picture-in-Picture) ----------
+  // Ouvre une vraie fenêtre toujours au-dessus des autres (comme la PiP
+  // vidéo classique), dans laquelle on déplace les VRAIS éléments
+  // (même <video>, même flux caméra -- pas une copie) : la détection et
+  // la reconnaissance continuent de tourner dans cette page d'origine,
+  // qui reste active même cachée derrière un PowerPoint, exactement
+  // comme une vidéo normale en PiP n'est jamais mise en pause quand on
+  // change de fenêtre. Honnêteté : jamais testé ici contre un VRAI
+  // PowerPoint en plein écran sur un vrai projecteur -- à essayer une
+  // fois avant une présentation réelle (voir LISEZ-MOI.txt).
+  var pipWin = null;
+  pipBtn.addEventListener("click", async function () {
+    if (!("documentPictureInPicture" in window)) {
+      showError("Ton navigateur ne supporte pas l'incrustation flottante (essaie Chrome ou Edge récent). Tu peux quand même réduire cette fenêtre et la placer par-dessus ton PowerPoint manuellement.");
+      return;
+    }
+    try {
+      pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 260 });
+      var style = pipWin.document.createElement("style");
+      style.textContent = document.querySelector("style").textContent;
+      pipWin.document.head.appendChild(style);
+      pipWin.document.body.style.margin = "0";
+      pipWin.document.body.style.background = "#0A0C14";
+      pipWin.document.body.appendChild(stage);
+      stage.classList.add("pip");
+      pipWin.addEventListener("pagehide", function () {
+        document.body.appendChild(stage);
+        stage.classList.remove("pip");
+        pipWin = null;
+      });
+    } catch (e) {
+      showError("Impossible d'ouvrir la fenêtre flottante (" + (e && e.message ? e.message : "erreur inconnue") + ").");
+    }
+  });
+
+  if (!("documentPictureInPicture" in window)) {
+    pipBtn.textContent = "Par-dessus (non supporté ici)";
+  }
+})();
+</script>
+</body>
+</html>
