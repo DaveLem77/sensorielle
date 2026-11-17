@@ -1517,6 +1517,170 @@
     .speech-transcript { margin-bottom: 8px; padding: 16px 16px; }
     .speech-controls { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
   }
+
+  /* =======================================================================
+     LIVE CAMERA — restyle v10 (2026-11-17, David) : "ya trop de truc qui
+     serve a rien... pour je signe les lignes sur le visage devrait plus
+     ressembler a ca: IDENTIQUE A L'IMAGE FOURNIE SAUF MON ICONE FAVICON A
+     LA PLACE, ET MÊME LES POINTS SUR LE CORPS ET VISAGE IDENTIQUE" --
+     David a signalé explicitement que le v9 (ci-dessus) ne ressemblait
+     PAS à la maquette fournie : fond plein écran noir au lieu d'un fond
+     pastel clair, vidéo plein écran au lieu d'une carte arrondie avec
+     marge, logo petit dans un coin au lieu d'un gros logo centré en
+     haut, panneau de traduction en glassmorphism sombre au lieu d'une
+     carte claire, et aucun bouton rond en bas. Ce bloc corrige tout ça
+     en PUR overlay visuel (même convention que v6/v8/v9 plus haut :
+     aucune règle précédente n'est supprimée, celle-ci gagne juste par
+     l'ordre du CSS). AUCUN id ni écouteur JS n'est retiré : #camToggle,
+     #stageCloseBtn et #voiceBtn ont seulement changé d'EMPLACEMENT dans
+     le HTML (voir #controlsBar) -- vérifié avant de toucher à ce CSS que
+     makeToScreen() (plus bas dans ce fichier) recalcule déjà le vrai
+     rectangle de la vidéo à chaque image via getBoundingClientRect(),
+     donc le suivi des mains/visage reste exact même si la vidéo est
+     maintenant une carte plus petite qu'un plein écran. */
+
+  .stage { background: linear-gradient(165deg, #F2EEFF 0%, #FBEFF8 52%, #FFF1EC 100%); }
+
+  .cam-frame {
+    position: absolute; left: 16px; right: 16px;
+    top: calc(env(safe-area-inset-top, 0px) + 80px);
+    /* 335px laisse ~195px de marge au-dessus du bas de la carte caméra
+       pour la carte de traduction (voir .caption-wrap plus bas) --
+       mesuré avec une phrase longue réaliste (3 lignes sur un écran de
+       375px de large) qui occupe jusqu'à 180px : sans cette marge, le
+       texte le plus long chevauchait le bas de la carte caméra. */
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 335px);
+    border-radius: 28px; overflow: hidden; z-index: 1;
+    box-shadow: 0 24px 60px -20px rgba(8,13,37,0.28), 0 2px 0 rgba(255,255,255,0.4) inset;
+  }
+  .cam-frame video, .cam-frame #overlay { border-radius: inherit; }
+  /* les bandeaux sombres (.scrim-top/.scrim-bottom) servaient à garder le
+     texte lisible par-dessus la vidéo plein écran -- inutiles maintenant
+     que la traduction vit dans sa propre carte claire, EN DESSOUS de la
+     carte caméra, jamais par-dessus elle. */
+  .cam-frame .scrim-top, .cam-frame .scrim-bottom { display: none; }
+  .cam-frame .preview-diag { top: 10px; left: 10px; right: 10px; }
+  .cam-frame .viewfinder { inset: 14px; }
+  .vf-corner { width: 26px; height: 26px; border-color: rgba(255,255,255,0.92); border-width: 2.5px; }
+
+  /* logo remonté, gros, centré au-dessus de la carte caméra (maquette
+     fournie) -- flotte directement sur le gradient pastel du .stage,
+     donc plus besoin d'ombre de texte sombre (celle-ci était pour la
+     lisibilité sur fond vidéo). */
+  .topbar { padding: calc(env(safe-area-inset-top, 0px) + 18px) 14px 0; z-index: 2; }
+  .topbar-row { position: relative; justify-content: flex-end; }
+  .hud-brand {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    gap: 9px;
+  }
+  .hud-brand-icon { height: 30px; width: 30px; border-radius: 8px; }
+  .hud-brand-name {
+    font-family: var(--s-display); font-weight: 600; font-size: 19px;
+    color: var(--s-ink); text-shadow: none; letter-spacing: -0.02em;
+  }
+  /* seul #infoBtn reste dans le bandeau du haut (discret, en haut à
+     droite -- la maquette fournie ne montre aucun bouton ici, seulement
+     le logo) ; #camToggle et #stageCloseBtn ont déménagé dans les
+     boutons ronds du bas, voir .controls-bar plus bas. */
+  .topbar-row-right .cam-flip-btn {
+    width: 30px; height: 30px; background: rgba(8,13,37,0.06);
+    border-color: rgba(8,13,37,0.1); color: var(--s-ink-dim);
+  }
+
+  /* panneau de traduction : carte CLAIRE (fond blanc), plus de
+     glassmorphism sombre -- correspond à la maquette fournie. */
+  .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 138px); z-index: 2; }
+  .stage.live .live-pill { display: none; } /* pas de pastille séparée dans la maquette -- l'étiquette + l'icône au-dessus du mot suffisent */
+  .caption-card {
+    background: rgba(255,255,255,0.86); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(8,13,37,0.06); box-shadow: 0 18px 44px -18px rgba(8,13,37,0.22);
+  }
+  .caption-eyebrow {
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    color: var(--s-ink-dim); font-weight: 600;
+  }
+  .caption-eyebrow .eyebrow-wave { flex: none; color: var(--s-violet); }
+  .caption-card .caption-word { color: var(--s-ink); }
+  /* curseur clignotant après le mot en cours (maquette fournie) --
+     purement décoratif (::after), ne touche à aucun texte ni à aucune
+     lecture d'écran. */
+  #smartSentence::after {
+    content: ""; display: inline-block; width: 2.5px; height: 0.95em;
+    margin-left: 3px; vertical-align: -0.12em;
+    background: var(--s-violet); animation: captionCursor 1s steps(1) infinite;
+  }
+  @keyframes captionCursor { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { #smartSentence::after { animation: none; opacity: 0.6; } }
+
+  /* trois boutons ronds en bas (maquette fournie) : changer de caméra
+     (gauche, petit) / fermer la caméra (centre, gros, anneau dégradé) /
+     couper le son (droite, petit). #shutterBtn (mort depuis le 17
+     novembre, voir plus haut) reste cette fois-ci bel et bien invisible
+     même si #controlsBar redevient visible. */
+  #shutterBtn { display: none; }
+  .controls-bar {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 26px); z-index: 2; gap: 20px;
+  }
+  .controls-bar .cam-flip-btn {
+    flex-direction: row; width: 54px; height: 54px; min-width: 54px; border-radius: 50%;
+    background: rgba(255,255,255,0.75); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(8,13,37,0.1); color: var(--s-ink);
+    box-shadow: 0 10px 24px -12px rgba(8,13,37,0.2);
+  }
+  .controls-bar .cam-flip-btn svg { width: 19px; height: 19px; }
+  .controls-bar .cam-flip-btn--primary {
+    width: 74px; height: 74px; min-width: 74px;
+    background:
+      linear-gradient(rgba(23,20,38,0.94), rgba(23,20,38,0.94)) padding-box,
+      var(--s-gradient) border-box;
+    border: 3px solid transparent; color: #fff;
+    box-shadow: 0 16px 34px -14px rgba(8,13,37,0.4);
+  }
+  .controls-bar .cam-flip-btn--primary svg { width: 24px; height: 24px; }
+  .controls-bar .cam-flip-btn:active { transform: scale(0.94); }
+
+  /* #voiceBtn : déménagé du panneau de réglages vers les boutons ronds
+     du bas -- même id, même classList.toggle("active", ...) posé par le
+     script plus bas ; le texte "Son"/"Muet" reste dans le DOM pour les
+     lecteurs d'écran (voir .voice-btn-text) mais devient visuellement
+     invisible, remplacé par une icône micro / micro-barré choisie
+     uniquement via la classe .active déjà posée par le JS existant. */
+  #controlsBar #voiceBtn {
+    width: 54px; height: 54px; min-width: 54px; height: 54px; padding: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.75); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(8,13,37,0.1); color: var(--s-ink);
+    box-shadow: 0 10px 24px -12px rgba(8,13,37,0.2); cursor: pointer;
+  }
+  #controlsBar #voiceBtn .voice-btn-text {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0);
+  }
+  #controlsBar #voiceBtn svg { width: 20px; height: 20px; }
+  #controlsBar #voiceBtn .icon-muted { display: none; }
+  #controlsBar #voiceBtn:not(.active) .icon-unmuted { display: none; }
+  #controlsBar #voiceBtn:not(.active) .icon-muted { display: block; }
+  #controlsBar #voiceBtn:active { transform: scale(0.94); }
+
+  @media (max-width: 400px) {
+    .cam-frame {
+      left: 12px; right: 12px;
+      top: calc(env(safe-area-inset-top, 0px) + 72px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 325px);
+    }
+    .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); }
+    .controls-bar { gap: 14px; }
+  }
+
+  /* écrans courts (vieux téléphones, mode paysage) : la carte caméra a
+     besoin d'un minimum de hauteur utilisable -- si l'espace vertical
+     total est serré, on réduit plutôt la marge du haut (logo) et le bas
+     (traduction + boutons) que de laisser la carte caméra devenir trop
+     petite pour être utile. */
+  @media (max-height: 700px) {
+    .cam-frame { top: calc(env(safe-area-inset-top, 0px) + 64px); bottom: calc(env(safe-area-inset-bottom, 0px) + 300px); }
+    .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 118px); }
+    .controls-bar { bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
+  }
 </style>
 
 
@@ -1664,22 +1828,33 @@
 </head>
 <body>
 <div class="stage" id="stage">
-  <video id="video" playsinline autoplay muted></video>
-  <canvas id="overlay" hidden></canvas>
-  <div class="preview-diag" id="previewDiag" hidden></div>
-  <div class="scrim-top"></div>
-  <div class="scrim-bottom"></div>
-  <!-- Coins de visée discrets (David, 2026-11-16 : "quatre petits coins
-       blancs discrets pour suggérer la zone de détection, aucun cadre
-       épais") -- purement décoratif, comme .scrim-top/.scrim-bottom,
-       sans id, sans lien avec le moteur de reconnaissance. Reste
-       invisible sur la page d'accueil (.landing, z-index 5, opaque, le
-       recouvre) tant que la caméra n'est pas ouverte. -->
-  <div class="viewfinder" aria-hidden="true">
-    <span class="vf-corner tl"></span>
-    <span class="vf-corner tr"></span>
-    <span class="vf-corner bl"></span>
-    <span class="vf-corner br"></span>
+  <!-- David, 2026-11-17 : "je veux identique [à la maquette fournie] sauf
+       mon favicon à la place" -- la vidéo/l'overlay/les coins de visée
+       sont maintenant regroupés dans cette carte arrondie (.cam-frame,
+       voir le CSS "restyle v10" plus bas) au lieu d'occuper tout l'écran
+       en noir plein écran. Rien de la mécanique de reconnaissance n'a
+       changé : makeToScreen() (plus bas dans ce fichier) recalcule déjà
+       le vrai rectangle de la vidéo à chaque image via
+       getBoundingClientRect(), donc le suivi des mains/visage reste
+       exact même si la vidéo est maintenant plus petite qu'avant. -->
+  <div class="cam-frame" id="camFrame">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="overlay" hidden></canvas>
+    <div class="preview-diag" id="previewDiag" hidden></div>
+    <div class="scrim-top"></div>
+    <div class="scrim-bottom"></div>
+    <!-- Coins de visée discrets (David, 2026-11-16 : "quatre petits coins
+         blancs discrets pour suggérer la zone de détection, aucun cadre
+         épais") -- purement décoratif, comme .scrim-top/.scrim-bottom,
+         sans id, sans lien avec le moteur de reconnaissance. Reste
+         invisible sur la page d'accueil (.landing, z-index 5, opaque, le
+         recouvre) tant que la caméra n'est pas ouverte. -->
+    <div class="viewfinder" aria-hidden="true">
+      <span class="vf-corner tl"></span>
+      <span class="vf-corner tr"></span>
+      <span class="vf-corner bl"></span>
+      <span class="vf-corner br"></span>
+    </div>
   </div>
 
   <div class="landing" id="emptyState">
@@ -1904,19 +2079,15 @@
            seulement). Règle CSS .lang-pill laissée en place, inutilisée
            (même convention que v6 plus haut dans ce fichier). -->
       <div class="topbar-row-right">
-      <!-- David, 2026-11-16 : le bouton rond du bas est retiré (plus
-           besoin, l'enregistrement est continu -- voir autoLoopActive
-           plus bas) ; #infoBtn (seul moyen d'ouvrir le panneau de
-           réglages) déménage donc ici, en petite icône discrète, pour
-           ne rien perdre. Même id, même écouteur JS -- juste déplacé. -->
+      <!-- David, 2026-11-17 : seul #infoBtn reste ici (petite icône
+           discrète, en haut à droite -- la maquette fournie ne montre
+           aucun bouton sur le bandeau du haut, seulement le logo
+           centré) ; #camToggle et #stageCloseBtn ont déménagé dans les
+           boutons ronds du bas (voir #controlsBar). Même id, même
+           écouteur JS pour #infoBtn -- juste déplacé en 2026-11-16, resté
+           en place depuis. -->
       <button class="cam-flip-btn" id="infoBtn" aria-label="Plus d'options">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.1" fill="currentColor"/></svg>
-      </button>
-      <button class="cam-flip-btn" id="camToggle" aria-label="Changer de caméra">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0113.66-5.66M20 12a8 8 0 01-13.66 5.66" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17.5 3.5v3.5h-3.5M6.5 20.5v-3.5h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="cam-flip-btn" id="stageCloseBtn" aria-label="Fermer la caméra">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
       </div>
     </div>
@@ -1931,7 +2102,10 @@
       <span id="livePillText">Traduction en direct</span>
     </div>
     <div class="caption-card">
-      <p class="caption-eyebrow">Traduction (français)</p>
+      <!-- David, 2026-11-17 : étiquette + petite icône onde, comme la
+           maquette fournie ("Traduction en temps réel"), à la place de
+           "Traduction (français)". -->
+      <p class="caption-eyebrow"><svg class="eyebrow-wave" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h2.2M8 7v10M12.5 4v16M17 7v10M21.8 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Traduction en temps réel</p>
       <div class="caption-word" id="smartSentence">Analyse en cours…</div>
       <div class="caption-word" id="captionWord" style="display:none;">–</div>
       <div class="caption-label" id="captionLabel"></div>
@@ -1967,9 +2141,29 @@
        écouteur de clic restent en place (code mort inoffensif) au cas où
        un déclenchement manuel redeviendrait utile un jour. -->
   <div class="controls-bar" id="controlsBar" style="display:none;">
+    <!-- David, 2026-11-17 : trois boutons ronds (changer de caméra /
+         fermer la caméra / couper le son), comme la maquette fournie --
+         #camToggle et #voiceBtn ont déménagé ici (depuis le bandeau du
+         haut et le panneau de réglages respectivement) ; mêmes id, mêmes
+         écouteurs JS, seul leur EMPLACEMENT et leur apparence changent.
+         #shutterBtn reste dans le DOM (mort depuis le 17 novembre,
+         l'enregistrement est continu) mais masqué en CSS (voir
+         "restyle v10" plus haut) pour ne pas apparaître comme un
+         quatrième bouton. -->
     <button class="shutter-btn" id="shutterBtn" aria-label="Démarrer : décompte 3-2-1 puis enregistre mon signe (quelques secondes)">
       <span class="shutter-icon" aria-hidden="true"></span>
       <span class="shutter-caption" id="shutterCaption">Démarrer</span>
+    </button>
+    <button class="cam-flip-btn" id="camToggle" aria-label="Changer de caméra">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0113.66-5.66M20 12a8 8 0 01-13.66 5.66" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17.5 3.5v3.5h-3.5M6.5 20.5v-3.5h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="cam-flip-btn cam-flip-btn--primary" id="stageCloseBtn" aria-label="Fermer la caméra">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.3" fill="currentColor"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.3" fill="currentColor"/></svg>
+    </button>
+    <button class="sheet-toggle-btn active" id="voiceBtn" aria-label="Couper la voix">
+      <svg class="icon-unmuted" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 10v4h3.5L13 17.5v-11L8.5 10H5z" fill="currentColor"/><path d="M16.2 9a4 4 0 010 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M18.2 6.6a7.5 7.5 0 010 10.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <svg class="icon-muted" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 10v4h3.5L13 17.5v-11L8.5 10H5z" fill="currentColor"/><path d="M16 8.5l5 7M21 8.5l-5 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="voice-btn-text">Son</span>
     </button>
   </div>
 
@@ -1982,9 +2176,10 @@
   <div class="sheet-scrim" id="sheetScrim"></div>
   <div class="sheet" id="infoSheet">
     <div class="handle"></div>
-    <div class="sheet-toggles">
-      <button class="sheet-toggle-btn active" id="voiceBtn" aria-label="Couper la voix">Son</button>
-    </div>
+    <!-- #voiceBtn a déménagé dans les boutons ronds du bas (voir
+         #controlsBar, "restyle v10" 2026-11-17) -- ce panneau ne
+         contenait que lui dans .sheet-toggles, donc ce wrapper est
+         retiré avec lui (aucun autre bouton ne l'utilisait). -->
     <h2>Comment ça reconnaît un signe</h2>
     <p>Depuis le 16 novembre 2026 : le navigateur fait tourner, localement sur ton appareil, un vrai modèle de détection des points-clés de la main (21 points par main, plus l'état de chaque doigt — tendu ou plié) — téléchargé une seule fois au premier chargement de la page puis mis en cache par ton navigateur (~7 Mo), mais jamais aucune image ni donnée renvoyée nulle part. Ta position de main est normalisée par rapport à ton visage détecté de la même façon. Depuis le 17 novembre 2026, la reconnaissance tourne en continu (plus besoin de rappuyer entre deux signes) : chaque cycle dure le temps de capter assez d'images utiles pour UN signe (quelques secondes, parfois un peu plus sur un appareil moins puissant), cette trajectoire est comparée directement — sur ton appareil — aux vraies vidéos du dictionnaire LSQ déjà filmées pour ce site (analysées par ce même modèle), et le mot reconnu s'ajoute à la phrase en cours (affichée et mise à jour toutes les 5 secondes, lue à voix haute — bouton « Son » pour couper le son). Pendant une pause entre deux signes, l'écran reste simplement silencieux — c'est normal, pas une panne.</p>
     <p><b>Résultat honnête, pas une estimation</b> : testé sur le vrai pipeline complet (caméra, détection de main, comparaison — pas un raccourci hors-ligne), sur un échantillon de 24 mots pris parmi les 325 : 23 sur 24 bien reconnus en premier choix. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette. Ce test reste basé sur les mêmes vidéos qui ont servi à construire le dictionnaire (pas des prises indépendantes sur un autre téléphone) — la vraie mesure, c'est ton usage réel. Limite connue : environ 15 mots sur 325 n'ont pour l'instant aucune signature exploitable (la main n'est jamais détectée assez nettement dans leur vidéo de référence, souvent une pose mains basses/paumes vers le haut) et ne sont donc pas encore reconnaissables — à corriger dans un prochain passage.</p>
@@ -2824,12 +3019,18 @@
 
       emptyState.style.display = "none";
       topbar.style.display = "flex";
-      // David, 2026-11-17 : "il doit traduire plus vite, pas arrêter son
-      // enregistrement mais continuer, ça doit pouvoir traduire des
-      // phrases" -- retour au mode continu (le bouton Démarrer manuel du
-      // 16 novembre ne sert plus à rien : plus besoin de "viser" une
-      // fenêtre, voir plus bas). #controlsBar/#shutterBtn restent donc
-      // cachés (voir aussi stopRecording/maybeContinueLoop plus bas).
+      // David, 2026-11-17 (plus tôt le même jour) : "il doit traduire
+      // plus vite, pas arrêter son enregistrement mais continuer, ça
+      // doit pouvoir traduire des phrases" -- retour au mode continu (le
+      // bouton Démarrer manuel du 16 novembre ne sert plus à rien : plus
+      // besoin de "viser" une fenêtre, voir plus bas). #shutterBtn à
+      // l'intérieur reste donc cadhé en CSS (voir aussi
+      // stopRecording/maybeContinueLoop plus bas).
+      // David, 2026-11-17 (plus tard, maquette fournie) : "je veux
+      // identique sauf mon favicon à la place" -- #controlsBar redevient
+      // visible pour afficher les trois boutons ronds (changer de
+      // caméra / fermer / couper le son), maintenant déménagés dedans.
+      controlsBar.style.display = "flex";
       captionWrap.style.display = "flex";
       transcriptRow.hidden = false;
       setLive(true);
@@ -3187,7 +3388,16 @@
     voiceBtn.addEventListener("click", () => {
       voiceOn = !voiceOn;
       voiceBtn.classList.toggle("active", voiceOn);
-      voiceBtn.textContent = voiceOn ? "Son" : "Muet";
+      // David, 2026-11-17 : voiceBtn a déménagé dans les boutons ronds du
+      // bas (voir #controlsBar) et porte maintenant une icône micro, pas
+      // juste du texte -- un `.textContent =` ici effacerait les <svg>
+      // en même temps que le texte. On met donc à jour seulement le
+      // <span class="voice-btn-text"> interne (visuellement masqué,
+      // gardé pour les lecteurs d'écran) ; repli sur l'ancien
+      // comportement si jamais ce span n'existe pas.
+      var voiceBtnText = voiceBtn.querySelector(".voice-btn-text");
+      if (voiceBtnText) voiceBtnText.textContent = voiceOn ? "Son" : "Muet";
+      else voiceBtn.textContent = voiceOn ? "Son" : "Muet";
       voiceBtn.setAttribute("aria-label", voiceOn ? "Couper la voix" : "Activer la voix");
       if (!voiceOn && "speechSynthesis" in window) speechSynthesis.cancel();
     });
