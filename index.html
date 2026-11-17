@@ -1946,7 +1946,13 @@
        clic n'ont jamais bougé, seul CE QU'IL DÉCLENCHE change (voir
        runCountdown() plus bas : décompte d'abord, puis startRecording()).
        Durée dans l'aria-label mise à jour (3,5s -> 6s -> durée variable,
-       voir MIN_RECORD_MS/TARGET_ROWS/MAX_RECORD_MS, 2026-11-16). -->
+       voir MIN_RECORD_MS/TARGET_ROWS/MAX_RECORD_MS, 2026-11-16).
+       David, 2026-11-17 : retour au mode continu (voir startCamera()) --
+       #controlsBar redevient caché (style inline, comme avant v9) : plus
+       besoin de presser quoi que ce soit, startCamera() lance elle-même
+       le décompte puis startRecording() en boucle. #shutterBtn et son
+       écouteur de clic restent en place (code mort inoffensif) au cas où
+       un déclenchement manuel redeviendrait utile un jour. -->
   <div class="controls-bar" id="controlsBar" style="display:none;">
     <button class="shutter-btn" id="shutterBtn" aria-label="Démarrer : décompte 3-2-1 puis enregistre mon signe (quelques secondes)">
       <span class="shutter-icon" aria-hidden="true"></span>
@@ -1967,9 +1973,9 @@
       <button class="sheet-toggle-btn active" id="voiceBtn" aria-label="Couper la voix">Son</button>
     </div>
     <h2>Comment ça reconnaît un signe</h2>
-    <p>Depuis le 16 novembre 2026 : le navigateur fait tourner, localement sur ton appareil, un vrai modèle de détection des points-clés de la main (21 points par main, plus l'état de chaque doigt — tendu ou plié) — téléchargé une seule fois au premier chargement de la page puis mis en cache par ton navigateur (~7 Mo), mais jamais aucune image ni donnée renvoyée nulle part. Ta position de main est normalisée par rapport à ton visage détecté de la même façon. L'enregistrement dure le temps de capter assez d'images utiles (quelques secondes, parfois un peu plus sur un appareil moins puissant — jamais de silence total : si le signal reste trop faible, un message te le dit clairement au lieu de ne rien afficher). Une fois assez d'images captées, cette trajectoire est comparée directement — sur ton appareil — aux vraies vidéos du dictionnaire LSQ déjà filmées pour ce site (analysées par ce même modèle), et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
+    <p>Depuis le 16 novembre 2026 : le navigateur fait tourner, localement sur ton appareil, un vrai modèle de détection des points-clés de la main (21 points par main, plus l'état de chaque doigt — tendu ou plié) — téléchargé une seule fois au premier chargement de la page puis mis en cache par ton navigateur (~7 Mo), mais jamais aucune image ni donnée renvoyée nulle part. Ta position de main est normalisée par rapport à ton visage détecté de la même façon. Depuis le 17 novembre 2026, la reconnaissance tourne en continu (plus besoin de rappuyer entre deux signes) : chaque cycle dure le temps de capter assez d'images utiles pour UN signe (quelques secondes, parfois un peu plus sur un appareil moins puissant), cette trajectoire est comparée directement — sur ton appareil — aux vraies vidéos du dictionnaire LSQ déjà filmées pour ce site (analysées par ce même modèle), et le mot reconnu s'ajoute à la phrase en cours (affichée et mise à jour toutes les 5 secondes, lue à voix haute — bouton « Son » pour couper le son). Pendant une pause entre deux signes, l'écran reste simplement silencieux — c'est normal, pas une panne.</p>
     <p><b>Résultat honnête, pas une estimation</b> : testé sur le vrai pipeline complet (caméra, détection de main, comparaison — pas un raccourci hors-ligne), sur un échantillon de 24 mots pris parmi les 325 : 23 sur 24 bien reconnus en premier choix. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette. Ce test reste basé sur les mêmes vidéos qui ont servi à construire le dictionnaire (pas des prises indépendantes sur un autre téléphone) — la vraie mesure, c'est ton usage réel. Limite connue : environ 15 mots sur 325 n'ont pour l'instant aucune signature exploitable (la main n'est jamais détectée assez nettement dans leur vidéo de référence, souvent une pose mains basses/paumes vers le haut) et ne sont donc pas encore reconnaissables — à corriger dans un prochain passage.</p>
-    <p><b>Pour un bon résultat</b> : recule-toi assez pour que tes épaules et tes bras soient visibles (pas juste ton visage de près — les vidéos du dictionnaire sont filmées à cette distance-là), centre ton visage dans le cadre, garde un bon éclairage, et signe à peu près à la même distance de la caméra à chaque fois. Appuie sur le bouton pour démarrer : décompte 3-2-1, puis enregistre jusqu'à avoir assez d'images utiles.</p>
+    <p><b>Pour un bon résultat</b> : recule-toi assez pour que tes épaules et tes bras soient visibles (pas juste ton visage de près — les vidéos du dictionnaire sont filmées à cette distance-là), centre ton visage dans le cadre, garde un bon éclairage, et signe à peu près à la même distance de la caméra à chaque fois. Dès l'activation de la caméra : décompte 3-2-1, puis la reconnaissance reste active en continu — enchaîne tes signes, les mots confirmés s'accumulent en phrase, pas besoin de rappuyer sur quoi que ce soit entre deux signes.</p>
     <p><b>Dossier vidéos personnel (Son à signe)</b> : le bouton ci-dessous te laisse choisir un dossier sur ton appareil — chaque vidéo que tu y déposes, nommée d'après le mot (ex. <code>bonjour.mp4</code>), devient reconnaissable, en priorité sur les mots déjà intégrés. Rien n'est jamais envoyé ni copié ailleurs qu'à l'endroit que tu as choisi toi-même. Disponible sur Chrome et Edge; le bouton reste caché sur les navigateurs qui n'offrent pas encore cette fonction.</p>
     <button type="button" class="sheet-toggle-btn" id="speechFolderBtn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" aria-hidden="true"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Choisir mon dossier de vidéos (Son à signe)</button>
     <p class="speech-folder-status" id="speechFolderStatus"></p>
@@ -2073,6 +2079,7 @@
   const statusLine = document.getElementById("statusLine");
   const confBar = document.getElementById("confBar");
   const confPct = document.getElementById("confPct");
+  const transcriptRow = document.getElementById("transcriptRow");
   const controlsBar = document.getElementById("controlsBar");
   const livePill = document.getElementById("livePill");
   const livePillText = document.getElementById("livePillText");
@@ -2090,7 +2097,14 @@
   // décompte 3 2 1" -- retour à un déclenchement manuel : sans bouton,
   // la personne ne savait jamais QUAND la fenêtre d'enregistrement avait
   // lieu, donc elle signait rarement pendant qu'elle était ouverte.
-  const IDLE_TEXT = "Appuie sur Démarrer pour signer";
+  // David, 2026-11-17 : "il doit [...] pas arrêter son enregistrement
+  // mais continuer, ça doit pouvoir traduire des phrases" -- retour au
+  // mode continu (voir startCamera/runCountdown), mais cette fois avec un
+  // SEUL décompte 3-2-1 au début (la personne sait quand ça commence à
+  // écouter) puis ça enchaîne tout seul -- ça règle le vrai problème du
+  // 15 novembre (ne jamais savoir QUAND signer) sans perdre le mode
+  // continu lui-même.
+  const IDLE_TEXT = "À l'écoute… prépare-toi à signer";
   // David, 2026-11-16 (encore plus tard) : "ca ne traduit pas du tout
   // les videos des 325". Mesure honnete sur les 325 fichiers source
   // (media/signs/*.mp4, qui sont EXACTEMENT les videos utilisees pour
@@ -2188,6 +2202,9 @@
   // clic sur #shutterBtn, via runCountdown(), plus bas).
   let autoLoopActive = false;
   let extractor = null;
+  let lastWordSeenAt = 0; // 0 = aucun mot confirme depuis l'ouverture de la camera (voir le filet de securite dans stopRecording)
+  let recordingSessionStartedAt = 0; // horodatage du debut de la session continue (voir startCamera)
+  let lastWatchdogHintAt = 0; // throttle de l'indice "toujours a l'ecoute" (voir stopRecording)
   let recordTimer = null;
   let sampleTimer = null;
   const work = document.createElement("canvas");
@@ -2733,8 +2750,25 @@
     confBar.style.width = "0%";
     confBar.style.background = "var(--bad)";
     if (confPct) confPct.textContent = "—";
-    statusLine.textContent = "Centre ton visage, puis appuie sur le bouton pour enregistrer ton signe.";
+    statusLine.textContent = "Centre ton visage, prépare-toi à signer…";
     setAnalyzing(false);
+    if (transcriptRow) transcriptRow.textContent = ""; // nouvelle session caméra = nouvelle phrase
+  }
+
+  // David, 2026-11-17 : chaque mot CONFIRMÉ (voir "confident" plus bas
+  // dans stopRecording) devient une puce dans #transcriptRow -- c'est ce
+  // flux que le module "traduction par phrases" plus bas dans ce fichier
+  // (smartTranslate, déjà écrit le 16 novembre mais resté inerte faute de
+  // puces) observe pour construire et annoncer une phrase toutes les 5
+  // secondes. On ne touche à rien d'autre dans ce module : on se contente
+  // de lui donner enfin la matière qu'il attendait.
+  function addTranscriptChip(word) {
+    if (!transcriptRow) return;
+    const span = document.createElement("span");
+    span.className = "chip";
+    span.textContent = word;
+    transcriptRow.appendChild(span);
+    transcriptRow.scrollLeft = transcriptRow.scrollWidth;
   }
 
   async function startCamera() {
@@ -2753,8 +2787,14 @@
 
       emptyState.style.display = "none";
       topbar.style.display = "flex";
-      controlsBar.style.display = "flex";
+      // David, 2026-11-17 : "il doit traduire plus vite, pas arrêter son
+      // enregistrement mais continuer, ça doit pouvoir traduire des
+      // phrases" -- retour au mode continu (le bouton Démarrer manuel du
+      // 16 novembre ne sert plus à rien : plus besoin de "viser" une
+      // fenêtre, voir plus bas). #controlsBar/#shutterBtn restent donc
+      // cachés (voir aussi stopRecording/maybeContinueLoop plus bas).
       captionWrap.style.display = "flex";
+      transcriptRow.hidden = false;
       setLive(true);
       resetCaption();
 
@@ -2770,13 +2810,15 @@
       startLivePreview();
       SensorielleSignRecognizer.loadSignatures().catch(function () {});
 
-      // David, 2026-11-16 (plus tard, même jour) : "je veux un bouton
-      // démarrer, un décompte 3 2 1" -- retour au déclenchement manuel.
-      // autoLoopActive reste donc à false ici (plus d'auto-démarrage ni
-      // de relance automatique -- maybeContinueLoop() devient inerte tant
-      // qu'il reste false) ; la caméra s'ouvre et ATTEND que la personne
-      // appuie sur #shutterBtn (voir son écouteur de clic plus bas, qui
-      // lance runCountdown() puis startRecording()).
+      // David, 2026-11-17 : un seul décompte 3-2-1 pour que la personne
+      // sache quand se préparer (le probleme signale le 15 novembre
+      // visait l'ABSENCE totale de signal de "c'est maintenant" -- voir
+      // d7fd31a -- pas le principe du mode continu lui-meme), puis
+      // autoLoopActive=true et ça continue tout seul indéfiniment (chaque
+      // cycle enchaine sur le suivant via maybeContinueLoop(), voir
+      // stopRecording plus bas) jusqu'à ce que la caméra soit fermée
+      // (stopCamera() remet autoLoopActive à false).
+      runCountdown(function () { autoLoopActive = true; recordingSessionStartedAt = Date.now(); lastWordSeenAt = 0; lastWatchdogHintAt = 0; startRecording(); });
     } catch (err) {
       mainBtn.disabled = false;
       mainBtnLabel.textContent = "Activer la caméra";
@@ -2947,32 +2989,37 @@
     const lastSignal = extractor.getLastSignal ? extractor.getLastSignal() : "?";
     extractor = SensorielleSignRecognizer.createExtractor(); // prêt pour le prochain cycle
     if (!rows || rows.length < MIN_USABLE_ROWS) {
-      // Ancien commentaire (avant le 16 novembre 2026, mode continu en
-      // arrière-plan) : "c'est l'état NORMAL la plupart du temps, pas une
-      // erreur, on ne montre rien". Ce raisonnement ne tient plus --
-      // depuis le retour au bouton Démarrer + décompte explicite (voir
-      // runCountdown plus haut), CHAQUE enregistrement est volontaire :
-      // la personne vient de signer pendant cette fenêtre précise. Rester
-      // muet ici, c'est exactement le bug que David a signalé : "j'ai
-      // déjà fait démarrer et le décompte, mais ça n'affiche pas la
-      // traduction". Avec la boucle adaptative ci-dessus, ce cas ne
-      // devrait plus se produire que si l'appareil est si lent qu'il n'a
-      // capté quasiment aucune image utile même en MAX_RECORD_MS -- donc
-      // un vrai problème à signaler honnêtement, pas un non-événement.
+      // David, 2026-11-17 : retour au mode continu (voir startCamera plus
+      // haut) -- la justification du 16 novembre pour afficher un message
+      // à CHAQUE cycle insuffisant ("chaque enregistrement est volontaire,
+      // la personne vient de signer") ne tient plus : en continu, la
+      // plupart des cycles tombent normalement pendant une pause entre
+      // deux signes (la personne réfléchit, relâche ses mains, etc.) --
+      // ce n'est PAS une erreur, et le signaler à chaque fois rendrait
+      // l'écran illisible (un message qui clignote plusieurs fois par
+      // minute). On redevient donc silencieux ICI (diagnostic en
+      // console seulement) -- MAIS avec un vrai filet de sécurité plus
+      // bas (voir le filet "ça fait longtemps que rien n'est confirmé")
+      // pour ne jamais revenir au bug du 16 novembre ("ça n'affiche rien
+      // du tout, pour toujours, sans jamais le dire").
       if (diagLastErr) console.debug("[sensorielle] erreur de capture :", diagLastErr);
       else console.debug("[sensorielle] rien capté ce cycle :", diagHits + "/" + diagTicks, "signal:", lastSignal);
-      smartSentence.textContent = IDLE_TEXT;
-      captionLabel.textContent = "";
-      captionLabel.classList.remove("confident");
-      confBar.style.width = "0%";
-      confBar.style.background = "var(--bad)";
-      if (confPct) confPct.textContent = "—";
-      statusLine.textContent = rows && rows.length
-        ? "Signal trop faible (" + rows.length + " image" + (rows.length > 1 ? "s" : "") + " captée" + (rows.length > 1 ? "s" : "") + ") — assure-toi que ta main est bien visible, puis réessaie."
-        : "Aucune main détectée — assure-toi que ta main est bien visible et réessaie.";
+      const silentForMs = Date.now() - (lastWordSeenAt || recordingSessionStartedAt);
+      if (autoLoopActive && silentForMs > 20000) {
+        // Vingt secondes sans le moindre mot confirmé : assez long pour
+        // ne plus être une simple pause naturelle entre deux signes, mais
+        // pas encore une erreur bloquante -- indice discret plutôt
+        // qu'alarmant, et on ne le répète pas à chaque cycle (throttle
+        // via lastWatchdogHintAt) pour ne pas clignoter non plus.
+        if (Date.now() - lastWatchdogHintAt > 8000) {
+          lastWatchdogHintAt = Date.now();
+          statusLine.textContent = "Toujours à l'écoute… assure-toi d'être bien visible et centré.";
+        }
+      }
       maybeContinueLoop();
       return;
     }
+    lastWatchdogHintAt = 0; // un cycle normal a eu lieu, le filet se reinitialise
     setAnalyzing(true);
     // La reconnaissance locale (DTW) est déjà très rapide -- souvent
     // quelques millisecondes -- donc sans plancher, "Analyse en cours"
@@ -3049,19 +3096,34 @@
       // texte, c'est l'avertissement qui rend cet affichage honnête.
       const confident = pct >= 30;
       afterAnalysis(function () {
-        smartSentence.textContent = labelFor(top.word);
+        // David, 2026-11-17 : #smartSentence n'est plus écrit directement
+        // ici -- depuis le retour au mode continu, c'est le module
+        // "traduction par phrases" (smartTranslate, plus bas) qui en est
+        // seul propriétaire : il accumule les puces de #transcriptRow
+        // (voir addTranscriptChip) et y écrit la PHRASE toutes les 5
+        // secondes. Écrire ici un mot isolé à chaque cycle créerait une
+        // bataille d'affichage entre les deux (voir le commentaire dans
+        // smartTranslate expliquant pourquoi il a lui-même arrêté d'y
+        // toucher le 16 novembre).
+        lastWordSeenAt = Date.now();
         if (confident) {
+          const label = labelFor(top.word);
+          addTranscriptChip(label);
           const alts = result.ranked.slice(1, 4).map(function (r) { return labelFor(r.word); });
           captionLabel.textContent = "mot reconnu";
           captionLabel.classList.add("confident");
           confBar.style.background = "var(--good)";
           statusLine.textContent = alts.length ? "Sinon peut-être : " + alts.join(", ") + "." : "";
-          speak(labelFor(top.word));
+          speak(label);
         } else {
+          // Pas assez net : on ne pollue PAS la phrase avec un mot
+          // probablement faux (voir localFallbackSentence, qui n'a aucun
+          // moyen de filtrer ça après coup) -- juste un indice visuel
+          // discret, comme avant.
           captionLabel.textContent = "pas sûr, peut-être…";
           captionLabel.classList.remove("confident");
           confBar.style.background = "var(--bad)";
-          statusLine.textContent = "Pas assez net pour être sûr — réessaie si ce n'est pas ça.";
+          statusLine.textContent = "Pas assez net pour être sûr.";
         }
         confBar.style.width = pct + "%";
         if (confPct) confPct.textContent = pct + "%";
