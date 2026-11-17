@@ -1225,6 +1225,12 @@
     display: flex; align-items: center; justify-content: center;
     min-height: 0;
   }
+  /* 2026-11-17 (David : incrustation par-dessus un PowerPoint) : une fois
+     ce conteneur déplacé dans une fenêtre Picture-in-Picture (voir
+     speechPipBtn plus bas), il n'a plus de parent flex (.speech-stage) qui
+     lui donne sa hauteur via flex:1 -- position:fixed;inset:0 le fait
+     remplir cette fenêtre flottante tout seul, quelle que soit sa taille. */
+  .speech-video-wrap.pip-floating { position: fixed; inset: 0; flex: none; }
   .speech-video {
     position: absolute; inset: 0; width: 100%; height: 100%;
     /* object-fit: cover (plutôt que contain) sur demande explicite du
@@ -1991,7 +1997,9 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <span class="speech-title">Français → LSQ</span>
-    <span class="speech-icon-btn speech-icon-btn-spacer" aria-hidden="true"></span>
+    <button class="speech-icon-btn" id="speechPipBtn" aria-label="Mettre la traduction par-dessus d'autres fenêtres" title="Mettre par-dessus (incrustation flottante)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 3H5a2 2 0 00-2 2v3m0 8v3a2 2 0 002 2h3m8 0h3a2 2 0 002-2v-3m0-8V5a2 2 0 00-2-2h-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
   </div>
   <div class="speech-video-wrap">
     <video id="speechVideoA" class="speech-video" muted playsinline></video>
@@ -6417,6 +6425,12 @@ if (typeof document !== "undefined") {
 
     backBtn.addEventListener("click", () => {
       stopMic();
+      // 2026-11-17 : si la vidéo est actuellement dans la fenêtre flottante
+      // (voir speechPipBtn plus bas), la fermer proprement ici plutôt que de
+      // laisser une fenêtre flottante vide une fois le mode quitté -- le
+      // "pagehide" de cette fenêtre remet lui-même videoWrap à sa place
+      // avant que stage.hidden masque tout.
+      if (pipWin) { try { pipWin.close(); } catch (e) {} }
       stage.hidden = true;
       if (emptyState) emptyState.style.display = "flex";
       playToken += 1; // invalide toute callback de lecture encore en vol
@@ -6447,6 +6461,55 @@ if (typeof document !== "undefined") {
       showIdle(true);
       resetSentimentVisual();
     });
+
+    // =========================================================================
+    // Incrustation flottante ("par-dessus") — David, 2026-11-17 : « le son à
+    // signe, si quelqu'un parle ça affiche la traduction en direct » par-dessus
+    // un PowerPoint en plein écran sur un projecteur. Document
+    // Picture-in-Picture (fenêtre réellement toujours au-dessus des autres,
+    // même d'autres applications) : on déplace le VRAI conteneur vidéo
+    // (videoWrap, même <video>, même flux de signes déjà en cours) dans cette
+    // fenêtre plutôt que d'en recréer un autre -- aucune nouvelle logique de
+    // reconnaissance/lecture, seulement ce même "Son à Signe" déjà en place,
+    // vu dans une fenêtre flottante. Honnêteté : testé techniquement (la
+    // fenêtre s'ouvre, le conteneur vidéo s'y affiche et continue de jouer,
+    // se referme proprement) mais jamais contre un vrai PowerPoint plein
+    // écran sur un vrai projecteur -- à essayer une fois avant une
+    // présentation importante.
+    let pipWin = null;
+    const pipBtn = document.getElementById("speechPipBtn");
+    const videoWrap = stage.querySelector(".speech-video-wrap");
+    if (pipBtn && videoWrap) {
+      if (!("documentPictureInPicture" in window)) {
+        pipBtn.hidden = true; // navigateur sans Document PiP (Firefox/Safari à ce jour) -- le bouton n'aurait aucun effet
+      } else {
+        pipBtn.addEventListener("click", async () => {
+          if (pipWin) { try { pipWin.close(); } catch (e) {} return; }
+          try {
+            pipWin = await documentPictureInPicture.requestWindow({ width: 380, height: 520 });
+            document.querySelectorAll("style").forEach((styleEl) => {
+              pipWin.document.head.appendChild(styleEl.cloneNode(true));
+            });
+            pipWin.document.body.style.margin = "0";
+            pipWin.document.body.style.background = "#dcdce0";
+            pipWin.document.body.appendChild(videoWrap);
+            videoWrap.classList.add("pip-floating");
+            pipWin.addEventListener("pagehide", () => {
+              // Remet videoWrap exactement où il était (juste avant
+              // transcriptBox, premier enfant restant de .speech-video-wrap
+              // dans le flux normal de .speech-stage) -- stage reste la
+              // référence stable, pas une position mémorisée à la main.
+              stage.insertBefore(videoWrap, transcriptBox);
+              videoWrap.classList.remove("pip-floating");
+              pipWin = null;
+            });
+          } catch (e) {
+            dbg("incrustation flottante : échec (" + (e && e.message ? e.message : e) + ")");
+            pipWin = null;
+          }
+        });
+      }
+    }
   })();
 }
 </script>
