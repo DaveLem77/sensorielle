@@ -1966,8 +1966,8 @@
       <button class="sheet-toggle-btn active" id="voiceBtn" aria-label="Couper la voix">Son</button>
     </div>
     <h2>Comment ça reconnaît un signe</h2>
-    <p>Aucun modèle téléchargé, aucune donnée envoyée sur internet. Le navigateur suit la position et la forme de ta main en mouvement (couleur de peau + mouvement, image par image), normalisée par rapport à ton visage détecté de la même façon. Une fois les 6 secondes enregistrées, cette trajectoire est comparée directement — sur ton appareil — aux 325 vraies vidéos du dictionnaire LSQ déjà filmées pour ce site, et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
-    <p><b>Résultat honnête, pas une estimation</b> : testé hors-ligne sur les 325 mots du dictionnaire avec des déformations volontaires (vitesse différente, bruit, décalage de position) pour simuler une autre prise du même signe : 88,3% de bonne réponse en premier choix, 97,2% dans les 5 premiers choix, sur 325 mots possibles. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette. Ce test reste basé sur les mêmes vidéos qui ont servi à construire le dictionnaire (pas des prises indépendantes sur un autre téléphone) — la vraie mesure, c'est ton usage réel.</p>
+    <p>Depuis le 16 novembre 2026 : le navigateur fait tourner, localement sur ton appareil, un vrai modèle de détection des points-clés de la main (21 points par main, plus l'état de chaque doigt — tendu ou plié) — téléchargé une seule fois au premier chargement de la page puis mis en cache par ton navigateur (~7 Mo), mais jamais aucune image ni donnée renvoyée nulle part. Ta position de main est normalisée par rapport à ton visage détecté de la même façon. Une fois les 6 secondes enregistrées, cette trajectoire est comparée directement — sur ton appareil — aux vraies vidéos du dictionnaire LSQ déjà filmées pour ce site (analysées par ce même modèle), et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
+    <p><b>Résultat honnête, pas une estimation</b> : testé sur le vrai pipeline complet (caméra, détection de main, comparaison — pas un raccourci hors-ligne), sur un échantillon de 24 mots pris parmi les 325 : 23 sur 24 bien reconnus en premier choix. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette. Ce test reste basé sur les mêmes vidéos qui ont servi à construire le dictionnaire (pas des prises indépendantes sur un autre téléphone) — la vraie mesure, c'est ton usage réel. Limite connue : environ 15 mots sur 325 n'ont pour l'instant aucune signature exploitable (la main n'est jamais détectée assez nettement dans leur vidéo de référence, souvent une pose mains basses/paumes vers le haut) et ne sont donc pas encore reconnaissables — à corriger dans un prochain passage.</p>
     <p><b>Pour un bon résultat</b> : recule-toi assez pour que tes épaules et tes bras soient visibles (pas juste ton visage de près — les vidéos du dictionnaire sont filmées à cette distance-là), centre ton visage dans le cadre, garde un bon éclairage, et signe à peu près à la même distance de la caméra à chaque fois. La caméra enregistre et traduit en continu, aucun bouton à presser.</p>
     <p><b>Dossier vidéos personnel (Son à signe)</b> : le bouton ci-dessous te laisse choisir un dossier sur ton appareil — chaque vidéo que tu y déposes, nommée d'après le mot (ex. <code>bonjour.mp4</code>), devient reconnaissable, en priorité sur les mots déjà intégrés. Rien n'est jamais envoyé ni copié ailleurs qu'à l'endroit que tu as choisi toi-même. Disponible sur Chrome et Edge; le bouton reste caché sur les navigateurs qui n'offrent pas encore cette fonction.</p>
     <button type="button" class="sheet-toggle-btn" id="speechFolderBtn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" aria-hidden="true"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Choisir mon dossier de vidéos (Son à signe)</button>
@@ -2029,19 +2029,21 @@
      Remplace le 2026-11-15 (demande de David) l'ancien prototype MediaPipe
      ci-dessus (qui ne reconnaissait que des gestes de main génériques, pas
      de vrais mots LSQ, et restait volontairement verrouillé sur "À venir").
-     Nouvelle approche : on enregistre ~3,5 secondes de signe, on en extrait
-     une trajectoire de main (couleur de peau + mouvement, normalisée par
-     rapport au visage détecté par la même technique — aucun modèle
-     téléchargé, aucun réseau requis après le chargement de cette page),
-     puis on la compare par DTW (Dynamic Time Warping) aux 325 vraies
-     vidéos du dictionnaire. Testé hors-ligne (325 mots, déformations
-     synthétiques simulant une prise différente) : 88,3% de bonne réponse en
-     premier choix, 97,2% dans les 5 premiers choix (mis à jour le
-     2026-11-16 après l'ajout de deux canaux de forme de main, extent et
-     solidity, ET la correction d'une erreur de calibrage du repère visage
-     qui faussait toute la normalisation — voir media/sign-recognizer.js)
-     — voir la feuille d'info (bouton "i") pour le détail honnête de ce
-     test.
+     On enregistre ~6 secondes de signe, on en extrait une trajectoire, puis
+     on la compare par DTW (Dynamic Time Warping) aux vraies vidéos du
+     dictionnaire. La façon d'extraire cette trajectoire a changé une
+     deuxième fois le 2026-11-16 (demande de David, apres que le suivi par
+     couleur de peau/mouvement -- malgré plusieurs corrections -- ait
+     plafonné autour de 20% de bonne réponse en conditions réelles) : un
+     vrai modèle de détection des points-clés de la main (21 points +
+     courbure par doigt, librairie "Human"/tensorflow.js, voir
+     media/sign-recognizer.js) tourne maintenant localement dans le
+     navigateur -- cette fois AVEC un modèle téléchargé (~7 Mo, mis en
+     cache, jamais de donnée renvoyée). Testé honnêtement sur le vrai
+     pipeline (24 mots sur 325) : 23/24 en premier choix -- voir la feuille
+     d'info (bouton "i") pour le détail honnête de ce test, y compris sa
+     limite connue (~15 mots sur 325 sans signature exploitable pour
+     l'instant).
      ============================================================ -->
 <script src="/media/sign-recognizer.js"></script>
 <script>
@@ -2131,6 +2133,7 @@
   const work = document.createElement("canvas");
   work.width = WORK_W; work.height = WORK_H;
   const workCtx = work.getContext("2d", { willReadFrequently: true });
+  let workSizeWarmedUp = null; // "WORK_WxWORK_H" déjà préchauffé (voir warmupFor)
   function sizeWorkCanvas() {
     var vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return;
@@ -2138,6 +2141,16 @@
     if (vw >= vh) { WORK_W = maxDim; WORK_H = Math.max(16, Math.round(maxDim * vh / vw)); }
     else { WORK_H = maxDim; WORK_W = Math.max(16, Math.round(maxDim * vw / vh)); }
     work.width = WORK_W; work.height = WORK_H;
+    // 2026-11-16 : paye ici (dès que la vraie taille de travail est
+    // connue, typiquement bien avant tout clic sur Démarrer) le coût
+    // ponctuel de compilation des shaders du modèle de détection de main
+    // pour CETTE taille de canvas précise -- voir le commentaire détaillé
+    // dans warmupFor (sign-recognizer.js). Best-effort, jamais bloquant.
+    var key = WORK_W + "x" + WORK_H;
+    if (workSizeWarmedUp !== key && window.SensorielleSignRecognizer && window.SensorielleSignRecognizer.warmupFor) {
+      workSizeWarmedUp = key;
+      window.SensorielleSignRecognizer.warmupFor(WORK_W, WORK_H);
+    }
   }
   // David, 2026-11-15 : "ça marque 'démarrage...' et puis rien d'autre"
   // -- le diagnostic de l'aperçu (voir startLivePreview) ne se met
@@ -2183,8 +2196,11 @@
   // prototype précédent, voir git log 4607885^, déjà prouvée chez
   // David) pour le retour visuel. La RECONNAISSANCE réelle (traduire un
   // signe LSQ en mot français) reste entièrement le moteur local DTW
-  // (sign-recognizer.js + sign-signatures.json, 88,3%/97,2% validé
-  // hors-ligne au 2026-11-16) -- complètement séparé de ce qui suit, et inchangé.
+  // (sign-recognizer.js + sign-signatures.json -- detection de main par
+  // points-clefs depuis le 2026-11-16, 23/24 valide sur le vrai pipeline,
+  // voir le commentaire plus haut) -- completement separe de ce qui suit
+  // (ce bloc-ci utilise sa PROPRE instance MediaPipe Tasks Vision, chargee
+  // depuis jsdelivr, pour le dessin uniquement) et inchange.
   let handLandmarker = null;
   let faceLandmarker = null;
   let faceModelReady = false;
@@ -2789,19 +2805,30 @@
     // n'implique non plus de faire disparaître la traduction en continu).
     const startedAt = Date.now();
     statusLine.textContent = "Enregistrement… signe maintenant.";
-    sampleTimer = setInterval(function () {
+    // 2026-11-16 : pushFrame est maintenant ASYNCHRONE (detection de main
+    // par un vrai modele IA sur le GPU, pas un simple calcul de pixels
+    // synchrone comme avant) -- un setInterval fixe a 80ms empilerait des
+    // inferences en vol si une image prend plus de 80ms a traiter. On
+    // programme donc chaque prochaine capture SEULEMENT apres que la
+    // precedente soit terminee (await), avec 80ms comme delai minimum
+    // entre deux captures plutot qu'un rythme fixe garanti.
+    async function sampleLoop() {
+      if (!recording) return;
       diagTicks++;
       try {
         workCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
         const img = workCtx.getImageData(0, 0, WORK_W, WORK_H);
-        const row = extractor.pushFrame(img, WORK_W, WORK_H);
+        const row = await extractor.pushFrame(img, WORK_W, WORK_H);
         if (row) diagHits++;
       } catch (e) {
         diagLastErr = (e && e.message) ? e.message : String(e);
       }
+      if (!recording) return; // stopRecording() a pu arriver pendant l'await
       const left = Math.max(0, RECORD_MS - (Date.now() - startedAt));
       statusLine.textContent = "Enregistrement… " + (Math.ceil(left / 1000)) + "s";
-    }, 80);
+      sampleTimer = setTimeout(sampleLoop, 80);
+    }
+    sampleTimer = setTimeout(sampleLoop, 0);
     recordTimer = setTimeout(function () { stopRecording(false); }, RECORD_MS);
   }
 
@@ -2809,7 +2836,7 @@
     if (!recording) return;
     recording = false;
     if (recordTimer) { clearTimeout(recordTimer); recordTimer = null; }
-    if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
+    if (sampleTimer) { clearTimeout(sampleTimer); sampleTimer = null; }
     shutterBtn.disabled = false;
     shutterBtn.classList.remove("is-recording");
     if (shutterCaption) shutterCaption.textContent = "Démarrer";

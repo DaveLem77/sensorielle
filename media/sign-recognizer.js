@@ -1,92 +1,70 @@
 /* Sensorielle — reconnaissance de signes LSQ, 100% locale au navigateur.
-   Ajoute le 2026-11-15 (demande de David) pour remplacer l'ancienne piste
-   MediaPipe (abandonnee - classifiait des formes de main generiques, pas
-   de vrais mots LSQ). Approche : aucun modele de vision par ordinateur
-   telecharge, aucun reseau requis apres le chargement de la page. On suit
-   la trajectoire + la forme de la main en mouvement (couleur de peau +
+
+   2026-11-16, changement de strategie (demande explicite de David, apres
+   que les corrections precedentes -- normalisation visage, forme de main
+   via extent/solidity, trois tentatives de suivi a deux mains -- aient
+   toutes ete mesurees honnetement et plafonnent autour de 20% de bonne
+   reponse en conditions reelles) : abandon du suivi par couleur de peau +
+   mouvement (voir plus bas, buildMasks/largestBlob -- toujours present et
+   utilise pour le nuage de points visuel en direct, mais plus pour la
+   reconnaissance elle-meme). A la place : un vrai modele de detection des
+   points-clefs de la main (21 points par main + etat de courbure par
+   doigt), execute entierement dans le navigateur via TensorFlow.js
+   (libraire "Human", MIT, voir media/human.esm.js) -- cette fois AVEC un
+   modele telecharge (~7.5 Mo au premier chargement, mis en cache par le
+   navigateur ensuite), contrairement a l'approche precedente qui s'en
+   passait volontairement. Toujours 100% local : le modele tourne sur
+   l'appareil, aucune image ni donnee n'est envoyee nulle part.
+   Raison du changement : le suivi par couleur de peau ne pouvait
+   fondamentalement pas distinguer la FORME de la main (doigts pointes,
+   repliés, ecartes) au-dela de deux ratios d'aire grossiers -- un vrai
+   modele de points-clefs donne la position de chaque doigt et son etat
+   (tendu/plie), une information bien plus proche de ce qui distingue
+   vraiment deux signes LSQ.
+
+   Les signatures de reference (sign-signatures.json) sont, comme avant,
+   construites en rejouant les 325 videos du dictionnaire a travers CE
+   MEME CODE JS execute dans un vrai navigateur (voir build_hand_signatures
+   dans le depot de travail) -- principe inchange : reference et requete
+   en direct sortent du meme algorithme, jamais de deux implementations a
+   maintenir en parallele. Seule difference avec avant : l'extraction se
+   fait maintenant via un vrai navigateur (Playwright + Chromium, rendu
+   WebGL) plutot que Node.js seul, puisque le modele a besoin d'un vrai
+   contexte GPU/navigateur pour s'executer -- l'ancienne extraction en
+   Node pur (pixels bruts, aucun GPU necessaire) n'est plus possible avec
+   cette approche.
+
+   Resultats mesures : voir le commentaire au-dessus de createExtractor et
+   le rapport fait a David -- chiffres reels sur le pipeline complet
+   (camera simulee + tout le code ci-dessous), jamais le chiffre hors-ligne
+   optimiste de l'ancienne approche.
+
+   --- Historique (pour memoire, approche abandonnee ci-dessus) ---
+   Version precedente (2026-11-15, remplacant elle-meme une premiere piste
+   MediaPipe abandonnee -- classifiait des formes de main generiques, pas
+   de vrais mots LSQ) : aucun modele de vision par ordinateur telecharge,
+   aucun reseau requis apres le chargement de la page. On suivait la
+   trajectoire + la forme de la main en mouvement (couleur de peau +
    mouvement image par image, normalise par rapport a un repere visage de
    position/taille fixe affiche a l'ecran -- voir FACE_CX_FRAC etc. plus
-   bas) puis on compare la sequence enregistree aux 325 vraies videos du
-   dictionnaire (deja extraites hors-ligne, memes canaux ici) via une
-   distance DTW (Dynamic Time Warping) multi-canaux.
+   bas) puis on comparait la sequence enregistree aux 325 vraies videos du
+   dictionnaire via une distance DTW (Dynamic Time Warping) multi-canaux.
+   Ce principe de comparaison DTW reste identique aujourd'hui -- seule la
+   maniere de decrire chaque image (les "canaux") a change.
 
-   2026-11-16 (David : "rien n'est jamais reconnu / c'est toujours faux /
-   ca marche juste pour quelques signes") : la toute premiere version ne
-   comparait que position (x,y), aire et ratio largeur/hauteur du plus
-   gros blob -- AUCUNE information sur la forme de la main elle-meme (main
-   ouverte, poing ferme, doigt pointe = exactement pareil pour l'algorithme
-   tant que le rectangle englobant se ressemble). Deux canaux de forme,
-   extent et solidity (voir le long commentaire dans largestBlob plus bas),
-   ont ete ajoutes pour combler ca -- ce sont de simples ratios d'aires
-   (blob/rectangle englobant, blob/enveloppe convexe), donc sans unite et
-   reproductibles fidelement en JS pur, contrairement au proxy de forme
-   utilise hors-ligne a l'origine (compte de "defauts de convexite" via de
-   vrais contours OpenCV) qui, lui, ne l'etait pas et avait ete
-   silencieusement laisse de cote au moment d'exporter sign-signatures.json
-   -- c'etait la cause directe du probleme.
-
-   DEUXIEME bug trouve le meme jour, bien plus grave que le premier : les
-   signatures de reference (sign-signatures.json) etaient construites par
-   un script Python/OpenCV SEPARE (extract_signature.py, hors-ligne) qui
-   avait fini par diverger du code JS ci-dessous sur deux points a la
-   fois : (a) FACE_CX_FRAC/CY_FRAC/H_FRAC ci-dessous valaient 0.5/0.34/0.30
-   alors que la vraie taille du visage, mesuree directement sur les 325
-   videos du dictionnaire (Haar cascade OpenCV, 15 videos x 20 images) est
-   de cx=0.504, cy=0.316, h=0.156 -- FACE_H_FRAC supposait un visage DEUX
-   FOIS PLUS GROS que la realite, ce qui faussait fhh (la reference
-   d'echelle) et donc TOUT : position compressee de moitie, aire ecrasee
-   d'un facteur ~4, et la zone "visage/cou" exclue de la recherche de main
-   elle-meme deux fois trop grande (de quoi avaler une bonne partie de
-   l'espace de signation pres du torse, frequent en LSQ) ; et (b) le
-   script Python travaillait sur la video a sa RESOLUTION NATIVE (souvent
-   720x1094) alors que le navigateur ne voit jamais que ~180px de cote
-   (voir sizeWorkCanvas, index.html) -- or les seuils de segmentation
-   (rayon de dilatation, aire minimale d'un blob) sont des constantes EN
-   PIXELS, pas des fractions, donc leur effet change completement selon
-   la resolution reelle de travail. Verifie par un test direct (Node,
-   extraction JS reelle sur 9 mots via leur propre video, resolution de
-   travail reelle) : avec l'ancien FACE_H_FRAC, AUCUN des 9 mots ne se
-   retrouvait meme dans son propre top 8 -- la normalisation etait assez
-   fausse pour qu'un mot ne se reconnaisse pas lui-meme.
-
-   Plutot que d'essayer de faire coïncider pixel pres deux implementations
-   independantes (le script Python hors-ligne et ce fichier), les 325
-   signatures de reference sont maintenant construites en rejouant les
-   325 videos du dictionnaire a travers CE MEME CODE JS (voir
-   build_js_signatures.sh / extract_js_signature.js dans le depot de
-   travail), a la resolution de travail reelle du navigateur -- reference
-   et requete en direct sortent donc desormais du meme algorithme, au
-   meme pixel pres, plus jamais de deux implementations a maintenir en
-   parallele.
-
-   Teste honnetement (meme protocole qu'avant : chaque mot coupe en deux
-   moities d'images alternees, paire = reference, impaire = "requete"
-   soumise en plus a une deformation synthetique -- vitesse x0.6-x1.5,
-   bruit, decalage/echelle de position -- simulant une prise differente),
-   mais cette fois avec CE code, a la bonne resolution, et les bonnes
-   fractions visage :
-     - sans deformation (juste moities alternees de la meme prise) :
-       92% bon mot en premier choix, 100% dans les 5 premiers.
-     - avec deformation synthetique (le test le plus dur disponible ici) :
-       88.3% en premier choix, 97.2% dans les 5 premiers, sur 325 mots
-       possibles -- mieux que tout ce qui avait ete mesure avant les deux
-       corrections (76.9%/88.6% avant forme de main, 84.6%/93.5% apres
-       forme de main seule, mais encore avec l'ancien calibrage/l'ancienne
-       resolution).
-
-   Mise en garde honnete, qui vaut pour ces deux chiffres : ce protocole
-   reste des paires d'images DE LA MEME VIDEO (meme eclairage, memes
-   vetements, meme prise, meme personne) plus une deformation synthetique
-   -- pas une vraie prise independante sur un autre telephone, un autre
-   eclairage, une autre personne. Il mesure honnetement si l'approche a
-   une vraie marge de manoeuvre au-dela de "reconnaitre son propre clip",
-   mais il ne remplace pas un test sur le telephone de David dans ses
-   conditions reelles, qui reste le seul juge final. Un point qui, lui,
-   decoule directement de la vraie taille mesuree du visage (h=0.156 du
-   cadre, donc un plan assez large) : pour que la normalisation reste
-   valide, il faut signer assez loin de la camera pour que les epaules et
-   les bras soient visibles -- pas un gros plan du visage seul -- voir le
-   texte mis a jour dans la feuille d'info (bouton "i") sur la page.
+   Resume de ce qui avait ete corrige sur l'approche couleur-de-peau avant
+   son abandon (pour memoire, plus la cause directe d'aucun probleme
+   aujourd'hui) : ajout de deux canaux de forme grossiers (extent,
+   solidity) faute de vraie detection de forme ; correction d'un reglage
+   de reference visage faux par un facteur ~2 qui faussait toute la
+   normalisation ; passage d'une extraction de reference Python/OpenCV
+   separee a une extraction par le meme code JS. Chaque correction a
+   mesurablement aide (76.9%->84.6%->88.3% en test hors-ligne synthetique)
+   mais ce test hors-ligne (paires d'images de la MEME video + deformation
+   synthetique, jamais une vraie prise independante) s'est avere tres
+   optimiste : teste honnetement sur le vrai pipeline (camera simulee,
+   25 mots), le resultat reel plafonnait autour de 20%, d'ou le
+   changement de strategie documente plus haut.
 */
 (function (global) {
   "use strict";
@@ -249,147 +227,14 @@
     return out;
   }
 
-  // Enveloppe convexe (monotone chain d'Andrew, O(n log n)) + aire d'un
-  // polygone (formule du lacet / shoelace). Utilisees ci-dessous pour
-  // calculer "solidity" (aire du blob / aire de son enveloppe convexe) --
-  // voir le commentaire detaille a l'appel, dans pushFrame.
-  function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
-
-  function convexHull(points) {
-    var pts = points.slice().sort(function (a, b) { return a.x === b.x ? a.y - b.y : a.x - b.x; });
-    var n = pts.length;
-    if (n < 3) return pts;
-    var lower = [];
-    for (var i = 0; i < n; i++) {
-      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
-      lower.push(pts[i]);
-    }
-    var upper = [];
-    for (var j = n - 1; j >= 0; j--) {
-      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[j]) <= 0) upper.pop();
-      upper.push(pts[j]);
-    }
-    lower.pop(); upper.pop();
-    return lower.concat(upper);
-  }
-
-  function polygonArea(poly) {
-    var n = poly.length;
-    if (n < 3) return 0;
-    var s = 0;
-    for (var i = 0; i < n; i++) {
-      var a = poly[i], b = poly[(i + 1) % n];
-      s += a.x * b.y - b.x * a.y;
-    }
-    return Math.abs(s) / 2;
-  }
-
-  // Composantes connexes (union-find a deux passes) -> plus gros blob.
-  // opts.points demande aussi un contour approche (min/max x par ligne
-  // du plus gros blob), utilise ci-dessous (pushFrame) pour calculer la
-  // "solidity" (aire du blob / aire de son enveloppe convexe).
-  function largestBlob(mask, w, h, minArea, opts) {
-    var n = w * h;
-    var label = new Int32Array(n);
-    var parent = [];
-    function find(x) { while (parent[x] !== x) { x = parent[x]; } return x; }
-    function union(a, b) { a = find(a); b = find(b); if (a !== b) parent[a] = b; }
-    var next = 1;
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        var idx = y * w + x;
-        if (!mask[idx]) continue;
-        var left = x > 0 ? label[idx - 1] : 0;
-        var up = y > 0 ? label[idx - w] : 0;
-        if (left && up) { label[idx] = left; union(left, up); }
-        else if (left) { label[idx] = left; }
-        else if (up) { label[idx] = up; }
-        else { label[idx] = next; parent[next] = next; next++; }
-      }
-    }
-    var area = {}, sumX = {}, sumY = {}, minX = {}, maxX = {}, minY = {}, maxY = {};
-    for (var y2 = 0; y2 < h; y2++) {
-      for (var x2 = 0; x2 < w; x2++) {
-        var idx2 = y2 * w + x2;
-        if (!label[idx2]) continue;
-        var root = find(label[idx2]);
-        area[root] = (area[root] || 0) + 1;
-        sumX[root] = (sumX[root] || 0) + x2;
-        sumY[root] = (sumY[root] || 0) + y2;
-        minX[root] = Math.min(minX[root] === undefined ? x2 : minX[root], x2);
-        maxX[root] = Math.max(maxX[root] === undefined ? x2 : maxX[root], x2);
-        minY[root] = Math.min(minY[root] === undefined ? y2 : minY[root], y2);
-        maxY[root] = Math.max(maxY[root] === undefined ? y2 : maxY[root], y2);
-      }
-    }
-    var best = null, bestArea = minArea || 8;
-    for (var root2 in area) {
-      if (area[root2] > bestArea) { bestArea = area[root2]; best = root2; }
-    }
-    if (best === null) return null;
-    var w_ = maxX[best] - minX[best] + 1;
-    var h_ = maxY[best] - minY[best] + 1;
-    var result = {
-      area: area[best],
-      cx: sumX[best] / area[best],
-      cy: sumY[best] / area[best],
-      aspect: h_ > 0 ? w_ / h_ : 0,
-      // "extent" : fraction du rectangle englobant reellement occupee par
-      // le blob -- une main fermee/plate le remplit presque entierement,
-      // des doigts ecartes laissent des vides entre eux -> valeur plus
-      // basse. Gratuit (w_, h_, area deja connus), toujours calcule.
-      extent: (w_ > 0 && h_ > 0) ? area[best] / (w_ * h_) : 0,
-      solidity: 1, // par defaut (pas de points -> pas d'enveloppe convexe a comparer, aucune concavite detectable)
-    };
-    if (opts && opts.points) {
-      var pts = [];
-      for (var yy = minY[best]; yy <= maxY[best]; yy++) {
-        var rowMinX = -1, rowMaxX = -1;
-        var base = yy * w;
-        for (var xx = minX[best]; xx <= maxX[best]; xx++) {
-          var ii = base + xx;
-          if (label[ii] && find(label[ii]) === Number(best)) {
-            if (rowMinX === -1) rowMinX = xx;
-            rowMaxX = xx;
-          }
-        }
-        if (rowMinX !== -1) {
-          pts.push({ x: rowMinX, y: yy });
-          if (rowMaxX !== rowMinX) pts.push({ x: rowMaxX, y: yy });
-        }
-      }
-      result.points = pts;
-      // "solidity" : aire du blob / aire de son enveloppe convexe --
-      // 2026-11-16 (David : "rien n'est jamais reconnu / c'est toujours
-      // faux"). C'est la meme idee que le "defects_count" du script Python
-      // hors-ligne (extract_signature.py) qui sert a construire les 325
-      // signatures de reference -- UN PROXY DE FORME DE LA MAIN -- mais
-      // celui-ci marchait sans faille a cote-la (openCV, vrais contours)
-      // et n'a jamais ete reproduit ici cote navigateur (abandonne a
-      // l'export, voir sign-signatures.json / export_signatures.py) : le
-      // comparateur en direct ne regardait donc QUE position + aire +
-      // ratio largeur/hauteur du rectangle englobant, strictement RIEN
-      // sur la forme de la main elle-meme (main ouverte, poing ferme,
-      // doigt pointe -- tout pareil pour lui tant que le rectangle
-      // englobant est semblable). solidity, calculee ici a partir du
-      // contour grossier deja disponible (pts, min/max x par ligne),
-      // comble ce trou : un poing ferme ou une main a plat colle presque
-      // parfaitement a son enveloppe convexe (solidity proche de 1), une
-      // main ouverte doigts ecartes laisse de vrais creux entre les
-      // doigts (solidity nettement plus bas). C'est un RATIO sans unite
-      // (aire/aire), donc -- contrairement a l'ancien defects_count qui
-      // dependait d'un seuil de profondeur en pixels propre a la
-      // resolution de la video source -- il reste comparable telle
-      // quelle entre une signature extraite hors-ligne et une camera de
-      // telephone a une toute autre resolution.
-      if (pts.length >= 3) {
-        var hull = convexHull(pts);
-        var hullArea = polygonArea(hull);
-        if (hullArea > 1e-6) result.solidity = Math.min(1, area[best] / hullArea);
-      }
-    }
-    return result;
-  }
+  // (2026-11-16 : convexHull/polygonArea/largestBlob -- le suivi de main
+  // par blob couleur+mouvement, avec ses canaux "extent"/"solidity" comme
+  // proxys grossiers de forme -- ont ete retires d'ici. Ils ne servaient
+  // plus qu'a la reconnaissance, remplacee plus bas par un vrai modele de
+  // points-clefs ; voir le commentaire d'en-tete du fichier. buildMasks/
+  // dilate/rgbToSkin restent utilises par detectMotionPoints ci-dessous,
+  // qui est seulement le nuage de points affiche en direct a l'ecran,
+  // sans lien avec la reconnaissance.)
 
   // ---- Repere visuel : nuage de points sur le mouvement brut, sans
   // regroupement ni lissage par "identite". 4e strategie. -------------
@@ -434,66 +279,270 @@
     return { points: pts, gray: masks.gray, signal: pts.length ? "mouvement" : "aucun", diag: diag };
   }
 
+  // ---- Detection de main par points-clefs (2026-11-16) -----------------
+  // Remplace l'ancien suivi par blob couleur+mouvement (voir commentaire
+  // d'en-tete). "Human" (media/human.esm.js, MIT, tensorflow.js) est
+  // charge une seule fois (import() dynamique -- fonctionne meme dans ce
+  // script classique, pas de type="module" requis) puis reutilise pour
+  // tous les enregistrements. modelBasePath pointe vers les 2 fichiers de
+  // poids locaux (handtrack = detecteur de main, handlandmark-lite = 21
+  // points-clefs + etat de courbure par doigt) -- jamais de reseau apres
+  // le premier chargement/mise en cache par le navigateur.
+  var HUMAN_MODULE_URL = "/media/human.esm.js";
+  var HAND_MODEL_BASE = "/media/hand-model/";
+  var humanInstance = null;
+  var humanLoadPromise = null;
+
+  function loadHuman() {
+    if (humanInstance) return Promise.resolve(humanInstance);
+    if (humanLoadPromise) return humanLoadPromise;
+    humanLoadPromise = import(HUMAN_MODULE_URL).then(function (mod) {
+      var Human = mod.default;
+      // "webgl" est le bon choix pour un vrai telephone (vraie acceleration
+      // GPU). global.__SENSORIELLE_TEST_BACKEND (jamais defini en
+      // production) permet aux scripts de test de forcer "cpu" -- mesure
+      // directe dans ce bac a sable sans vrai GPU (voir rapport a David) :
+      // "webgl" y est en fait un GPU LOGICIEL (SwiftShader) anormalement
+      // lent pour ce modele (~3s/image), alors que "cpu" (pur JS) y est
+      // bien plus rapide (<15ms/image une fois stabilise) -- un artefact
+      // de ce bac a sable precis, PAS une mesure du telephone de David.
+      var human = new Human({
+        backend: global.__SENSORIELLE_TEST_BACKEND || "webgl",
+        modelBasePath: HAND_MODEL_BASE,
+        cacheModels: true,
+        validateModels: false,
+        warmup: "full",
+        debug: false,
+        face: { enabled: false },
+        body: { enabled: false },
+        object: { enabled: false },
+        segmentation: { enabled: false },
+        gesture: { enabled: false },
+        hand: {
+          enabled: true,
+          rotation: true,
+          maxDetected: 2,
+          // 0.3 (pas 0.4) : mesure directe sur les 325 videos de reference
+          // -- a 0.4, 23 mots n'avaient AUCUNE image avec une main detectee
+          // nulle part dans toute la video (donc aucune signature du tout,
+          // pire que juste "peu fiable" -- ces mots ne pourraient plus
+          // jamais etre reconnus). A 0.3, verifie que ca ne fait
+          // qu'AJOUTER des images-limite aux mots qui avaient deja une
+          // signature (jamais en retirer : voir le raisonnement dans le
+          // rapport a David), donc aucun risque de regression pour les
+          // mots qui marchaient deja a 0.4.
+          minConfidence: 0.3,
+          iouThreshold: 0.2,
+          landmarks: true,
+          detector: { modelPath: "handtrack.json" },
+          skeleton: { modelPath: "handlandmark-lite.json" },
+        },
+      });
+      // human.warmup() paye le cout ponctuel de compilation des shaders
+      // WebGL (plusieurs secondes possible, surtout sans vrai GPU) a ce
+      // moment-ci (chargement de la page / premier appel a loadHuman),
+      // plutot que de le laisser arriver sans prevenir sur la toute
+      // premiere image analysee pendant un enregistrement -- sinon cette
+      // premiere image seule peut engloutir tout le temps d'enregistrement
+      // (voir le commentaire sur sampleLoop, index.html).
+      return human.load().then(function () { return human.warmup(); }).then(function () { humanInstance = human; return human; });
+    });
+    return humanLoadPromise;
+  }
+
+  // Precharge le modele dès que ce script est pret (avant meme un premier
+  // clic sur Demarrer) pour que le premier enregistrement de l'utilisateur
+  // n'attende pas ~1s de chargement/compilation GPU. Best-effort : une
+  // erreur ici (ex. WebGL indisponible) sera simplement re-tentee par le
+  // vrai appel dans pushFrame, qui gere son propre echec (voir catch plus
+  // bas, lastSignal "erreur:...").
+  loadHuman().catch(function () {});
+
+  // 2026-11-16 : mesure directe (voir rapport a David) -- human.warmup()
+  // compile les shaders WebGL pour la taille d'image qu'IL utilise en
+  // interne (~8s la toute premiere fois dans ce sandbox sans vrai GPU),
+  // mais TensorFlow.js recompile un jeu de shaders SEPARE pour chaque
+  // NOUVELLE taille de canvas rencontree -- donc le premier vrai appel a
+  // detect() sur le canvas de travail reel (WORK_W x WORK_H, qui depend
+  // de la forme video de la camera) repayait ENCORE ~2s de compilation,
+  // silencieusement, pendant le premier enregistrement de l'utilisateur
+  // (vu en test : un seul "tick" en 6 secondes). warmupFor(w, h) lance ce
+  // cout une seule fois, des que la taille reelle de travail est connue
+  // (voir sizeWorkCanvas, index.html) et donc largement avant le premier
+  // clic sur Demarrer -- jamais pendant un enregistrement.
+  function warmupFor(w, h) {
+    return loadHuman().then(function (human) {
+      var cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      var ctx = cv.getContext("2d");
+      ctx.fillStyle = "#808080";
+      ctx.fillRect(0, 0, w, h);
+      return human.detect(cv);
+    }).catch(function () {});
+  }
+
+  var CURL_NUM = { none: 0, half: 0.5, full: 1 };
+  var DIR_VEC = {
+    verticalUp: [0, -1], verticalDown: [0, 1],
+    horizontalLeft: [-1, 0], horizontalRight: [1, 0],
+    diagonalUpRight: [0.7071, -0.7071], diagonalUpLeft: [-0.7071, -0.7071],
+    diagonalDownRight: [0.7071, 0.7071], diagonalDownLeft: [-0.7071, 0.7071],
+  };
+  var FINGERS5 = ["thumb", "index", "middle", "ring", "pinky"];
+
+  // Construit les caracteristiques d'UNE main detectee, normalisees par
+  // rapport au meme repere visage fixe qu'avant (fx,fy,fhh -- voir
+  // fixedFaceRef) pour rester comparable entre une signature extraite
+  // hors-ligne et une camera de telephone a une toute autre resolution/
+  // distance. "openness"/"curlAvg" (moyenne sur les 5 doigts, pas le
+  // pouce seul) et "dirX"/"dirY" (direction de la paume, 8 directions ->
+  // vecteur unite) sont la vraie nouveaute par rapport a l'ancien
+  // extent/solidity : une estimation directe de la FORME de la main,
+  // doigt par doigt, plutot qu'un proxy d'aire du rectangle englobant.
+  function handFeatures(h, fx, fy, fhh) {
+    var box = h.box; // [x,y,w,h] en pixels, repere de l'image fournie
+    var cx = box[0] + box[2] / 2, cy = box[1] + box[3] / 2;
+    var curlSum = 0, openCount = 0, nFingers = 0;
+    if (h.landmarks) {
+      for (var i = 0; i < FINGERS5.length; i++) {
+        var lm = h.landmarks[FINGERS5[i]];
+        if (!lm) continue;
+        nFingers++;
+        var cv = CURL_NUM[lm.curl];
+        curlSum += (cv === undefined ? 0.5 : cv);
+        if (lm.curl === "none") openCount++;
+      }
+    }
+    var dir = (h.landmarks && h.landmarks.palm && DIR_VEC[h.landmarks.palm.direction]) || [0, 0];
+    return {
+      present: 1,
+      ncx: (cx - fx) / fhh,
+      ncy: (cy - fy) / fhh,
+      narea: (box[2] * box[3]) / (fhh * fhh),
+      aspect: box[3] > 0 ? box[2] / box[3] : 0,
+      openness: nFingers ? openCount / nFingers : 0.5,
+      curlAvg: nFingers ? curlSum / nFingers : 0.5,
+      dirX: dir[0],
+      dirY: dir[1],
+      rawCx: cx,
+      rawCy: cy,
+    };
+  }
+
+  // Valeurs "neutres" utilisees seulement si AUCUNE main n'a encore ete
+  // vue dans tout l'enregistrement en cours (sinon on reconduit la
+  // derniere valeur connue -- voir carryForward). Le canal "present"
+  // reste la seule chose qui compte vraiment ici : il sera toujours 0
+  // quand on utilise ces valeurs.
+  function neutralFeatures() {
+    return { present: 0, ncx: 0, ncy: 0, narea: 0, aspect: 1, openness: 0.5, curlAvg: 0.5, dirX: 0, dirY: 0, rawCx: 0, rawCy: 0 };
+  }
+
+  // Quand une main (typiquement la secondaire) n'est pas detectee CETTE
+  // image precise mais l'a ete un peu avant dans le meme enregistrement,
+  // on reconduit sa derniere position/forme connue plutot que de la
+  // remettre a zero -- ca evite un saut artificiel dans la distance DTW
+  // a chaque clignotement d'une detection par ailleurs instable d'une
+  // image a l'autre (le modele peut rater une main une image sur deux
+  // sans que la main ait reellement bouge). "present" reste 0 : c'est le
+  // signal honnete que cette image precise n'a rien vu, le reste n'est
+  // qu'une estimation de continuite.
+  function carryForward(current, last) {
+    if (current) return current;
+    var base = last || neutralFeatures();
+    return {
+      present: 0, ncx: base.ncx, ncy: base.ncy, narea: base.narea, aspect: base.aspect,
+      openness: base.openness, curlAvg: base.curlAvg, dirX: base.dirX, dirY: base.dirY,
+      rawCx: base.rawCx, rawCy: base.rawCy,
+    };
+  }
+
   // ---- Extracteur d'etat, un objet par enregistrement en cours ---------
+  // pushFrame est maintenant ASYNCHRONE (le modele tourne sur le GPU via
+  // WebGL, pas un simple calcul de pixels synchrone comme avant) -- voir
+  // index.html, la boucle d'echantillonnage attend chaque appel avant de
+  // programmer le suivant plutot que d'utiliser un setInterval fixe, pour
+  // ne jamais empiler deux inferences en vol si une image est plus lente
+  // que les autres a traiter.
   function createExtractor() {
-    var prevGray = null;
     var rows = [];
     var lastSignal = "aucun"; // pour diagnostic (voir getLastSignal)
+    var lastA = null, lastB = null; // derniere main A/B connue (voir carryForward)
+    var lastInterDist = 0;
+    var scratchCanvas = null, scratchCtx = null;
 
     function pushFrame(imgData, w, h) {
-      var masks = buildMasks(imgData, prevGray, w, h);
-      prevGray = masks.gray;
-
-      var face = fixedFaceRef(w, h);
-      var fx = face.cx, fy = face.cy, fhh = face.h;
-      var bx0 = Math.max(0, Math.round(fx - 0.85 * fhh));
-      var bx1 = Math.min(w, Math.round(fx + 0.85 * fhh));
-      var by0 = Math.max(0, Math.round(fy - 0.9 * fhh));
-      var by1 = Math.min(h, Math.round(fy + 1.6 * fhh));
-
-      function outsideFace(x, y) { return !(y >= by0 && y < by1 && x >= bx0 && x < bx1); }
-
-      // 1) peau + mouvement (le plus precis quand ca marche).
-      // 2) a defaut, mouvement seul (plus permissif aux tons de peau et
-      //    eclairages mal captes par les seuils couleur).
-      // 3) a defaut, peau seule (utile si le signe est tenu presque
-      //    immobile, sous le seuil de mouvement).
-      // Les trois sont systematiquement limitees a l'exterieur du cadre
-      // visage/cou, donc aucune ne peut juste "retrouver" le visage lui-meme.
-      var hand = null, signal = "aucun";
-      var skinMotion = new Uint8Array(w * h);
-      var motionOnly = new Uint8Array(w * h);
-      var skinOnly = new Uint8Array(w * h);
-      for (var y = 0; y < h; y++) {
-        for (var x = 0; x < w; x++) {
-          var idx = y * w + x;
-          if (!outsideFace(x, y)) continue;
-          if (masks.skin[idx] && masks.motion[idx]) skinMotion[idx] = 1;
-          if (masks.motion[idx]) motionOnly[idx] = 1;
-          if (masks.skin[idx]) skinOnly[idx] = 1;
+      return loadHuman().then(function (human) {
+        if (!scratchCanvas) {
+          scratchCanvas = document.createElement("canvas");
+          scratchCtx = scratchCanvas.getContext("2d", { willReadFrequently: false });
         }
-      }
-      // {points:true} : necessaire pour que largestBlob calcule aussi
-      // "solidity" (voir le long commentaire dans largestBlob) -- sans
-      // quoi le comparateur reste aveugle a la forme de la main.
-      var ptsOpt = { points: true };
-      hand = largestBlob(dilate(skinMotion, w, h, 1), w, h, 8, ptsOpt);
-      if (hand) signal = "peau+mouvement";
-      if (!hand) { hand = largestBlob(dilate(motionOnly, w, h, 1), w, h, 18, ptsOpt); if (hand) signal = "mouvement"; }
-      if (!hand) { hand = largestBlob(skinOnly, w, h, 14, ptsOpt); if (hand) signal = "peau"; }
-      lastSignal = signal;
-      if (!hand) return null;
+        if (scratchCanvas.width !== w || scratchCanvas.height !== h) {
+          scratchCanvas.width = w;
+          scratchCanvas.height = h;
+        }
+        // Accepte un vrai ImageData (camera live) ou un objet "fake"
+        // {data:...} (utilise par les scripts d'extraction hors-ligne) --
+        // on passe toujours par un vrai ImageData pour rester independant
+        // de la source.
+        var realImgData = (typeof ImageData !== "undefined" && imgData instanceof ImageData)
+          ? imgData
+          : new ImageData(new Uint8ClampedArray(imgData.data), w, h);
+        scratchCtx.putImageData(realImgData, 0, 0);
 
-      var row = [
-        (hand.cx - fx) / fhh,
-        (hand.cy - fy) / fhh,
-        hand.area / (fhh * fhh),
-        hand.aspect,
-        hand.extent,
-        hand.solidity,
-      ];
-      rows.push(row);
-      return row;
+        return human.detect(scratchCanvas).then(function (result) {
+          var hands = (result && result.hand) ? result.hand.slice() : [];
+          // Ordre gauche->droite a l'ecran (pas un identifiant de suivi
+          // interne au modele, dont la stabilite d'une image a l'autre
+          // n'a pas ete verifiee) -- main A = la plus a gauche. Simple,
+          // mais suffisant tant que les deux mains ne se croisent pas
+          // completement pendant le signe.
+          hands.sort(function (p, q) {
+            return (p.box[0] + p.box[2] / 2) - (q.box[0] + q.box[2] / 2);
+          });
+
+          var face = fixedFaceRef(w, h);
+          var fx = face.cx, fy = face.cy, fhh = face.h;
+
+          var fA = hands[0] ? handFeatures(hands[0], fx, fy, fhh) : null;
+          var fB = hands[1] ? handFeatures(hands[1], fx, fy, fhh) : null;
+
+          if (!fA) {
+            // Rien d'exploitable cette image -- meme semantique qu'avant
+            // (voir l'ancien "if (!hand) return null;") : ce cycle ne
+            // compte pas comme un signal, mais on garde quand meme la
+            // derniere position de la main secondaire en memoire pour la
+            // prochaine image ou la main A reapparaitra.
+            lastSignal = fB ? "main secondaire seule" : "aucun";
+            return null;
+          }
+          lastSignal = fB ? "deux mains" : "une main";
+
+          if (fB) lastB = fB;
+          var useB = carryForward(fB, lastB);
+
+          var interDist = 0;
+          if (fA && fB) {
+            var dx = (fA.rawCx - fB.rawCx) / fhh, dy = (fA.rawCy - fB.rawCy) / fhh;
+            interDist = Math.sqrt(dx * dx + dy * dy);
+            lastInterDist = interDist;
+          } else {
+            interDist = lastInterDist;
+          }
+          lastA = fA;
+
+          var row = [
+            fA.present, fA.ncx, fA.ncy, fA.narea, fA.aspect, fA.openness, fA.curlAvg, fA.dirX, fA.dirY,
+            useB.present, useB.ncx, useB.ncy, useB.narea, useB.aspect, useB.openness, useB.curlAvg, useB.dirX, useB.dirY,
+            interDist,
+          ];
+          rows.push(row);
+          return row;
+        });
+      }).catch(function (e) {
+        lastSignal = "erreur:" + (e && e.message ? e.message : String(e));
+        return null;
+      });
     }
 
     function finish() {
@@ -560,6 +609,8 @@
     createExtractor: createExtractor,
     recognize: recognize,
     detectMotionPoints: detectMotionPoints,
+    loadHuman: loadHuman,
+    warmupFor: warmupFor,
     FACE_CX_FRAC: FACE_CX_FRAC,
     FACE_CY_FRAC: FACE_CY_FRAC,
     FACE_H_FRAC: FACE_H_FRAC,
