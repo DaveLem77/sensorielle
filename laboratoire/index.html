@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Laboratoire — Sensorielle</title>
 <meta name="description" content="Explorateur de données : l'architecture, l'entraînement mesuré et la comparaison honnête du réseau de neurones expérimental de Sensorielle.">
+<meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../media/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,6 +38,26 @@ header{padding:22px 0;border-bottom:1px solid var(--s-line)}
 .brand span{font-family:var(--s-display);font-weight:700;font-size:19px;letter-spacing:-.5px;color:var(--s-ink)}
 .back{font-size:13px;font-weight:600;color:var(--s-ink-dim);text-decoration:none;display:flex;align-items:center;gap:6px}
 .back:hover{color:var(--s-violet)}
+
+/* ---- Verrou par code (2244, meme code et meme session que /dashboard/
+   -- voir dashboard/index.html) : David (2026-11-17) veut cette page
+   accessible UNIQUEMENT via la section admin, pour ceux qui ont le code,
+   pas un lien public. Pas une vraie securite (page statique), juste un
+   verrou de page comme pour le tableau de bord. */
+#pinGate{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%,#efeaff 0%,var(--s-bg) 60%);padding:24px}
+#pinGate.is-hidden{display:none}
+.pin-card{width:min(360px,100%);background:var(--s-surface);border-radius:22px;padding:34px 28px;box-shadow:var(--s-shadow-md);text-align:center}
+.pin-card .pin-lock{width:46px;height:46px;border-radius:50%;background:var(--s-gradient);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;box-shadow:0 10px 24px -8px rgba(124,77,255,.55)}
+.pin-card .pin-lock svg{width:21px;height:21px;color:#fff}
+.pin-card h1{font-family:var(--s-display);font-size:19px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px;background:none;-webkit-background-clip:unset;background-clip:unset;-webkit-text-fill-color:unset;color:var(--s-ink)}
+.pin-card p{font-size:13px;color:var(--s-ink-dim);margin:0 0 22px;line-height:1.6}
+#pinInput{width:100%;text-align:center;font:700 26px/1 var(--s-display);letter-spacing:10px;padding:14px 10px 12px;border-radius:13px;border:1.5px solid var(--s-line-strong);background:var(--s-bg-alt);color:var(--s-ink);outline:none}
+#pinInput:focus{border-color:var(--s-violet)}
+#pinSubmit{width:100%;margin-top:14px;padding:13px;border:none;border-radius:999px;background:var(--s-gradient);color:#fff;font:700 13.5px var(--s-display);cursor:pointer;transition:transform .15s,box-shadow .15s}
+#pinSubmit:hover{transform:translateY(-1px);box-shadow:0 14px 30px -10px rgba(124,77,255,.55)}
+#pinError{margin-top:12px;font-size:12.5px;color:#c23a4e;min-height:16px}
+#labApp{display:none}
+#labApp.is-visible{display:block}
 
 main{padding:48px 0 100px}
 .eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11px;letter-spacing:1.4px;color:var(--s-violet-deep);font-weight:700;text-transform:uppercase;background:var(--s-violet-wash);padding:6px 12px;border-radius:999px;margin:0 0 18px}
@@ -149,6 +170,20 @@ footer a:hover{color:var(--s-violet)}
 </head>
 <body>
 
+<div id="pinGate">
+  <div class="pin-card">
+    <div class="pin-lock"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="10" rx="2.2" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+    <h1>Laboratoire</h1>
+    <p>Entre le code d'accès pour continuer.</p>
+    <form id="pinForm" autocomplete="off">
+      <input id="pinInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autofocus>
+      <button id="pinSubmit" type="submit">Déverrouiller</button>
+    </form>
+    <div id="pinError"></div>
+  </div>
+</div>
+
+<div id="labApp">
 <header>
   <div class="wrap header-row">
     <a class="brand" href="/">
@@ -310,6 +345,43 @@ footer a:hover{color:var(--s-violet)}
     <a href="/">Retour au site</a>
   </div>
 </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // Meme code et meme cle sessionStorage que /dashboard/ : une fois
+  // deverrouille via le tableau de bord, pas besoin de retaper le code en
+  // suivant le lien "Laboratoire" depuis la meme session de navigation.
+  var ACCESS_CODE = "2244";
+  var pinGate = document.getElementById("pinGate");
+  var pinForm = document.getElementById("pinForm");
+  var pinInput = document.getElementById("pinInput");
+  var pinError = document.getElementById("pinError");
+  var labApp = document.getElementById("labApp");
+
+  function unlock() {
+    pinGate.classList.add("is-hidden");
+    labApp.classList.add("is-visible");
+    try { sessionStorage.setItem("senso_admin_unlocked", "1"); } catch (e) {}
+  }
+
+  pinForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (pinInput.value.trim() === ACCESS_CODE) {
+      unlock();
+    } else {
+      pinError.textContent = "Code incorrect.";
+      pinInput.value = "";
+      pinInput.focus();
+    }
+  });
+
+  var alreadyUnlocked = false;
+  try { alreadyUnlocked = sessionStorage.getItem("senso_admin_unlocked") === "1"; } catch (e) {}
+  if (alreadyUnlocked) unlock();
+})();
+</script>
 
 <script>
 const HIST = {"loss": [4.7816, 2.8888, 1.8523, 1.2153, 0.8856, 0.6666, 0.5646, 0.4568, 0.403, 0.3746, 0.3418, 0.2981, 0.3016, 0.2419, 0.2659, 0.2563, 0.2472, 0.2386, 0.2247, 0.2052, 0.2056, 0.1987, 0.205, 0.2137, 0.2037, 0.2078, 0.2162, 0.1674, 0.1881, 0.184, 0.1515, 0.1653, 0.178, 0.1528, 0.1672, 0.1799, 0.1494, 0.1635, 0.1465, 0.1532], "val_loss": [3.8272, 1.9603, 0.9078, 0.6152, 0.4904, 0.2966, 0.2711, 0.2175, 0.137, 0.1592, 0.177, 0.117, 0.1419, 0.1091, 0.0884, 0.1312, 0.243, 0.0962, 0.1614, 0.0762, 0.1013, 0.1033, 0.0734, 0.0805, 0.0892, 0.1432, 0.1143, 0.0757, 0.1106, 0.093, 0.0705, 0.1145, 0.0719, 0.0624, 0.1127, 0.0546, 0.1436, 0.1593, 0.1054, 0.0928], "accuracy": [0.0539, 0.2432, 0.4382, 0.6075, 0.6994, 0.7722, 0.8056, 0.8358, 0.8591, 0.8648, 0.8781, 0.8905, 0.8923, 0.9137, 0.9013, 0.9067, 0.9113, 0.9129, 0.9184, 0.9257, 0.9259, 0.9275, 0.9265, 0.9228, 0.9256, 0.9233, 0.9227, 0.9388, 0.9289, 0.932, 0.9432, 0.9402, 0.9348, 0.9423, 0.9432, 0.9358, 0.9456, 0.939, 0.9488, 0.9477], "val_accuracy": [0.1922, 0.4811, 0.7724, 0.8332, 0.8484, 0.9152, 0.9088, 0.9341, 0.9571, 0.9461, 0.9346, 0.9562, 0.9475, 0.9608, 0.9687, 0.9525, 0.9083, 0.9677, 0.9419, 0.9737, 0.965, 0.9664, 0.9742, 0.9733, 0.971, 0.9493, 0.9493, 0.9682, 0.9576, 0.965, 0.971, 0.9608, 0.9751, 0.976, 0.9594, 0.9774, 0.941, 0.9387, 0.9599, 0.9599]};

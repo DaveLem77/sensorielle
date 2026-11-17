@@ -1693,8 +1693,6 @@
         <a href="#demo" data-scroll>Découvrir</a>
         <a href="#contribuer" data-scroll>Contribuer</a>
         <a href="#don" data-scroll class="nav-don">Faire un don</a>
-        <a href="/apprendre/">Apprendre la LSQ</a>
-        <a href="/entreprises/">Entreprises</a>
       </div>
       <div class="nav-right">
         <div class="nav-account" id="navAccount">
@@ -1717,8 +1715,6 @@
         <a href="#contribuer" data-scroll>Contribuer un signe</a>
         <a href="#essayer" data-scroll>Essayer</a>
         <a href="#don" data-scroll class="nav-don">Faire un don</a>
-        <a href="/apprendre/">Apprendre la LSQ</a>
-        <a href="/entreprises/">Entreprises</a>
       </div>
     </nav>
 
@@ -1881,13 +1877,9 @@
           <div class="footer-links">
             <a href="#contribuer" data-scroll>Contribuer</a>
             <a href="#contribuer" data-scroll>Le projet</a>
-            <a href="/apprendre/">Apprendre la LSQ</a>
-            <a href="/entreprises/">Entreprises</a>
             <a href="/confidentialite/">Confidentialité</a>
             <a href="/conditions/">Conditions</a>
             <a href="#don" data-scroll>Faire un don</a>
-            <a href="/laboratoire/">Laboratoire</a>
-            <a href="/traducteur-direct/">Traducteur en direct</a>
             <a href="dashboard/index.html" style="opacity:.55" aria-label="Tableau de bord">Admin</a>
           </div>
         </div>
@@ -2351,6 +2343,22 @@
     [276, 283, 282, 295, 285], [300, 293, 334, 296, 336],
     [46, 53, 52, 65, 55], [70, 63, 105, 66, 107],
   ];
+  // David, 2026-11-17 (image de référence fournie) : contour des yeux +
+  // ligne du nez, pour que le visage ressemble à l'image -- mêmes
+  // repères MediaPipe FaceMesh standards que les sourcils/lèvres
+  // ci-dessus, juste un sous-ensemble léger de 6 points par oeil
+  // (ensemble classique utilisé pour le calcul de clignement -- pas les
+  // 16 points du contour complet, pour rester aussi délicat que le
+  // reste). Chaque chaîne d'oeil revient à son premier point (boucle
+  // fermée) ; la ligne du nez reste ouverte (pont -> bout, comme sur la
+  // photo). FACE_ACCENT_POINTS (plus bas) tombe déjà sur plusieurs de
+  // ces mêmes repères (1, 33, 159, 263, 386), donc les points lumineux
+  // existants viennent renforcer ce nouveau tracé sans rien dupliquer.
+  const FACE_EYE_CHAINS = [
+    [33, 160, 158, 133, 153, 144, 33],
+    [263, 387, 385, 362, 380, 373, 263],
+  ];
+  const FACE_NOSE_CHAIN = [168, 6, 197, 195, 5, 1];
   const FACE_ACCENT_POINTS = [1, 33, 263, 105, 159, 334, 386];
   const HAND_TIP_IDX = [4, 8, 12, 16, 20];
   // Repères de pose (33 points) : seulement les bras nous intéressent
@@ -2492,6 +2500,12 @@
     overlayCtx.stroke();
     overlayCtx.beginPath();
     FACE_EYEBROW_CHAINS.forEach(function (chain) { strokeSmoothChain(toScreen, chain.map(function (i) { return lm[i]; })); });
+    overlayCtx.stroke();
+    overlayCtx.beginPath();
+    FACE_EYE_CHAINS.forEach(function (chain) { strokeSmoothChain(toScreen, chain.map(function (i) { return lm[i]; })); });
+    overlayCtx.stroke();
+    overlayCtx.beginPath();
+    strokeSmoothChain(toScreen, FACE_NOSE_CHAIN.map(function (i) { return lm[i]; }));
     overlayCtx.stroke();
     overlayCtx.shadowBlur = 0;
     FACE_ACCENT_POINTS.forEach(function (idx) {
