@@ -1945,9 +1945,10 @@
        pour reprendre l'espace libéré). #shutterBtn et son écouteur de
        clic n'ont jamais bougé, seul CE QU'IL DÉCLENCHE change (voir
        runCountdown() plus bas : décompte d'abord, puis startRecording()).
-       Durée dans l'aria-label mise à jour (3,5s -> 6s, voir RECORD_MS). -->
+       Durée dans l'aria-label mise à jour (3,5s -> 6s -> durée variable,
+       voir MIN_RECORD_MS/TARGET_ROWS/MAX_RECORD_MS, 2026-11-16). -->
   <div class="controls-bar" id="controlsBar" style="display:none;">
-    <button class="shutter-btn" id="shutterBtn" aria-label="Démarrer : décompte 3-2-1 puis enregistre mon signe (6 secondes)">
+    <button class="shutter-btn" id="shutterBtn" aria-label="Démarrer : décompte 3-2-1 puis enregistre mon signe (quelques secondes)">
       <span class="shutter-icon" aria-hidden="true"></span>
       <span class="shutter-caption" id="shutterCaption">Démarrer</span>
     </button>
@@ -1966,9 +1967,9 @@
       <button class="sheet-toggle-btn active" id="voiceBtn" aria-label="Couper la voix">Son</button>
     </div>
     <h2>Comment ça reconnaît un signe</h2>
-    <p>Depuis le 16 novembre 2026 : le navigateur fait tourner, localement sur ton appareil, un vrai modèle de détection des points-clés de la main (21 points par main, plus l'état de chaque doigt — tendu ou plié) — téléchargé une seule fois au premier chargement de la page puis mis en cache par ton navigateur (~7 Mo), mais jamais aucune image ni donnée renvoyée nulle part. Ta position de main est normalisée par rapport à ton visage détecté de la même façon. Une fois les 6 secondes enregistrées, cette trajectoire est comparée directement — sur ton appareil — aux vraies vidéos du dictionnaire LSQ déjà filmées pour ce site (analysées par ce même modèle), et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
+    <p>Depuis le 16 novembre 2026 : le navigateur fait tourner, localement sur ton appareil, un vrai modèle de détection des points-clés de la main (21 points par main, plus l'état de chaque doigt — tendu ou plié) — téléchargé une seule fois au premier chargement de la page puis mis en cache par ton navigateur (~7 Mo), mais jamais aucune image ni donnée renvoyée nulle part. Ta position de main est normalisée par rapport à ton visage détecté de la même façon. L'enregistrement dure le temps de capter assez d'images utiles (quelques secondes, parfois un peu plus sur un appareil moins puissant — jamais de silence total : si le signal reste trop faible, un message te le dit clairement au lieu de ne rien afficher). Une fois assez d'images captées, cette trajectoire est comparée directement — sur ton appareil — aux vraies vidéos du dictionnaire LSQ déjà filmées pour ce site (analysées par ce même modèle), et le mot le plus proche est affiché et lu à voix haute (bouton « Son » pour couper le son).</p>
     <p><b>Résultat honnête, pas une estimation</b> : testé sur le vrai pipeline complet (caméra, détection de main, comparaison — pas un raccourci hors-ligne), sur un échantillon de 24 mots pris parmi les 325 : 23 sur 24 bien reconnus en premier choix. En dessous de cette page, « Sinon peut-être : … » montre les autres mots envisagés quand la réponse n'est pas nette. Ce test reste basé sur les mêmes vidéos qui ont servi à construire le dictionnaire (pas des prises indépendantes sur un autre téléphone) — la vraie mesure, c'est ton usage réel. Limite connue : environ 15 mots sur 325 n'ont pour l'instant aucune signature exploitable (la main n'est jamais détectée assez nettement dans leur vidéo de référence, souvent une pose mains basses/paumes vers le haut) et ne sont donc pas encore reconnaissables — à corriger dans un prochain passage.</p>
-    <p><b>Pour un bon résultat</b> : recule-toi assez pour que tes épaules et tes bras soient visibles (pas juste ton visage de près — les vidéos du dictionnaire sont filmées à cette distance-là), centre ton visage dans le cadre, garde un bon éclairage, et signe à peu près à la même distance de la caméra à chaque fois. La caméra enregistre et traduit en continu, aucun bouton à presser.</p>
+    <p><b>Pour un bon résultat</b> : recule-toi assez pour que tes épaules et tes bras soient visibles (pas juste ton visage de près — les vidéos du dictionnaire sont filmées à cette distance-là), centre ton visage dans le cadre, garde un bon éclairage, et signe à peu près à la même distance de la caméra à chaque fois. Appuie sur le bouton pour démarrer : décompte 3-2-1, puis enregistre jusqu'à avoir assez d'images utiles.</p>
     <p><b>Dossier vidéos personnel (Son à signe)</b> : le bouton ci-dessous te laisse choisir un dossier sur ton appareil — chaque vidéo que tu y déposes, nommée d'après le mot (ex. <code>bonjour.mp4</code>), devient reconnaissable, en priorité sur les mots déjà intégrés. Rien n'est jamais envoyé ni copié ailleurs qu'à l'endroit que tu as choisi toi-même. Disponible sur Chrome et Edge; le bouton reste caché sur les navigateurs qui n'offrent pas encore cette fonction.</p>
     <button type="button" class="sheet-toggle-btn" id="speechFolderBtn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" aria-hidden="true"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Choisir mon dossier de vidéos (Son à signe)</button>
     <p class="speech-folder-status" id="speechFolderStatus"></p>
@@ -2029,9 +2030,12 @@
      Remplace le 2026-11-15 (demande de David) l'ancien prototype MediaPipe
      ci-dessus (qui ne reconnaissait que des gestes de main génériques, pas
      de vrais mots LSQ, et restait volontairement verrouillé sur "À venir").
-     On enregistre ~6 secondes de signe, on en extrait une trajectoire, puis
-     on la compare par DTW (Dynamic Time Warping) aux vraies vidéos du
-     dictionnaire. La façon d'extraire cette trajectoire a changé une
+     On enregistre le signe (~2,2 secondes au plancher, le temps de capter
+     assez d'images utiles -- voir MIN_RECORD_MS/TARGET_ROWS/MAX_RECORD_MS
+     plus bas : variable depuis le 16 novembre 2026, voir pourquoi juste
+     après), on en extrait une trajectoire, puis on la compare par DTW
+     (Dynamic Time Warping) aux vraies vidéos du dictionnaire. La façon
+     d'extraire cette trajectoire a changé une
      deuxième fois le 2026-11-16 (demande de David, apres que le suivi par
      couleur de peau/mouvement -- malgré plusieurs corrections -- ait
      plafonné autour de 20% de bonne réponse en conditions réelles) : un
@@ -2102,11 +2106,36 @@
   // des mots plus courts que 7.5s (la majorite) : apres la fin du
   // signe, la camera continue d'enregistrer plusieurs secondes de
   // "rien" (main immobile ou hors cadre) qui diluent la signature avec
-  // du bruit non pertinent. 6000ms est le compromis mesure : couvre
-  // 97.2% des 325 mots (316/325 <= 6.0s) tout en limitant a ~1.3s
-  // (mediane) le temps mort ajoute apres la fin du signe pour la
-  // majorite des mots.
-  const RECORD_MS = 6000;
+  // du bruit non pertinent. 6000ms etait le compromis mesure avant le
+  // 16 novembre 2026 (couvre 97.2% des 325 mots en suivi couleur de
+  // peau). Garde comme PLANCHER de duree (voir MIN_RECORD_MS) -- mais
+  // n'est plus un plafond fixe depuis le changement vers la detection de
+  // main par IA (modele telecharge, voir sign-recognizer.js) : ce modele
+  // est beaucoup plus lourd par image que l'ancien suivi de blob, et son
+  // cout reel par image depend fortement de l'appareil (GPU, charge du
+  // navigateur). Un plafond fixe en secondes se traduisait, sur un
+  // appareil ou chaque image prend plus de temps qu'en test, par moins
+  // de 6 lignes utiles captees sur toute la fenetre -- donc par AUCUNE
+  // traduction affichee, le decompte se terminant en silence total
+  // (David, 2026-11-16 : "j'ai deja fait demarrer et le decompte mais ca
+  // n'affiche pas la traduction", et "je lui montre des videos des 325
+  // et il ne traduit rien de bon" -- reproduit et confirme en mesurant
+  // le vrai pipeline bout-en-bout avec une camera simulee dans ce
+  // sandbox : 0 a 3 images utiles captees sur toute une fenetre de 6
+  // secondes, largement sous le minimum de 6 lignes alors exige pour
+  // meme tenter une reconnaissance).
+  //
+  // Nouvelle logique : on vise un NOMBRE d'images utiles plutot qu'une
+  // duree fixe, avec un plancher de duree (pour ne pas couper un signe
+  // trop court meme si quelques images arrivent vite) et un plafond de
+  // securite (pour ne jamais rester bloque indefiniment sur un appareil
+  // qui ne capte jamais assez de signal). Plus lent sur un appareil
+  // lent, mais ne reste plus jamais silencieux.
+  const MIN_RECORD_MS = 2200;   // plancher : meme si TARGET_ROWS est atteint plus vite
+  const TARGET_ROWS = 10;       // lignes utiles visees avant d'arreter volontairement
+  const MAX_RECORD_MS = 15000;  // plafond de securite si l'appareil est trop lent
+  const MIN_USABLE_ROWS = 4;    // sous ce seuil, on ne tente meme pas une reconnaissance
+  const RECORD_MS = MIN_RECORD_MS; // garde pour le texte d'etat initial seulement
   // Dimensions de travail recalculees une fois la camera ouverte (voir
   // sizeWorkCanvas) pour garder le vrai ratio largeur/hauteur de la video —
   // l'ecraser dans un carre fixe fausserait le canal "aspect" de la main
@@ -2655,7 +2684,7 @@
     confBar.style.width = "0%";
     confBar.style.background = "var(--bad)";
     if (confPct) confPct.textContent = "—";
-    statusLine.textContent = "Centre ton visage, puis appuie sur le bouton pour enregistrer ton signe (6 secondes).";
+    statusLine.textContent = "Centre ton visage, puis appuie sur le bouton pour enregistrer ton signe.";
     setAnalyzing(false);
   }
 
@@ -2812,6 +2841,14 @@
     // programme donc chaque prochaine capture SEULEMENT apres que la
     // precedente soit terminee (await), avec 80ms comme delai minimum
     // entre deux captures plutot qu'un rythme fixe garanti.
+    //
+    // 2026-11-16 (suite) : la boucle decide maintenant ELLE-MEME quand
+    // s'arreter (voir MIN_RECORD_MS/TARGET_ROWS/MAX_RECORD_MS plus haut)
+    // au lieu d'attendre un recordTimer externe a duree fixe -- sur un
+    // appareil lent, on continue de capter plus longtemps plutot que de
+    // couper avec trop peu d'images. recordTimer devient un pur filet de
+    // securite (voir plus bas) au cas ou cette boucle resterait bloquee
+    // pour une raison imprevue.
     async function sampleLoop() {
       if (!recording) return;
       diagTicks++;
@@ -2824,12 +2861,28 @@
         diagLastErr = (e && e.message) ? e.message : String(e);
       }
       if (!recording) return; // stopRecording() a pu arriver pendant l'await
-      const left = Math.max(0, RECORD_MS - (Date.now() - startedAt));
-      statusLine.textContent = "Enregistrement… " + (Math.ceil(left / 1000)) + "s";
+      const elapsed = Date.now() - startedAt;
+      const rowsSoFar = extractor.getRowCount ? extractor.getRowCount() : diagHits;
+      const reachedTarget = elapsed >= MIN_RECORD_MS && rowsSoFar >= TARGET_ROWS;
+      const timedOut = elapsed >= MAX_RECORD_MS;
+      if (reachedTarget || timedOut) {
+        stopRecording(false);
+        return;
+      }
+      if (elapsed < MIN_RECORD_MS) {
+        const left = Math.max(0, MIN_RECORD_MS - elapsed);
+        statusLine.textContent = "Enregistrement… " + (Math.ceil(left / 1000)) + "s";
+      } else {
+        // Plancher de duree deja depasse : on attend encore assez
+        // d'images utiles. Message honnete plutot qu'un faux compte a
+        // rebours -- sur un appareil lent, c'est normal que ça prenne
+        // plus de temps que prevu, pas un signe de bug.
+        statusLine.textContent = "Enregistrement… " + rowsSoFar + "/" + TARGET_ROWS + " images captées.";
+      }
       sampleTimer = setTimeout(sampleLoop, 80);
     }
     sampleTimer = setTimeout(sampleLoop, 0);
-    recordTimer = setTimeout(function () { stopRecording(false); }, RECORD_MS);
+    recordTimer = setTimeout(function () { stopRecording(false); }, MAX_RECORD_MS + 500);
   }
 
   function stopRecording(cancelled) {
@@ -2844,16 +2897,30 @@
     const rows = extractor.finish();
     const lastSignal = extractor.getLastSignal ? extractor.getLastSignal() : "?";
     extractor = SensorielleSignRecognizer.createExtractor(); // prêt pour le prochain cycle
-    if (!rows || rows.length < 6) {
-      // Rien de significatif capté ce cycle-ci (mains pas encore dans le
-      // cadre, pause entre deux signes, etc.) -- en continu, c'est l'état
-      // NORMAL la plupart du temps, pas une erreur : on ne montre donc
-      // rien d'alarmant, on ne touche pas à la traduction déjà affichée,
-      // et on relance tout de suite. Le diagnostic détaillé (utile pour
-      // déboguer un vrai problème) va dans la console plutôt que dans
-      // l'interface.
+    if (!rows || rows.length < MIN_USABLE_ROWS) {
+      // Ancien commentaire (avant le 16 novembre 2026, mode continu en
+      // arrière-plan) : "c'est l'état NORMAL la plupart du temps, pas une
+      // erreur, on ne montre rien". Ce raisonnement ne tient plus --
+      // depuis le retour au bouton Démarrer + décompte explicite (voir
+      // runCountdown plus haut), CHAQUE enregistrement est volontaire :
+      // la personne vient de signer pendant cette fenêtre précise. Rester
+      // muet ici, c'est exactement le bug que David a signalé : "j'ai
+      // déjà fait démarrer et le décompte, mais ça n'affiche pas la
+      // traduction". Avec la boucle adaptative ci-dessus, ce cas ne
+      // devrait plus se produire que si l'appareil est si lent qu'il n'a
+      // capté quasiment aucune image utile même en MAX_RECORD_MS -- donc
+      // un vrai problème à signaler honnêtement, pas un non-événement.
       if (diagLastErr) console.debug("[sensorielle] erreur de capture :", diagLastErr);
       else console.debug("[sensorielle] rien capté ce cycle :", diagHits + "/" + diagTicks, "signal:", lastSignal);
+      smartSentence.textContent = IDLE_TEXT;
+      captionLabel.textContent = "";
+      captionLabel.classList.remove("confident");
+      confBar.style.width = "0%";
+      confBar.style.background = "var(--bad)";
+      if (confPct) confPct.textContent = "—";
+      statusLine.textContent = rows && rows.length
+        ? "Signal trop faible (" + rows.length + " image" + (rows.length > 1 ? "s" : "") + " captée" + (rows.length > 1 ? "s" : "") + ") — assure-toi que ta main est bien visible, puis réessaie."
+        : "Aucune main détectée — assure-toi que ta main est bien visible et réessaie.";
       maybeContinueLoop();
       return;
     }

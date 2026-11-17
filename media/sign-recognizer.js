@@ -551,7 +551,15 @@
 
     function getLastSignal() { return lastSignal; }
 
-    return { pushFrame: pushFrame, finish: finish, getLastSignal: getLastSignal };
+    // Nombre de lignes utiles deja accumulees ce cycle-ci, sans "finir"
+    // l'extracteur (voir index.html : la boucle d'enregistrement s'en
+    // sert pour savoir quand elle a assez de signal pour s'arreter d'elle-
+    // meme, plutot que d'attendre une duree fixe en secondes -- 2026-11-16,
+    // suite au ralentissement du nouveau modele de detection de main, voir
+    // plus bas).
+    function getRowCount() { return rows.length; }
+
+    return { pushFrame: pushFrame, finish: finish, getLastSignal: getLastSignal, getRowCount: getRowCount };
   }
 
   // ---- DTW multi-canaux (poids par canal, cout euclidien pondere) ------
