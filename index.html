@@ -2142,6 +2142,37 @@
   // par rapport aux signatures de reference (extraites sans deformation).
   let WORK_W = 160, WORK_H = 160;
 
+  // David, 2026-11-17 : "ca ne traduit toujours rien de bon" meme apres la
+  // fenetre adaptative (donc PAS un probleme de trop peu d'images cette
+  // fois -- il en recoit assez, mais la reconnaissance reste mauvaise).
+  // Cause trouvee en comparant les dimensions reelles des 325 videos de
+  // reference (ffprobe sur tout le dossier media/signs/) : PRESQUE TOUTES
+  // (324/325) sont filmees en 720x1094, un cadre PORTRAIT (plus haut que
+  // large, ratio ~0,658) -- alors que startCamera() demande une camera au
+  // ratio 1:1 (width/height ideal:900/900), et qu'une webcam de PC classique
+  // est de toute facon native en PAYSAGE (plus large que haute). La
+  // normalisation de position (fixedFaceRef dans sign-recognizer.js) utilise
+  // des FRACTIONS fixes de la largeur/hauteur du cadre pour deviner la
+  // position du visage -- elle suppose donc implicitement que le cadre a le
+  // meme ratio largeur/hauteur que les videos de reference. Un cadre carre
+  // ou paysage casse cette hypothese : la meme fraction (ex. 0,504 de la
+  // largeur, 0,316 de la hauteur) ne tombe plus au meme endroit physique
+  // relatif au visage, ce qui fausse systematiquement la position/taille de
+  // la main calculee -- pas juste de temps en temps, mais a CHAQUE image,
+  // quel que soit la qualite du suivi de main lui-meme. Ca explique "ca ne
+  // traduit rien de bon" (erreur systematique) plutot qu'un echec
+  // occasionnel.
+  //
+  // Corrige en recadrant (centre, sans deformation) l'image de travail au
+  // MEME ratio que les videos de reference avant d'en extraire quoi que ce
+  // soit -- peu importe le ratio natif de la camera de la personne. Les
+  // videos de reference elles-memes sont deja a ce ratio : ce recadrage ne
+  // leur fait donc rien (sx=0,sy=0,sw=vw,sh=vh, inchange) si jamais on
+  // relancait l'extraction sur elles un jour -- seule la camera live est
+  // concernee en pratique.
+  const REF_ASPECT = 720 / 1094; // ratio largeur/hauteur des videos du dictionnaire (mesure : 324/325 mots exactement a 720x1094)
+  let cropSX = 0, cropSY = 0, cropSW = 0, cropSH = 0; // rectangle source (en pixels video) au ratio REF_ASPECT, mis a jour par sizeWorkCanvas
+
   let stream = null;
   let currentFacing = "user";
   let voiceOn = true;
@@ -2166,9 +2197,27 @@
   function sizeWorkCanvas() {
     var vw = video.videoWidth, vh = video.videoHeight;
     if (!vw || !vh) return;
+    // Recadrage centre au ratio des videos de reference (voir REF_ASPECT
+    // plus haut) AVANT de fixer WORK_W/WORK_H -- comble, sans deformer
+    // quoi que ce soit a l'interieur, l'ecart entre le ratio natif de la
+    // camera (carre ou paysage) et le ratio portrait des videos filmees.
+    var vAspect = vw / vh;
+    if (vAspect > REF_ASPECT) {
+      // Cadre plus large que la reference (carre/paysage, cas attendu
+      // pour la plupart des webcams de PC) : on garde toute la hauteur,
+      // on recadre la largeur.
+      cropSH = vh; cropSW = vh * REF_ASPECT;
+      cropSY = 0; cropSX = (vw - cropSW) / 2;
+    } else {
+      // Cadre deja plus etroit/haut que la reference (rare, ex. certains
+      // telephones en portrait tres allonge) : on garde toute la largeur,
+      // on recadre la hauteur.
+      cropSW = vw; cropSH = vw / REF_ASPECT;
+      cropSX = 0; cropSY = (vh - cropSH) / 2;
+    }
     var maxDim = 180;
-    if (vw >= vh) { WORK_W = maxDim; WORK_H = Math.max(16, Math.round(maxDim * vh / vw)); }
-    else { WORK_H = maxDim; WORK_W = Math.max(16, Math.round(maxDim * vw / vh)); }
+    if (cropSW >= cropSH) { WORK_W = maxDim; WORK_H = Math.max(16, Math.round(maxDim * cropSH / cropSW)); }
+    else { WORK_H = maxDim; WORK_W = Math.max(16, Math.round(maxDim * cropSW / cropSH)); }
     work.width = WORK_W; work.height = WORK_H;
     // 2026-11-16 : paye ici (dès que la vraie taille de travail est
     // connue, typiquement bien avant tout clic sur Démarrer) le coût
@@ -2578,7 +2627,7 @@
     if (previewCanvas.width !== WORK_W) previewCanvas.width = WORK_W;
     if (previewCanvas.height !== WORK_H) previewCanvas.height = WORK_H;
     try {
-      previewCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
+      previewCtx.drawImage(video, cropSX, cropSY, cropSW, cropSH, 0, 0, WORK_W, WORK_H);
       var img = previewCtx.getImageData(0, 0, WORK_W, WORK_H);
       var R = window.SensorielleSignRecognizer;
       if (R && R.detectMotionPoints) {
@@ -2853,7 +2902,7 @@
       if (!recording) return;
       diagTicks++;
       try {
-        workCtx.drawImage(video, 0, 0, WORK_W, WORK_H);
+        workCtx.drawImage(video, cropSX, cropSY, cropSW, cropSH, 0, 0, WORK_W, WORK_H);
         const img = workCtx.getImageData(0, 0, WORK_W, WORK_H);
         const row = await extractor.pushFrame(img, WORK_W, WORK_H);
         if (row) diagHits++;
