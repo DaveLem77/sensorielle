@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratoire — Sensorielle</title>
+<meta name="description" content="Le réseau de neurones expérimental de Sensorielle : son architecture réelle, son entraînement mesuré, et une comparaison honnête avec le système actuel.">
+<link rel="icon" href="../media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --s-bg:#F8F9FF;--s-surface:#fff;--s-bg-alt:#F4F1FD;
+  --s-ink:#080D25;--s-ink-dim:#62677A;--s-ink-faint:#9b9eac;
+  --s-line:#080d2514;--s-line-strong:#080d2524;
+  --s-violet:#7C4DFF;--s-violet-deep:#5B34D6;--s-violet-wash:rgba(124,77,255,.10);
+  --s-gradient:linear-gradient(100deg,#7157F5 0%,#B94FE4 38%,#F45E9A 68%,#FF8058 100%);
+  --s-display:'Manrope','Inter',sans-serif;
+  --s-mono:'JetBrains Mono',ui-monospace,monospace;
+  --s-shadow-soft:0 12px 40px rgba(50,35,100,.08);
+  --s-shadow-md:0 20px 55px rgba(50,35,100,.12);
+  --s-ok:#1f9d5c;--s-ok-wash:rgba(31,157,92,.1);
+  --s-err:#e0485a;--s-err-wash:rgba(224,72,90,.1);
+  --s-warn:#c98a1f;--s-warn-wash:rgba(201,138,31,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--s-bg);color:var(--s-ink);font:15px/1.65 'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{width:min(860px,92%);margin-inline:auto}
+header{padding:22px 0;border-bottom:1px solid var(--s-line)}
+.header-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none}
+.brand img{height:30px;width:30px;object-fit:contain}
+.brand span{font-family:var(--s-display);font-weight:700;font-size:19px;letter-spacing:-.5px;color:var(--s-ink)}
+.back{font-size:13px;font-weight:600;color:var(--s-ink-dim);text-decoration:none;display:flex;align-items:center;gap:6px}
+.back:hover{color:var(--s-violet)}
+
+main{padding:48px 0 100px}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11px;letter-spacing:1.4px;color:var(--s-violet-deep);font-weight:700;text-transform:uppercase;background:var(--s-violet-wash);padding:6px 12px;border-radius:999px;margin:0 0 18px}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--s-violet);display:inline-block}
+h1{font-family:var(--s-display);font-size:clamp(30px,5vw,44px);font-weight:800;letter-spacing:-.03em;line-height:1.1;margin:0 0 16px;background:var(--s-gradient);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lead{font-size:16px;color:var(--s-ink-dim);line-height:1.75;max-width:62ch;margin:0 0 10px}
+.lead strong{color:var(--s-ink);font-weight:600}
+
+section{margin-top:56px}
+h2{font-family:var(--s-display);font-size:clamp(21px,3vw,26px);font-weight:700;letter-spacing:-.02em;margin:0 0 8px}
+.section-sub{font-size:14px;color:var(--s-ink-dim);line-height:1.7;max-width:65ch;margin:0 0 26px}
+
+/* ---- status banner ------------------------------------------------- */
+.status{display:flex;gap:14px;align-items:flex-start;background:var(--s-warn-wash);border:1px solid rgba(201,138,31,.25);border-radius:16px;padding:18px 20px;margin-top:28px}
+.status-icon{flex:none;width:30px;height:30px;border-radius:50%;background:var(--s-warn);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px}
+.status h3{margin:0 0 4px;font-size:14.5px;font-weight:700;color:#8a5e10}
+.status p{margin:0;font-size:13.5px;color:#6b4c15;line-height:1.65}
+
+/* ---- pipeline diagram ------------------------------------------------ */
+.pipeline{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding:4px 2px 14px;margin-top:4px}
+.stage{flex:1 1 150px;min-width:140px;background:var(--s-surface);border:1px solid var(--s-line);border-radius:16px;padding:16px 14px;text-align:center;position:relative;box-shadow:var(--s-shadow-soft)}
+.stage .icon{width:38px;height:38px;border-radius:11px;background:var(--s-gradient);display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:17px}
+.stage .name{font-family:var(--s-display);font-weight:700;font-size:13.5px;letter-spacing:-.01em;margin:0 0 4px}
+.stage .detail{font-size:11.5px;color:var(--s-ink-dim);line-height:1.5}
+.arrow{flex:none;width:28px;display:flex;align-items:center;justify-content:center;color:var(--s-ink-faint);font-size:16px}
+
+/* ---- stat cards ------------------------------------------------------ */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.stat-card{background:var(--s-surface);border:1px solid var(--s-line);border-radius:16px;padding:18px 16px;box-shadow:var(--s-shadow-soft)}
+.stat-card .val{font-family:var(--s-display);font-weight:800;font-size:26px;letter-spacing:-.02em;background:var(--s-gradient);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.stat-card .lbl{font-size:12px;color:var(--s-ink-dim);margin-top:4px;line-height:1.4}
+
+/* ---- chart ------------------------------------------------------------ */
+.chart-card{background:var(--s-surface);border:1px solid var(--s-line);border-radius:18px;padding:22px 20px 16px;box-shadow:var(--s-shadow-soft)}
+.chart-legend{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:var(--s-ink-dim)}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px}
+.chart-legend i{width:12px;height:3px;border-radius:2px;display:inline-block}
+.chart-card svg{width:100%;height:auto;display:block}
+.chart-note{font-size:11.5px;color:var(--s-ink-faint);margin-top:10px}
+
+/* ---- comparison table -------------------------------------------------- */
+.compare-summary{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.compare-pill{flex:1 1 200px;border-radius:16px;padding:16px 18px;border:1px solid var(--s-line);background:var(--s-surface)}
+.compare-pill .who{font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--s-ink-faint)}
+.compare-pill .pct{font-family:var(--s-display);font-weight:800;font-size:28px;margin-top:4px}
+.compare-pill.dtw .pct{color:var(--s-violet-deep)}
+.compare-pill.nn .pct{color:#c9517a}
+.compare-pill .sub{font-size:12px;color:var(--s-ink-dim);margin-top:2px}
+
+table.cmp{width:100%;border-collapse:collapse;font-size:13px;background:var(--s-surface);border:1px solid var(--s-line);border-radius:16px;overflow:hidden}
+table.cmp th{text-align:left;font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--s-ink-faint);font-weight:700;padding:10px 14px;background:var(--s-bg-alt);border-bottom:1px solid var(--s-line)}
+table.cmp td{padding:9px 14px;border-bottom:1px solid var(--s-line)}
+table.cmp tr:last-child td{border-bottom:none}
+.tag{display:inline-flex;align-items:center;gap:5px;font-weight:600;font-size:12.5px}
+.tag.ok{color:var(--s-ok)}
+.tag.bad{color:var(--s-err)}
+.conf{font-family:var(--s-mono);font-size:11px;color:var(--s-ink-faint)}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ---- footer nod -------------------------------------------------------- */
+.closing{background:var(--s-bg-alt);border-radius:18px;padding:26px 24px;margin-top:10px}
+.closing p{margin:0 0 10px;font-size:14px;color:var(--s-ink-dim);line-height:1.75}
+.closing p:last-child{margin-bottom:0}
+.closing strong{color:var(--s-ink)}
+
+footer{border-top:1px solid var(--s-line);padding:30px 0;margin-top:70px}
+footer .wrap{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12.5px;color:var(--s-ink-faint)}
+footer a{text-decoration:none;color:var(--s-ink-dim);font-weight:600}
+footer a:hover{color:var(--s-violet)}
+
+@media (max-width:640px){
+  .pipeline{flex-direction:column}
+  .arrow{width:auto;height:20px;transform:rotate(90deg)}
+  .stage{min-width:0}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap header-row">
+    <a class="brand" href="/">
+      <img src="../media/favicon.png" alt="">
+      <span>Sensorielle<span style="color:var(--s-violet)">.</span></span>
+    </a>
+    <a class="back" href="/">← Retour au site</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <span class="eyebrow"><span class="dot"></span>Laboratoire — travail en cours</span>
+    <h1>Le réseau de neurones de Sensorielle</h1>
+    <p class="lead">Cette page montre, <strong>honnêtement et sans rien cacher</strong>, l'expérience en cours pour remplacer un jour la comparaison geste-par-geste (DTW) actuelle par un vrai réseau de neurones entraîné. Les chiffres ci-dessous sont <strong>réels et mesurés</strong> — pas des illustrations, pas des promesses.</p>
+
+    <div class="status">
+      <div class="status-icon">!</div>
+      <div>
+        <h3>Statut actuel : pas encore en ligne</h3>
+        <p>Le réseau entraîné ci-dessous obtient <strong>73 %</strong> de bonnes réponses sur un test réel, contre <strong>85 %</strong> pour le système DTW déjà utilisé sur le site. Il n'a encore battu le système actuel sur aucun des 26 mots testés. Tant que ce n'est pas vrai, <strong>le site continue d'utiliser le système actuel</strong> — rien n'a changé pour toi en ce moment sur sensorielle.ca.</p>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <section>
+      <h2>Comment ça fonctionne</h2>
+      <p class="section-sub">Le réseau de neurones ne remplace pas la détection des mains (ça, c'est toujours Human, le modèle qui repère les 21 points de chaque main) — il remplace seulement la dernière étape : décider QUEL mot correspond au mouvement capté.</p>
+
+      <div class="pipeline">
+        <div class="stage">
+          <div class="icon">🎥</div>
+          <div class="name">Caméra</div>
+          <div class="detail">Image en direct, recadrée au ratio des vidéos de référence</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="stage">
+          <div class="icon">✋</div>
+          <div class="name">Human (IA)</div>
+          <div class="detail">21 points par main, 19 mesures par image (position, forme, direction)</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="stage" style="border:2px solid var(--s-violet);box-shadow:0 0 0 4px var(--s-violet-wash), var(--s-shadow-soft)">
+          <div class="icon">🧠</div>
+          <div class="name">Nouveau : réseau de neurones</div>
+          <div class="detail">Classificateur entraîné (61 814 paramètres), remplace la comparaison DTW</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="stage">
+          <div class="icon">💬</div>
+          <div class="name">Mot reconnu</div>
+          <div class="detail">1 parmi 310 mots du dictionnaire</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <section>
+      <h2>D'où viennent les données d'entraînement</h2>
+      <p class="section-sub">Sensorielle n'a qu'<strong>un seul exemple vidéo réel par mot</strong> (325 vidéos). Un réseau de neurones a besoin de voir chaque mot sous plusieurs formes pour généraliser — donc avant d'entraîner quoi que ce soit, chaque exemple réel est multiplié artificiellement (étirement de vitesse, légère variation de position, mise en miroir pour une main gauche) pour créer des variantes réalistes.</p>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="val">310</div><div class="lbl">mots avec une signature de référence</div></div>
+        <div class="stat-card"><div class="val">37</div><div class="lbl">variantes générées par mot (1 réelle + 36 synthétiques)</div></div>
+        <div class="stat-card"><div class="val">11 470</div><div class="lbl">séquences d'entraînement au total</div></div>
+        <div class="stat-card"><div class="val">61 814</div><div class="lbl">paramètres du modèle (très léger, tourne dans le navigateur)</div></div>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <section>
+      <h2>Entraînement réel</h2>
+      <p class="section-sub">40 passages complets sur les données (époques), terminé en 74 secondes. Les deux courbes qui comptent : la précision sur les données d'entraînement (que le modèle a vues) et sur les données de validation (mises de côté, jamais vues pendant l'entraînement) — c'est cette deuxième courbe qui dit la vérité.</p>
+
+      <div class="chart-card">
+        <div class="chart-legend">
+          <span><i style="background:#7C4DFF"></i>Précision — entraînement</span>
+          <span><i style="background:#F45E9A"></i>Précision — validation (jamais vue)</span>
+        </div>
+        <svg id="accChart" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
+        <div class="chart-note">Précision finale de validation : <strong style="color:var(--s-ink)">96,0 %</strong> · meilleure observée : <strong style="color:var(--s-ink)">97,7 %</strong> — sur des variantes synthétiques du même exemple, pas sur de vraies nouvelles vidéos (voir le vrai test plus bas).</div>
+      </div>
+    </section>
+
+    <!-- ========================================================= -->
+    <section>
+      <h2>Le vrai test, honnête</h2>
+      <p class="section-sub">97,7 % sur des variantes synthétiques ne veut rien dire pour l'usage réel — alors le réseau a été testé exactement comme un vrai signe serait capté par la caméra (26 mots choisis au hasard, pas triés sur le volet), et comparé directement au système DTW déjà en place sur sensorielle.ca.</p>
+
+      <div class="compare-summary">
+        <div class="compare-pill dtw">
+          <div class="who">Système actuel (DTW)</div>
+          <div class="pct">22/26</div>
+          <div class="sub">84,6 % de bonnes réponses</div>
+        </div>
+        <div class="compare-pill nn">
+          <div class="who">Nouveau réseau de neurones</div>
+          <div class="pct">19/26</div>
+          <div class="sub">73,1 % de bonnes réponses</div>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="cmp">
+          <thead><tr><th>Mot signé</th><th>DTW (actuel)</th><th>Réseau de neurones</th></tr></thead>
+          <tbody id="cmpBody"></tbody>
+        </table>
+      </div>
+
+      <div class="closing" style="margin-top:22px">
+        <p><strong>Ce que ça montre :</strong> sur ces 26 mots, le réseau de neurones n'a fait <strong>mieux</strong> que le DTW nulle part — soit il fait aussi bien (19 fois), soit moins bien (7 fois). Les données augmentées artificiellement à partir d'un seul exemple par mot ne suffisent probablement pas encore à battre une méthode qui compare directement la forme du geste.</p>
+        <p><strong>Prochaine piste, honnêtement :</strong> la vraie amélioration viendra probablement de vrais exemples supplémentaires par mot (via <a href="/collector/" style="color:var(--s-violet-deep);font-weight:600">la page de contribution déjà en place</a>), pas de plus de données synthétiques. En attendant, le système actuel (DTW) reste en place — il fonctionne mieux.</p>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Sensorielle — page de travail, mise à jour au fil des expériences</span>
+    <a href="/">Retour au site</a>
+  </div>
+</footer>
+
+<script>
+const HIST = {"loss": [4.7816, 2.8888, 1.8523, 1.2153, 0.8856, 0.6666, 0.5646, 0.4568, 0.403, 0.3746, 0.3418, 0.2981, 0.3016, 0.2419, 0.2659, 0.2563, 0.2472, 0.2386, 0.2247, 0.2052, 0.2056, 0.1987, 0.205, 0.2137, 0.2037, 0.2078, 0.2162, 0.1674, 0.1881, 0.184, 0.1515, 0.1653, 0.178, 0.1528, 0.1672, 0.1799, 0.1494, 0.1635, 0.1465, 0.1532], "val_loss": [3.8272, 1.9603, 0.9078, 0.6152, 0.4904, 0.2966, 0.2711, 0.2175, 0.137, 0.1592, 0.177, 0.117, 0.1419, 0.1091, 0.0884, 0.1312, 0.243, 0.0962, 0.1614, 0.0762, 0.1013, 0.1033, 0.0734, 0.0805, 0.0892, 0.1432, 0.1143, 0.0757, 0.1106, 0.093, 0.0705, 0.1145, 0.0719, 0.0624, 0.1127, 0.0546, 0.1436, 0.1593, 0.1054, 0.0928], "accuracy": [0.0539, 0.2432, 0.4382, 0.6075, 0.6994, 0.7722, 0.8056, 0.8358, 0.8591, 0.8648, 0.8781, 0.8905, 0.8923, 0.9137, 0.9013, 0.9067, 0.9113, 0.9129, 0.9184, 0.9257, 0.9259, 0.9275, 0.9265, 0.9228, 0.9256, 0.9233, 0.9227, 0.9388, 0.9289, 0.932, 0.9432, 0.9402, 0.9348, 0.9423, 0.9432, 0.9358, 0.9456, 0.939, 0.9488, 0.9477], "val_accuracy": [0.1922, 0.4811, 0.7724, 0.8332, 0.8484, 0.9152, 0.9088, 0.9341, 0.9571, 0.9461, 0.9346, 0.9562, 0.9475, 0.9608, 0.9687, 0.9525, 0.9083, 0.9677, 0.9419, 0.9737, 0.965, 0.9664, 0.9742, 0.9733, 0.971, 0.9493, 0.9493, 0.9682, 0.9576, 0.965, 0.971, 0.9608, 0.9751, 0.976, 0.9594, 0.9774, 0.941, 0.9387, 0.9599, 0.9599]};
+const CMP = [{"word": "petit", "dtw": "petit", "nn": "petit", "nn_conf": 0.85, "nRows": 79}, {"word": "lion", "dtw": "lion", "nn": "lion", "nn_conf": 1.0, "nRows": 56}, {"word": "k", "dtw": "k", "nn": "k", "nn_conf": 0.63, "nRows": 58}, {"word": "dent", "dtw": "dent", "nn": "dent", "nn_conf": 0.61, "nRows": 56}, {"word": "marier", "dtw": "marier", "nn": "marier", "nn_conf": 1.0, "nRows": 57}, {"word": "boire", "dtw": "boire", "nn": "boire", "nn_conf": 0.9, "nRows": 55}, {"word": "canard", "dtw": "canard", "nn": "canard", "nn_conf": 1, "nRows": 57}, {"word": "peur", "dtw": "peur", "nn": "peur", "nn_conf": 0.98, "nRows": 45}, {"word": "chaud", "dtw": "chaud", "nn": "chaud", "nn_conf": 1.0, "nRows": 61}, {"word": "m", "dtw": "mais", "nn": "chapeau", "nn_conf": 0.72, "nRows": 52}, {"word": "près", "dtw": "oiseau", "nn": "oiseau", "nn_conf": 0.99, "nRows": 42}, {"word": "bouche", "dtw": "bouche", "nn": "bouche", "nn_conf": 1, "nRows": 50}, {"word": "parent", "dtw": "parent", "nn": "pluie", "nn_conf": 1.0, "nRows": 42}, {"word": "feuille", "dtw": "feuille", "nn": "Où", "nn_conf": 0.86, "nRows": 53}, {"word": "baseball", "dtw": "baseball", "nn": "baseball", "nn_conf": 0.99, "nRows": 57}, {"word": "chanter", "dtw": "chanter", "nn": "chanter", "nn_conf": 0.75, "nRows": 58}, {"word": "mot", "dtw": "mot", "nn": "mot", "nn_conf": 1, "nRows": 37}, {"word": "moins", "dtw": "i", "nn": "ici", "nn_conf": 0.67, "nRows": 39}, {"word": "bébé", "dtw": "bébé", "nn": "bébé", "nn_conf": 0.95, "nRows": 57}, {"word": "fête", "dtw": "fête", "nn": "fête", "nn_conf": 1.0, "nRows": 50}, {"word": "chaque", "dtw": "chaque", "nn": "chaque", "nn_conf": 1, "nRows": 57}, {"word": "plume", "dtw": "plume", "nn": "plume", "nn_conf": 1, "nRows": 44}, {"word": "monde", "dtw": "100", "nn": "peur", "nn_conf": 0.88, "nRows": 39}, {"word": "bout", "dtw": "bout", "nn": "bout", "nn_conf": 1.0, "nRows": 57}, {"word": "poupée", "dtw": "poupée", "nn": "ciel", "nn_conf": 0.6, "nRows": 45}, {"word": "communiquer", "dtw": "communiquer", "nn": "communiquer", "nn_conf": 1, "nRows": 59}];
+
+function drawChart() {
+  const svg = document.getElementById('accChart');
+  const W = 640, H = 220, padL = 34, padR = 10, padT = 10, padB = 24;
+  const n = HIST.accuracy.length;
+  const x = (i) => padL + (i / (n - 1)) * (W - padL - padR);
+  const y = (v) => padT + (1 - v) * (H - padT - padB);
+
+  function path(arr) {
+    return arr.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  }
+
+  let svgContent = '';
+  // grille horizontale (0%, 25%, 50%, 75%, 100%)
+  [0, 0.25, 0.5, 0.75, 1].forEach((v) => {
+    const yy = y(v).toFixed(1);
+    svgContent += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="#080d2512" stroke-width="1"/>`;
+    svgContent += `<text x="2" y="${+yy + 4}" font-size="10" fill="#9b9eac" font-family="Inter,sans-serif">${Math.round(v * 100)}%</text>`;
+  });
+  svgContent += `<path d="${path(HIST.accuracy)}" fill="none" stroke="#7C4DFF" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  svgContent += `<path d="${path(HIST.val_accuracy)}" fill="none" stroke="#F45E9A" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  svg.innerHTML = svgContent;
+}
+
+function renderTable() {
+  const tbody = document.getElementById('cmpBody');
+  tbody.innerHTML = CMP.map((r) => {
+    const dtwOk = r.dtw === r.word;
+    const nnOk = r.nn === r.word;
+    return `<tr>
+      <td style="font-weight:700">${r.word}</td>
+      <td><span class="tag ${dtwOk ? 'ok' : 'bad'}">${dtwOk ? '✓' : '✗'} ${r.dtw}</span></td>
+      <td><span class="tag ${nnOk ? 'ok' : 'bad'}">${nnOk ? '✓' : '✗'} ${r.nn}</span> <span class="conf">${Math.round(r.nn_conf * 100)}%</span></td>
+    </tr>`;
+  }).join('');
+}
+
+drawChart();
+renderTable();
+</script>
+</body>
+</html>
