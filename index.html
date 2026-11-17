@@ -1264,6 +1264,19 @@
     opacity: 0;
   }
   .speech-video.showing { opacity: 1; }
+  /* 2026-11-17 (David : en incrustation flottante, quand il rapetisse la
+     fenetre, "ne coupe pas le bas mais le haut ... la zone grise par
+     dessus la tete"). La fenetre PiP est redimensionnee librement par
+     David (voir speechPipBtn plus bas) et finit souvent bien plus large
+     que haute (ex. une bande posee au bas d'un ecran de presentation) --
+     un format tres different de la fenetre mobile pleine page pour
+     laquelle le 50%/12% ci-dessus a ete calibre. object-position a 100%
+     ancre la video sur son BAS : tout le rognage vertical supplementaire
+     vient du haut (le vide gris au-dessus de la tete), jamais du bas
+     (mains/corps, l'info qui compte en LSQ). drawWarpFrame/drawBridgeFrame
+     (JS) lisent le meme etat via videoAnchorY() pour rester alignes sur
+     ce meme cadrage pendant qu'elle est flottante. */
+  .speech-video-wrap.pip-floating .speech-video { object-position: 50% 100%; }
   /* Marqueurs grammaticaux non manuels (2026-10-19) : REMPLACE l'ancien
      filtre MediaPipe (detection de visage + deformation de pixels image
      par image), signale non fiable (modele a charger depuis le reseau a
@@ -4192,8 +4205,25 @@ if (typeof document !== "undefined") {
       negation: "Négation",
     };
     const SENT_CLASSES = ["sent-question-yn", "sent-question-wh", "sent-exclamation", "sent-negation"];
+    // Pastille (badge texte rond) retiree pour question et negation le
+    // 2026-11-17 (David : "enelve... les pastille negation et question").
+    // La rotation de cadre pour question-yn/question-wh et le warp
+    // sourcils de question-yn restent inchanges -- seul le petit badge
+    // rond disparait pour ces marqueurs. L'Exclamation n'a pas ete
+    // mentionnee par David et garde son badge (deja auto-masque apres
+    // 950ms, voir applySentimentVisual).
+    const BADGE_SENTIMENTS = { exclamation: true };
 
     const speechVideoWrap = document.querySelector(".speech-video-wrap");
+    // Doit rester en phase avec l'object-position CSS de .speech-video
+    // (voir la regle ".pip-floating .speech-video" plus haut) : 12% en
+    // temps normal, 100% (ancre sur le bas) une fois la fenetre flottante
+    // (PiP), pour que le warp sourcils/bouche et le pont ne derivent
+    // jamais par rapport a l'endroit ou la vraie video est reellement
+    // rognee.
+    function videoAnchorY() {
+      return (speechVideoWrap && speechVideoWrap.classList.contains("pip-floating")) ? 1 : 0.12;
+    }
     const sentimentBadge = document.getElementById("speechSentimentBadge");
     const sentimentLabelEl = document.getElementById("speechSentimentLabel");
     const warpCanvas = document.getElementById("speechWarpCanvas");
@@ -4363,7 +4393,7 @@ if (typeof document !== "undefined") {
       // boite, comme la video).
       const scale = Math.max(cw / vw, ch / vh);
       const offsetX = (cw - vw * scale) * 0.5;
-      const offsetY = (ch - vh * scale) * 0.12;
+      const offsetY = (ch - vh * scale) * videoAnchorY();
       const win = getWarpWindow(currentlyShowingKey);
       const winTopVid = win.top * vh;
       const winBottomVid = win.bottom * vh;
@@ -4486,9 +4516,13 @@ if (typeof document !== "undefined") {
       }
       if (speechVideoWrap) speechVideoWrap.classList.add("sent-" + sentiment);
       if (sentimentBadge && sentimentLabelEl) {
-        sentimentLabelEl.textContent = label;
-        sentimentBadge.dataset.kind = sentiment;
-        sentimentBadge.hidden = false;
+        if (BADGE_SENTIMENTS[sentiment]) {
+          sentimentLabelEl.textContent = label;
+          sentimentBadge.dataset.kind = sentiment;
+          sentimentBadge.hidden = false;
+        } else {
+          sentimentBadge.hidden = true;
+        }
       }
       if (WARP_TARGETS[sentiment] !== undefined) {
         setWarpTarget(WARP_TARGETS[sentiment], sentiment);
@@ -4655,7 +4689,7 @@ if (typeof document !== "undefined") {
       const { cw, ch, dpr } = info;
       const scale = Math.max(cw / frameW, ch / frameH);
       const offsetX = (cw - frameW * scale) * 0.5;
-      const offsetY = (ch - frameH * scale) * 0.12;
+      const offsetY = (ch - frameH * scale) * videoAnchorY();
       bridgeCtx.clearRect(0, 0, bridgeCanvas.width, bridgeCanvas.height);
       bridgeCtx.drawImage(
         img,
@@ -6131,8 +6165,21 @@ if (typeof document !== "undefined") {
     async function ensureMicCapture() {
       if (micStream) return true;
       try {
+        // echoCancellation/noiseSuppression désactivés le 2026-11-17
+        // (David : en incrustation flottante par-dessus une vidéo YouTube
+        // qui joue par les haut-parleurs, "je sais pas pk présentement ça
+        // marche pas"). Cause probable : l'annulation d'écho de Chrome est
+        // conçue précisément pour SUPPRIMER du micro tout son qui
+        // correspond à ce que les haut-parleurs DU MÊME APPAREIL sont en
+        // train de jouer — exactement le son qu'on veut ici reconnaître.
+        // Honnêteté : pas pu être vérifié ici contre un vrai couple
+        // micro+haut-parleurs (l'environnement de test n'a pas de vraie
+        // boucle acoustique) — à confirmer par David en conditions
+        // réelles. Risque connu du changement : la voix captée directement
+        // (usage normal, sans son concurrent) peut devenir un peu plus
+        // bruyante/moins nette qu'avant sur certains micros.
         micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+          audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false },
         });
       } catch (e) {
         dbg("micro: accès refusé (" + (e && e.message ? e.message : e) + ")");
