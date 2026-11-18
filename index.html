@@ -1539,20 +1539,55 @@
      donc le suivi des mains/visage reste exact même si la vidéo est
      maintenant une carte plus petite qu'un plein écran. */
 
-  .stage { background: linear-gradient(165deg, #F2EEFF 0%, #FBEFF8 52%, #FFF1EC 100%); }
-
-  .cam-frame {
-    position: absolute; left: 16px; right: 16px;
-    top: calc(env(safe-area-inset-top, 0px) + 80px);
+  .stage {
+    background: linear-gradient(165deg, #F2EEFF 0%, #FBEFF8 52%, #FFF1EC 100%);
+    /* Variables partagées avec .live-wave-top/.live-wave-bottom plus bas
+       (David, 2026-11-17 : vagues décoratives au-dessus/en dessous de la
+       carte caméra) -- une seule source pour la position de la carte,
+       reprise aux 2 points de rupture ci-dessous, pour que les vagues
+       restent toujours alignées sur les vrais bords de .cam-frame. */
+    --cam-top: calc(env(safe-area-inset-top, 0px) + 80px);
     /* 335px laisse ~195px de marge au-dessus du bas de la carte caméra
        pour la carte de traduction (voir .caption-wrap plus bas) --
        mesuré avec une phrase longue réaliste (3 lignes sur un écran de
        375px de large) qui occupe jusqu'à 180px : sans cette marge, le
        texte le plus long chevauchait le bas de la carte caméra. */
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 335px);
+    --cam-bottom: calc(env(safe-area-inset-bottom, 0px) + 335px);
+  }
+
+  .cam-frame {
+    position: absolute; left: 16px; right: 16px;
+    top: var(--cam-top); bottom: var(--cam-bottom);
     border-radius: 28px; overflow: hidden; z-index: 1;
     box-shadow: 0 24px 60px -20px rgba(8,13,37,0.28), 0 2px 0 rgba(255,255,255,0.4) inset;
   }
+
+  /* David, 2026-11-17 : "le probleme etait le vagyues qui naparraise pas
+     en dessosu et par dessus la camera comme a lacceuil comme style
+     visuelle" -- version allégée (pas de <animate> SMIL, 3 brins au lieu
+     de ~24) du ruban .opening-art/.ribbon-mesh de l'accueil, pour ne pas
+     ajouter de coût de calcul pendant le suivi caméra en direct. Placées
+     SOUS .cam-frame (z-index 0, alors que .cam-frame est z-index 1 et
+     opaque) : les brins ne sont visibles que dans les marges au-dessus
+     et en dessous de la carte, comme sur la maquette fournie -- masquées
+     automatiquement par .cam-frame (overflow:hidden) partout où elles la
+     chevauchent. Masquées hors mode caméra via .stage.live plus bas. */
+  .live-waves { display: none; position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .stage.live .live-waves { display: block; }
+  .live-wave { position: absolute; left: -12%; width: 124%; height: 220px; overflow: visible; }
+  .live-wave-top { top: calc(var(--cam-top) - 140px); }
+  .live-wave-bottom { bottom: calc(var(--cam-bottom) - 140px); top: auto; }
+  .live-wave path {
+    transform-origin: 50% 50%;
+    animation: liveWaveBreath 9s ease-in-out infinite;
+  }
+  .live-wave path:nth-child(2) { animation-delay: -3s; }
+  .live-wave path:nth-child(3) { animation-delay: -6s; }
+  @keyframes liveWaveBreath {
+    0%, 100% { transform: translateY(0) scaleY(0.92); opacity: 0.8; }
+    50% { transform: translateY(-5px) scaleY(1.05); opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { .live-wave path { animation: none; } }
   .cam-frame video, .cam-frame #overlay { border-radius: inherit; }
   /* les bandeaux sombres (.scrim-top/.scrim-bottom) servaient à garder le
      texte lisible par-dessus la vidéo plein écran -- inutiles maintenant
@@ -1662,11 +1697,11 @@
   #controlsBar #voiceBtn:active { transform: scale(0.94); }
 
   @media (max-width: 400px) {
-    .cam-frame {
-      left: 12px; right: 12px;
-      top: calc(env(safe-area-inset-top, 0px) + 72px);
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 325px);
+    .stage {
+      --cam-top: calc(env(safe-area-inset-top, 0px) + 72px);
+      --cam-bottom: calc(env(safe-area-inset-bottom, 0px) + 325px);
     }
+    .cam-frame { left: 12px; right: 12px; }
     .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); }
     .controls-bar { gap: 14px; }
   }
@@ -1677,7 +1712,10 @@
      (traduction + boutons) que de laisser la carte caméra devenir trop
      petite pour être utile. */
   @media (max-height: 700px) {
-    .cam-frame { top: calc(env(safe-area-inset-top, 0px) + 64px); bottom: calc(env(safe-area-inset-bottom, 0px) + 300px); }
+    .stage {
+      --cam-top: calc(env(safe-area-inset-top, 0px) + 64px);
+      --cam-bottom: calc(env(safe-area-inset-bottom, 0px) + 300px);
+    }
     .caption-wrap { bottom: calc(env(safe-area-inset-bottom, 0px) + 118px); }
     .controls-bar { bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
   }
@@ -1832,11 +1870,31 @@
        mon favicon à la place" -- la vidéo/l'overlay/les coins de visée
        sont maintenant regroupés dans cette carte arrondie (.cam-frame,
        voir le CSS "restyle v10" plus bas) au lieu d'occuper tout l'écran
-       en noir plein écran. Rien de la mécanique de reconnaissance n'a
-       changé : makeToScreen() (plus bas dans ce fichier) recalcule déjà
-       le vrai rectangle de la vidéo à chaque image via
-       getBoundingClientRect(), donc le suivi des mains/visage reste
-       exact même si la vidéo est maintenant plus petite qu'avant. -->
+       en noir plein écran. makeToScreen()/resizeOverlay() (plus bas dans
+       ce fichier) ont dû être corrigées pour ce changement : elles
+       calculaient encore par rapport à .stage (plein écran) alors que
+       #overlay vit maintenant dans .cam-frame -- c'est ce qui causait
+       les repères "pas au bon endroit, comme par-dessus" signalés par
+       David le 2026-11-17. Elles utilisent maintenant camFrame comme
+       référentiel. -->
+  <div class="live-waves" aria-hidden="true">
+    <svg class="live-wave live-wave-top" viewBox="0 0 400 220" preserveAspectRatio="none" fill="none">
+      <defs><linearGradient id="liveWaveInkTop" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#7C4DFF"/><stop offset=".48" stop-color="#E853D7"/><stop offset="1" stop-color="#FF8058"/>
+      </linearGradient></defs>
+      <path d="M -20 130 C 60 50, 140 200, 220 110 S 340 20, 440 95" stroke="url(#liveWaveInkTop)" stroke-width="2.2" opacity="0.5"/>
+      <path d="M -20 150 C 70 80, 150 210, 230 135 S 350 45, 440 115" stroke="url(#liveWaveInkTop)" stroke-width="1.6" opacity="0.36"/>
+      <path d="M -20 170 C 80 110, 160 215, 240 160 S 360 70, 440 135" stroke="url(#liveWaveInkTop)" stroke-width="1.3" opacity="0.26"/>
+    </svg>
+    <svg class="live-wave live-wave-bottom" viewBox="0 0 400 220" preserveAspectRatio="none" fill="none">
+      <defs><linearGradient id="liveWaveInkBottom" x1="0" y1="1" x2="1" y2="0">
+        <stop stop-color="#7C4DFF"/><stop offset=".48" stop-color="#E853D7"/><stop offset="1" stop-color="#FF8058"/>
+      </linearGradient></defs>
+      <path d="M -20 85 C 60 165, 140 15, 220 105 S 340 190, 440 110" stroke="url(#liveWaveInkBottom)" stroke-width="2.2" opacity="0.5"/>
+      <path d="M -20 65 C 70 135, 150 5, 230 80 S 350 160, 440 90" stroke="url(#liveWaveInkBottom)" stroke-width="1.6" opacity="0.36"/>
+      <path d="M -20 45 C 80 105, 160 -5, 240 55 S 360 130, 440 70" stroke="url(#liveWaveInkBottom)" stroke-width="1.3" opacity="0.26"/>
+    </svg>
+  </div>
   <div class="cam-frame" id="camFrame">
     <video id="video" playsinline autoplay muted></video>
     <canvas id="overlay" hidden></canvas>
@@ -2270,6 +2328,18 @@
 (function () {
   "use strict";
   const stage = document.getElementById("stage");
+  // David, 2026-11-17 : "les ligne sur le corp sont pas litterslement au
+  // bon ne endroit ont comme par dessus" -- repere confirme : #overlay vit
+  // maintenant dans .cam-frame (carte caméra plus petite que l'ecran
+  // complet, voir restyle v10 plus haut), mais resizeOverlay()/
+  // makeToScreen() calculaient encore tout par rapport a .stage (plein
+  // ecran). Le canvas avait donc une memoire-tampon dimensionnee pour le
+  // plein ecran, affichee dans une boite CSS beaucoup plus petite -> le
+  // navigateur redimensionnait l'image du canvas pour qu'elle rentre,
+  // ce qui decalait/deformait chaque repere dessine par rapport a la
+  // vraie position de la main/du visage dans la carte. camFrame est
+  // desormais l'ancre pour les deux fonctions.
+  const camFrame = document.getElementById("camFrame");
   const video = document.getElementById("video");
   const overlay = document.getElementById("overlay");
   const overlayCtx = overlay ? overlay.getContext("2d") : null;
@@ -2498,8 +2568,14 @@
   // repere dessine tombe exactement sur les fractions FACE_CX_FRAC/
   // FACE_CY_FRAC/FACE_H_FRAC utilisees cote analyse.
   function resizeOverlay() {
-    if (!overlay || !stage) return;
-    var rect = stage.getBoundingClientRect();
+    if (!overlay) return;
+    // #overlay est positionné (inset:0) par rapport à .cam-frame, pas à
+    // .stage, depuis la restylisation "carte caméra" -- la mémoire-tampon
+    // doit correspondre à cette même boîte, sinon le navigateur
+    // redimensionne le dessin pour qu'il rentre et tout se décale.
+    var anchor = camFrame || stage;
+    if (!anchor) return;
+    var rect = anchor.getBoundingClientRect();
     overlay.width = Math.round(rect.width);
     overlay.height = Math.round(rect.height);
   }
@@ -2595,7 +2671,12 @@
   // dans ce fichier).
   function makeToScreen() {
     var rect = video.getBoundingClientRect();
-    var stageRect = stage.getBoundingClientRect();
+    // anchorRect doit être le même référentiel que celui utilisé par
+    // resizeOverlay() pour la mémoire-tampon du canvas (.cam-frame, pas
+    // .stage) -- sinon chaque repère est calculé pour un canvas qui ne
+    // correspond plus à ce qui est réellement affiché.
+    var anchor = camFrame || stage;
+    var anchorRect = anchor.getBoundingClientRect();
     var mirrored = stage.classList.contains("mirror");
     var vw = video.videoWidth, vh = video.videoHeight;
     var renderW = rect.width, renderH = rect.height, cropX = 0, cropY = 0;
@@ -2606,9 +2687,9 @@
     }
     return function (p) {
       var x = p.x * renderW - cropX;
-      var y = p.y * renderH - cropY + (rect.top - stageRect.top);
+      var y = p.y * renderH - cropY + (rect.top - anchorRect.top);
       if (mirrored) x = rect.width - x;
-      x += rect.left - stageRect.left;
+      x += rect.left - anchorRect.left;
       return { x: x, y: y };
     };
   }
