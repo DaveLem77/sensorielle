@@ -7050,14 +7050,23 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
 <!-- ============================================================
      MODULE : Compte obligatoire (Supabase) — accès réservé au mode
      "Je parle" (voix → signe). Ajouté le 2026-10-19 à la demande de
-     la personne. Le mode "Je signe" (signe → voix) reste verrouillé
-     ("À venir"), indépendamment de ce qui précède dans la page.
+     la personne. À CETTE DATE, le mode "Je signe" (signe → voix)
+     restait un prototype placeholder volontairement verrouillé
+     ("À venir") -- d'où les règles opacity/order ci-dessous qui le
+     poussaient en retrait visuellement.
+
+     David, 2026-11-18 : "le bouton pour signe a son desactiver comme
+     auparavanat" -- ces règles n'avaient plus de raison d'être depuis
+     le 2026-11-15 (voir plus haut : "Je signe" est remplacé ce jour-là
+     par le vrai reconnaisseur DTW, ce n'est plus un placeholder) mais
+     n'avaient jamais été retirées. Supprimées : .camera-card garde son
+     opacité normale et redevient la première carte (ordre naturel du
+     HTML), .voice-card seconde -- aucun lien avec le module de compte
+     obligatoire lui-même (qui ne touche que #speechModeBtn, pas
+     #mainBtn), donc rien d'autre à changer ici.
      ============================================================ -->
 <style>
 .soon-badge{display:inline-block;vertical-align:middle;margin-left:10px;padding:4px 10px;border-radius:99px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8b6f14;background:#fdf1cf;border:1px solid #f1dfa0}
-.mode-card.camera-card{opacity:.82}
-.mode-card.voice-card{order:1}
-.mode-card.camera-card{order:2}
 
 .nav-account{position:relative}
 .nav-account-btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px 0 10px;border-radius:999px;border:1px solid #15182b1c;background:#ffffffb3;color:#151a31;font:600 11.5px var(--s-display,'Inter',sans-serif);cursor:pointer;transition:background .15s,border-color .15s,transform .15s}
