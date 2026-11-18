@@ -1880,33 +1880,90 @@
        les repères "pas au bon endroit, comme par-dessus" signalés par
        David le 2026-11-17. Elles utilisent maintenant camFrame comme
        référentiel. -->
-  <!-- David, 2026-11-17 (image de référence fournie) : "non les vague
-       comme jai demandé... fis toi a ca pour les vagues" -- les 3 brins
-       ci-dessous sont les 3 MÊMES courbes que .ribbon-mesh de l'accueil
-       (brins 1, 8 et 30 sur 30, voir .opening-art plus haut), juste
-       redimensionnées à l'échelle de ce viewBox (400x220 vs 700x440) --
-       donc littéralement "comme à l'accueil comme style visuel", pas une
-       forme réinventée. Dégradé ramené à violet→rose uniquement (pas
-       d'orange), comme sur l'image de référence. Le brin du bas est le
-       même jeu de courbes, simplement retourné verticalement
-       (transform matrix) pour ne pas être un copier-coller identique. -->
+  <!-- David, 2026-11-17 (image de référence fournie) : "cest oas preil tu
+       vois bien je veux comme a lacceuil" -- la version à 3 brins espacés
+       ne rendait pas la texture "ruban/maillage dense" de l'accueil.
+       Reprise cette fois des 30 brins de .ribbon-mesh (voir .opening-art
+       plus haut), à l'identique, juste mis à l'échelle du nouveau
+       viewBox (400x220 vs 700x440) -- même opacités croissantes
+       (0.46→0.94), même dégradé (sans l'arrêt orange, absent de l'image
+       de référence). Pas de <animate> SMIL (coût de calcul pendant le
+       suivi caméra en direct) : 30 chemins statiques restent bon marché
+       pour le navigateur, contrairement à 30 animations recalculées à
+       chaque image. Le bas reprend exactement les mêmes 30 courbes,
+       retournées verticalement (transform matrix), pour ne pas être un
+       copier-coller identique du haut. -->
   <div class="live-waves" aria-hidden="true">
     <svg class="live-wave live-wave-top" viewBox="0 0 400 220" preserveAspectRatio="none" fill="none">
       <defs><linearGradient id="liveWaveInkTop" x1="0" y1="0" x2="1" y2="0">
         <stop stop-color="#7C4DFF"/><stop offset="1" stop-color="#E853D7"/>
       </linearGradient></defs>
-      <path d="M -28.6 115 C 54.3 150, 82.9 -30, 165.7 55 S 205.7 225, 271.4 167.5 S 342.9 -10, 434.3 70" stroke="url(#liveWaveInkTop)" stroke-width="1.6" opacity="0.5"/>
-      <path d="M -28.6 124.0 C 54.3 144.5, 82.9 -10.7, 165.7 63.3 S 205.7 211.2, 271.4 156.5 S 342.9 8.0, 434.3 82.4" stroke="url(#liveWaveInkTop)" stroke-width="1.6" opacity="0.4"/>
-      <path d="M -28.6 147.5 C 54.3 130, 82.9 40, 165.7 85 S 205.7 175, 271.4 127.5 S 342.9 55, 434.3 115" stroke="url(#liveWaveInkTop)" stroke-width="1.6" opacity="0.3"/>
+      <path d="M -28.6 115 C 54.3 150, 82.9 -30, 165.7 55 S 205.7 225, 271.4 167.5 S 342.9 -10, 434.3 70" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.46"/>
+      <path d="M -28.6 116.1 C 54.3 149.3, 82.9 -27.6, 165.7 56.0 S 205.7 223.3, 271.4 166.1 S 342.9 -7.8, 434.3 71.5" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.48"/>
+      <path d="M -28.6 117.2 C 54.3 148.6, 82.9 -25.1, 165.7 57.0 S 205.7 221.6, 271.4 164.8 S 342.9 -5.5, 434.3 73.1" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.49"/>
+      <path d="M -28.6 118.3 C 54.3 147.9, 82.9 -22.8, 165.7 58.1 S 205.7 219.8, 271.4 163.3 S 342.9 -3.3, 434.3 74.7" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.51"/>
+      <path d="M -28.6 119.5 C 54.3 147.2, 82.9 -20.4, 165.7 59.1 S 205.7 218.1, 271.4 162 S 342.9 -1.1, 434.3 76.2" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.53"/>
+      <path d="M -28.6 120.6 C 54.3 146.6, 82.9 -17.9, 165.7 60.1 S 205.7 216.4, 271.4 160.6 S 342.9 1.2, 434.3 77.8" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.54"/>
+      <path d="M -28.6 121.7 C 54.3 145.8, 82.9 -15.5, 165.7 61.2 S 205.7 214.7, 271.4 159.2 S 342.9 3.5, 434.3 79.3" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.56"/>
+      <path d="M -28.6 122.8 C 54.3 145.2, 82.9 -13.1, 165.7 62.2 S 205.7 212.9, 271.4 157.8 S 342.9 5.7, 434.3 80.8" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.58"/>
+      <path d="M -28.6 124.0 C 54.3 144.5, 82.9 -10.7, 165.7 63.3 S 205.7 211.2, 271.4 156.4 S 342.9 8.0, 434.3 82.4" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.59"/>
+      <path d="M -28.6 125.1 C 54.3 143.8, 82.9 -8.3, 165.7 64.3 S 205.7 209.5, 271.4 155.1 S 342.9 10.2, 434.3 84.0" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.61"/>
+      <path d="M -28.6 126.2 C 54.3 143.1, 82.9 -5.8, 165.7 65.3 S 205.7 207.8, 271.4 153.7 S 342.9 12.4, 434.3 85.5" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.63"/>
+      <path d="M -28.6 127.3 C 54.3 142.4, 82.9 -3.5, 165.7 66.4 S 205.7 206.1, 271.4 152.3 S 342.9 14.7, 434.3 87.0" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.64"/>
+      <path d="M -28.6 128.4 C 54.3 141.7, 82.9 -1.1, 165.7 67.4 S 205.7 204.3, 271.4 150.9 S 342.9 16.9, 434.3 88.6" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.66"/>
+      <path d="M -28.6 129.6 C 54.3 141.1, 82.9 1.4, 165.7 68.5 S 205.7 202.6, 271.4 149.6 S 342.9 19.1, 434.3 90.2" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.68"/>
+      <path d="M -28.6 130.7 C 54.3 140.3, 82.9 3.8, 165.7 69.5 S 205.7 200.8, 271.4 148.2 S 342.9 21.4, 434.3 91.7" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.69"/>
+      <path d="M -28.6 131.8 C 54.3 139.7, 82.9 6.2, 165.7 70.5 S 205.7 199.2, 271.4 146.8 S 342.9 23.6, 434.3 93.3" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.71"/>
+      <path d="M -28.6 132.9 C 54.3 138.9, 82.9 8.6, 165.7 71.5 S 205.7 197.4, 271.4 145.4 S 342.9 25.9, 434.3 94.8" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.72"/>
+      <path d="M -28.6 134.1 C 54.3 138.3, 82.9 11.1, 165.7 72.6 S 205.7 195.7, 271.4 144.1 S 342.9 28.1, 434.3 96.4" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.74"/>
+      <path d="M -28.6 135.2 C 54.3 137.6, 82.9 13.4, 165.7 73.6 S 205.7 193.9, 271.4 142.7 S 342.9 30.4, 434.3 98.0" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.76"/>
+      <path d="M -28.6 136.3 C 54.3 136.9, 82.9 15.8, 165.7 74.7 S 205.7 192.2, 271.4 141.3 S 342.9 32.6, 434.3 99.5" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.77"/>
+      <path d="M -28.6 137.4 C 54.3 136.2, 82.9 18.3, 165.7 75.7 S 205.7 190.5, 271.4 139.9 S 342.9 34.9, 434.3 101.0" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.79"/>
+      <path d="M -28.6 138.6 C 54.3 135.5, 82.9 20.7, 165.7 76.7 S 205.7 188.8, 271.4 138.6 S 342.9 37.0, 434.3 102.6" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.81"/>
+      <path d="M -28.6 139.7 C 54.3 134.8, 82.9 23.1, 165.7 77.8 S 205.7 187.1, 271.4 137.2 S 342.9 39.3, 434.3 104.2" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.82"/>
+      <path d="M -28.6 140.8 C 54.3 134.2, 82.9 25.5, 165.7 78.8 S 205.7 185.3, 271.4 135.8 S 342.9 41.5, 434.3 105.7" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.84"/>
+      <path d="M -28.6 141.9 C 54.3 133.4, 82.9 27.9, 165.7 79.8 S 205.7 183.6, 271.4 134.4 S 342.9 43.8, 434.3 107.2" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.86"/>
+      <path d="M -28.6 143 C 54.3 132.8, 82.9 30.4, 165.7 80.8 S 205.7 181.9, 271.4 133 S 342.9 46.0, 434.3 108.8" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.87"/>
+      <path d="M -28.6 144.2 C 54.3 132.1, 82.9 32.8, 165.7 81.9 S 205.7 180.2, 271.4 131.7 S 342.9 48.3, 434.3 110.3" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.89"/>
+      <path d="M -28.6 145.2 C 54.3 131.4, 82.9 35.1, 165.7 83.0 S 205.7 178.4, 271.4 130.2 S 342.9 50.5, 434.3 111.9" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.91"/>
+      <path d="M -28.6 146.4 C 54.3 130.7, 82.9 37.6, 165.7 84.0 S 205.7 176.7, 271.4 128.9 S 342.9 52.8, 434.3 113.5" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.92"/>
+      <path d="M -28.6 147.5 C 54.3 130, 82.9 40, 165.7 85 S 205.7 175, 271.4 127.5 S 342.9 55, 434.3 115" stroke="url(#liveWaveInkTop)" stroke-width="0.9" opacity="0.94"/>
     </svg>
     <svg class="live-wave live-wave-bottom" viewBox="0 0 400 220" preserveAspectRatio="none" fill="none">
       <defs><linearGradient id="liveWaveInkBottom" x1="0" y1="0" x2="1" y2="0">
         <stop stop-color="#7C4DFF"/><stop offset="1" stop-color="#E853D7"/>
       </linearGradient></defs>
       <g transform="matrix(1,0,0,-1,0,220)">
-        <path d="M -28.6 115 C 54.3 150, 82.9 -30, 165.7 55 S 205.7 225, 271.4 167.5 S 342.9 -10, 434.3 70" stroke="url(#liveWaveInkBottom)" stroke-width="1.6" opacity="0.5"/>
-        <path d="M -28.6 124.0 C 54.3 144.5, 82.9 -10.7, 165.7 63.3 S 205.7 211.2, 271.4 156.5 S 342.9 8.0, 434.3 82.4" stroke="url(#liveWaveInkBottom)" stroke-width="1.6" opacity="0.4"/>
-        <path d="M -28.6 147.5 C 54.3 130, 82.9 40, 165.7 85 S 205.7 175, 271.4 127.5 S 342.9 55, 434.3 115" stroke="url(#liveWaveInkBottom)" stroke-width="1.6" opacity="0.3"/>
+        <path d="M -28.6 115 C 54.3 150, 82.9 -30, 165.7 55 S 205.7 225, 271.4 167.5 S 342.9 -10, 434.3 70" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.46"/>
+        <path d="M -28.6 116.1 C 54.3 149.3, 82.9 -27.6, 165.7 56.0 S 205.7 223.3, 271.4 166.1 S 342.9 -7.8, 434.3 71.5" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.48"/>
+        <path d="M -28.6 117.2 C 54.3 148.6, 82.9 -25.1, 165.7 57.0 S 205.7 221.6, 271.4 164.8 S 342.9 -5.5, 434.3 73.1" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.49"/>
+        <path d="M -28.6 118.3 C 54.3 147.9, 82.9 -22.8, 165.7 58.1 S 205.7 219.8, 271.4 163.3 S 342.9 -3.3, 434.3 74.7" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.51"/>
+        <path d="M -28.6 119.5 C 54.3 147.2, 82.9 -20.4, 165.7 59.1 S 205.7 218.1, 271.4 162 S 342.9 -1.1, 434.3 76.2" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.53"/>
+        <path d="M -28.6 120.6 C 54.3 146.6, 82.9 -17.9, 165.7 60.1 S 205.7 216.4, 271.4 160.6 S 342.9 1.2, 434.3 77.8" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.54"/>
+        <path d="M -28.6 121.7 C 54.3 145.8, 82.9 -15.5, 165.7 61.2 S 205.7 214.7, 271.4 159.2 S 342.9 3.5, 434.3 79.3" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.56"/>
+        <path d="M -28.6 122.8 C 54.3 145.2, 82.9 -13.1, 165.7 62.2 S 205.7 212.9, 271.4 157.8 S 342.9 5.7, 434.3 80.8" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.58"/>
+        <path d="M -28.6 124.0 C 54.3 144.5, 82.9 -10.7, 165.7 63.3 S 205.7 211.2, 271.4 156.4 S 342.9 8.0, 434.3 82.4" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.59"/>
+        <path d="M -28.6 125.1 C 54.3 143.8, 82.9 -8.3, 165.7 64.3 S 205.7 209.5, 271.4 155.1 S 342.9 10.2, 434.3 84.0" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.61"/>
+        <path d="M -28.6 126.2 C 54.3 143.1, 82.9 -5.8, 165.7 65.3 S 205.7 207.8, 271.4 153.7 S 342.9 12.4, 434.3 85.5" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.63"/>
+        <path d="M -28.6 127.3 C 54.3 142.4, 82.9 -3.5, 165.7 66.4 S 205.7 206.1, 271.4 152.3 S 342.9 14.7, 434.3 87.0" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.64"/>
+        <path d="M -28.6 128.4 C 54.3 141.7, 82.9 -1.1, 165.7 67.4 S 205.7 204.3, 271.4 150.9 S 342.9 16.9, 434.3 88.6" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.66"/>
+        <path d="M -28.6 129.6 C 54.3 141.1, 82.9 1.4, 165.7 68.5 S 205.7 202.6, 271.4 149.6 S 342.9 19.1, 434.3 90.2" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.68"/>
+        <path d="M -28.6 130.7 C 54.3 140.3, 82.9 3.8, 165.7 69.5 S 205.7 200.8, 271.4 148.2 S 342.9 21.4, 434.3 91.7" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.69"/>
+        <path d="M -28.6 131.8 C 54.3 139.7, 82.9 6.2, 165.7 70.5 S 205.7 199.2, 271.4 146.8 S 342.9 23.6, 434.3 93.3" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.71"/>
+        <path d="M -28.6 132.9 C 54.3 138.9, 82.9 8.6, 165.7 71.5 S 205.7 197.4, 271.4 145.4 S 342.9 25.9, 434.3 94.8" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.72"/>
+        <path d="M -28.6 134.1 C 54.3 138.3, 82.9 11.1, 165.7 72.6 S 205.7 195.7, 271.4 144.1 S 342.9 28.1, 434.3 96.4" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.74"/>
+        <path d="M -28.6 135.2 C 54.3 137.6, 82.9 13.4, 165.7 73.6 S 205.7 193.9, 271.4 142.7 S 342.9 30.4, 434.3 98.0" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.76"/>
+        <path d="M -28.6 136.3 C 54.3 136.9, 82.9 15.8, 165.7 74.7 S 205.7 192.2, 271.4 141.3 S 342.9 32.6, 434.3 99.5" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.77"/>
+        <path d="M -28.6 137.4 C 54.3 136.2, 82.9 18.3, 165.7 75.7 S 205.7 190.5, 271.4 139.9 S 342.9 34.9, 434.3 101.0" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.79"/>
+        <path d="M -28.6 138.6 C 54.3 135.5, 82.9 20.7, 165.7 76.7 S 205.7 188.8, 271.4 138.6 S 342.9 37.0, 434.3 102.6" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.81"/>
+        <path d="M -28.6 139.7 C 54.3 134.8, 82.9 23.1, 165.7 77.8 S 205.7 187.1, 271.4 137.2 S 342.9 39.3, 434.3 104.2" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.82"/>
+        <path d="M -28.6 140.8 C 54.3 134.2, 82.9 25.5, 165.7 78.8 S 205.7 185.3, 271.4 135.8 S 342.9 41.5, 434.3 105.7" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.84"/>
+        <path d="M -28.6 141.9 C 54.3 133.4, 82.9 27.9, 165.7 79.8 S 205.7 183.6, 271.4 134.4 S 342.9 43.8, 434.3 107.2" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.86"/>
+        <path d="M -28.6 143 C 54.3 132.8, 82.9 30.4, 165.7 80.8 S 205.7 181.9, 271.4 133 S 342.9 46.0, 434.3 108.8" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.87"/>
+        <path d="M -28.6 144.2 C 54.3 132.1, 82.9 32.8, 165.7 81.9 S 205.7 180.2, 271.4 131.7 S 342.9 48.3, 434.3 110.3" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.89"/>
+        <path d="M -28.6 145.2 C 54.3 131.4, 82.9 35.1, 165.7 83.0 S 205.7 178.4, 271.4 130.2 S 342.9 50.5, 434.3 111.9" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.91"/>
+        <path d="M -28.6 146.4 C 54.3 130.7, 82.9 37.6, 165.7 84.0 S 205.7 176.7, 271.4 128.9 S 342.9 52.8, 434.3 113.5" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.92"/>
+        <path d="M -28.6 147.5 C 54.3 130, 82.9 40, 165.7 85 S 205.7 175, 271.4 127.5 S 342.9 55, 434.3 115" stroke="url(#liveWaveInkBottom)" stroke-width="0.9" opacity="0.94"/>
       </g>
     </svg>
   </div>
