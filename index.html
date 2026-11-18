@@ -2274,6 +2274,28 @@
   const overlay = document.getElementById("overlay");
   const overlayCtx = overlay ? overlay.getContext("2d") : null;
   const previewDiag = document.getElementById("previewDiag");
+  // David, 2026-11-17 : "ca traduit jamais rien" -- pour savoir SI la
+  // main est seulement rarement vue (lastSignal "aucun" en boucle,
+  // probleme d'eclairage/cadrage/distance) OU si elle est bien vue mais
+  // que la reconnaissance elle-meme echoue ensuite (bug plus profond),
+  // on affiche maintenant ici, en direct, ce que le moteur de
+  // reconnaissance voit reellement a chaque cycle -- temporaire, le
+  // temps de trouver la vraie cause, voir stopRecording() plus bas.
+  // visionDiagNote : note sur le suivi VISUEL (squelette a l'ecran,
+  // voir previewTick) ; lastCycleNote : note sur la RECONNAISSANCE
+  // (le moteur qui compare au dictionnaire, voir stopRecording) --
+  // deux pipelines independants (voir sign-recognizer.js), donc deux
+  // notes separees, combinees par renderDiagLine().
+  let visionDiagNote = "";
+  let lastCycleNote = "";
+  function renderDiagLine() {
+    if (!previewDiag) return;
+    if (!stage.classList.contains("live")) { previewDiag.hidden = true; previewDiag.textContent = ""; return; }
+    const lines = [visionDiagNote, lastCycleNote].filter(Boolean);
+    if (!lines.length) { previewDiag.hidden = true; previewDiag.textContent = ""; return; }
+    previewDiag.hidden = false;
+    previewDiag.textContent = lines.join(" · ");
+  }
   const emptyState = document.getElementById("emptyState");
   const topbar = document.getElementById("topbar");
   const mainBtn = document.getElementById("mainBtn");
@@ -2602,10 +2624,15 @@
   // directement sur le trait, via shadowBlur) pour un rendu plus soigné
   // sans jamais verser dans le néon (le flou reste petit, l'opacité
   // reste faible).
-  var TRACE_LINE = "rgba(255,255,255,0.34)";
-  var TRACE_DOT = "rgba(255,255,255,0.55)";
-  var TRACE_ACCENT = "rgba(255,255,255,0.92)";
-  var TRACE_GLOW = "rgba(255,255,255,0.4)";
+  // David, 2026-11-17 : "regarde les 2 images c'est pas pareil du tout"
+  // (comparaison directe avec la maquette fournie, dont le squelette est
+  // rose/mauve, pas blanc) -- remplace le blanc pâle du 16 novembre par
+  // la teinte violette/rose de la maquette (reprend --s-violet/--s-pink
+  // du reste du site, pas une couleur inventée).
+  var TRACE_LINE = "rgba(142,92,255,0.5)";
+  var TRACE_DOT = "rgba(232,83,215,0.75)";
+  var TRACE_ACCENT = "rgba(199,140,255,0.95)";
+  var TRACE_GLOW = "rgba(142,92,255,0.45)";
 
   // Dessine une courbe lissée à travers une séquence ordonnée de repères
   // (quadratiques passant par le MILIEU de chaque paire de points
@@ -2865,7 +2892,18 @@
         (result.landmarks || []).forEach(function (lm) { drawHandSkeleton(lm); });
         if (faceLm) drawFaceSkeleton(faceLm);
         if (poseLm) drawArmSkeleton(poseLm);
-        if (previewDiag && !previewDiag.hidden) previewDiag.hidden = true; // suivi reel actif, plus besoin du diagnostic
+        // David, 2026-11-17 : avant, dès que la main marchait, ce
+        // diagnostic disparaissait pour de bon -- même si le visage ou
+        // les bras avaient échoué EN SILENCE (voir les catch plus haut).
+        // C'est exactement ce qui explique "c'est pas pareil du tout" :
+        // sur son téléphone, seule la main s'affiche, mais rien ne le
+        // signalait. On affiche maintenant une note discrète tant que
+        // l'un des deux manque, et on ne redevient silencieux QUE si les
+        // trois (main + visage + bras) fonctionnent vraiment.
+        visionDiagNote = (!faceModelReady || !poseModelReady)
+          ? ("suivi main actif — " + [!faceModelReady && "visage", !poseModelReady && "bras"].filter(Boolean).join(" et ") + " indisponible sur cet appareil")
+          : "";
+        renderDiagLine();
       } catch (e) {
         if (previewDiag) { previewDiag.hidden = false; previewDiag.textContent = "suivi visuel : erreur — " + ((e && e.message) ? e.message : String(e)); }
       }
@@ -2903,6 +2941,7 @@
     if (previewRafId) { cancelAnimationFrame(previewRafId); previewRafId = null; }
     if (overlay && overlayCtx) overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
     if (previewDiag) { previewDiag.hidden = true; previewDiag.textContent = ""; }
+    visionDiagNote = ""; lastCycleNote = ""; // caméra fermée : pas de note périmée au prochain essai
     previewPrevGray = null;
     recentFrames = [];
   }
@@ -3225,6 +3264,17 @@
     if (cancelled) return;
     const rows = extractor.finish();
     const lastSignal = extractor.getLastSignal ? extractor.getLastSignal() : "?";
+    // David, 2026-11-17 : "ca traduit jamais rien" -- note visible et
+    // temporaire (voir sa déclaration plus haut, près de previewDiag) :
+    // ce que le moteur de reconnaissance (sign-recognizer.js, indépendant
+    // du squelette affiché à l'écran) a réellement vu ce cycle-ci. Si ça
+    // affiche "aucun" en boucle : le moteur ne détecte pas sa main du
+    // tout (éclairage/cadrage/distance à ajuster). Si ça affiche "une
+    // main"/"deux mains" avec assez d'images mais que ça ne traduit
+    // toujours rien : le problème est plus loin, dans la comparaison au
+    // dictionnaire, pas dans la détection elle-même.
+    lastCycleNote = "reconnaissance : " + lastSignal + " (" + (rows ? rows.length : 0) + "/" + TARGET_ROWS + " images)";
+    renderDiagLine();
     extractor = SensorielleSignRecognizer.createExtractor(); // prêt pour le prochain cycle
     if (!rows || rows.length < MIN_USABLE_ROWS) {
       // David, 2026-11-17 : retour au mode continu (voir startCamera plus
