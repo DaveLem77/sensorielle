@@ -2058,21 +2058,21 @@ body{overflow-x:hidden}
  .opening-topic{font-size:10px!important;margin-bottom:8px!important;letter-spacing:.13em!important}
  .opening-copy p{font-size:clamp(25px,6.15vw,40px)!important;line-height:1.03!important;letter-spacing:-.05em!important}
  .hero-extra{padding-top:8px!important;gap:12px!important}
- .hero-carousel{margin-top:0!important;perspective:1100px!important}
- .hc-viewport{perspective:1100px!important;perspective-origin:center center!important}
- .hc-track{gap:10px!important;padding-top:15px!important;padding-bottom:15px!important;perspective:1100px!important}
+ .hero-carousel{margin-top:0!important;perspective:820px!important}
+ .hc-viewport{perspective:820px!important;perspective-origin:center center!important}
+ .hc-track{gap:10px!important;padding-top:15px!important;padding-bottom:15px!important;perspective:820px!important}
  .hc-slide{width:48vw!important;max-width:230px!important;aspect-ratio:720/1094!important;transform:scale(.90)!important;opacity:.53!important;transform-origin:center center!important;transition:transform .4s cubic-bezier(.2,.8,.2,1),opacity .4s,box-shadow .4s!important;backface-visibility:hidden!important}
  .hc-slide.is-active{transform:translateZ(0) rotateY(0) scale(1)!important;opacity:1!important;box-shadow:0 12px 35px #33205d30,0 0 22px #b06aff30!important}
- .hc-slide:has(+ .hc-slide.is-active){transform:rotateY(-16deg) rotateZ(-2deg) scale(.91)!important;transform-origin:right center!important;opacity:.62!important}
- .hc-slide.is-active + .hc-slide{transform:rotateY(16deg) rotateZ(2deg) scale(.91)!important;transform-origin:left center!important;opacity:.62!important}
+ .hc-slide:has(+ .hc-slide.is-active){transform:rotateY(-29deg) rotateZ(-2deg) scale(.86)!important;transform-origin:right center!important;opacity:.72!important;box-shadow:inset 20px 0 35px -10px rgba(10,6,30,.4)!important}
+ .hc-slide.is-active + .hc-slide{transform:rotateY(29deg) rotateZ(2deg) scale(.86)!important;transform-origin:left center!important;opacity:.72!important;box-shadow:inset -20px 0 35px -10px rgba(10,6,30,.4)!important}
  .hc-arrow{width:36px!important;height:36px!important;top:50%!important}
  .hc-track{padding-left:calc(50% - min(48vw,230px)/2)!important;padding-right:calc(50% - min(48vw,230px)/2)!important}
  .hero-progress{margin-top:-4px!important}
 }
 @media(min-width:700px){
- .hc-viewport,.hc-track,.hero-carousel{perspective:1400px!important}
- .hc-slide:has(+ .hc-slide.is-active){transform:rotateY(-13deg) rotateZ(-2deg) scale(.91)!important;transform-origin:right center!important}
- .hc-slide.is-active + .hc-slide{transform:rotateY(13deg) rotateZ(2deg) scale(.91)!important;transform-origin:left center!important}
+ .hc-viewport,.hc-track,.hero-carousel{perspective:950px!important}
+ .hc-slide:has(+ .hc-slide.is-active){transform:rotateY(-26deg) rotateZ(-2deg) scale(.87)!important;transform-origin:right center!important;opacity:.72!important;box-shadow:inset 20px 0 35px -10px rgba(10,6,30,.4)!important}
+ .hc-slide.is-active + .hc-slide{transform:rotateY(26deg) rotateZ(2deg) scale(.87)!important;transform-origin:left center!important;opacity:.72!important;box-shadow:inset -20px 0 35px -10px rgba(10,6,30,.4)!important}
 }
 </style>
 </head>
@@ -2192,7 +2192,7 @@ body{overflow-x:hidden}
 <div class="hero-extra" id="heroExtra" data-reveal>
 <div class="hero-carousel" id="heroCarousel"><button type="button" class="hc-arrow hc-arrow-prev" id="hcPrev" aria-label="Exemple précédent"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="hc-viewport" id="hcViewport"><div class="hc-track" id="hcTrack" role="listbox" aria-label="Exemples de signes en LSQ"><div class="hc-slide" role="option" data-word="bonjour"><video class="hc-video" playsinline preload="metadata" muted poster="/media/signs/posters/bonjour.jpg"><source src="/media/signs/bonjour.mp4" type="video/mp4"></video><button type="button" class="hc-play" aria-label="Lire l'exemple Bonjour"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><div class="hc-meta"><span class="hc-meta-word">Bonjour</span><span class="hc-meta-sub">Exemple en LSQ</span><span class="hc-meta-dur" data-dur></span></div></div><div class="hc-slide" role="option" data-word="merci"><video class="hc-video" playsinline preload="metadata" muted poster="/media/signs/posters/merci.jpg"><source src="/media/signs/merci.mp4" type="video/mp4"></video><button type="button" class="hc-play" aria-label="Lire l'exemple Merci"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><div class="hc-meta"><span class="hc-meta-word">Merci</span><span class="hc-meta-sub">Exemple en LSQ</span><span class="hc-meta-dur" data-dur></span></div></div><div class="hc-slide" role="option" data-word="famille"><video class="hc-video" playsinline preload="metadata" muted poster="/media/signs/posters/famille.jpg"><source src="/media/signs/famille.mp4" type="video/mp4"></video><button type="button" class="hc-play" aria-label="Lire l'exemple Famille"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><div class="hc-meta"><span class="hc-meta-word">Famille</span><span class="hc-meta-sub">Exemple en LSQ</span><span class="hc-meta-dur" data-dur></span></div></div><div class="hc-slide" role="option" data-word="content"><video class="hc-video" playsinline preload="metadata" muted poster="/media/signs/posters/content.jpg"><source src="/media/signs/content.mp4" type="video/mp4"></video><button type="button" class="hc-play" aria-label="Lire l'exemple Content"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><div class="hc-meta"><span class="hc-meta-word">Content</span><span class="hc-meta-sub">Exemple en LSQ</span><span class="hc-meta-dur" data-dur></span></div></div><div class="hc-slide" role="option" data-word="maison"><video class="hc-video" playsinline preload="metadata" muted poster="/media/signs/posters/maison.jpg"><source src="/media/signs/maison.mp4" type="video/mp4"></video><button type="button" class="hc-play" aria-label="Lire l'exemple Maison"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><div class="hc-meta"><span class="hc-meta-word">Maison</span><span class="hc-meta-sub">Exemple en LSQ</span><span class="hc-meta-dur" data-dur></span></div></div></div></div><button type="button" class="hc-arrow hc-arrow-next" id="hcNext" aria-label="Exemple suivant"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
 <div class="hero-progress"><div class="hp-track"><span class="hp-fill" id="hpFill"></span></div><span class="hp-count" id="hpCount">1 / 5</span></div>
-<div class="hero-discovery"><span class="hero-discovery-line"></span><span class="hero-discovery-label">UNE AUTRE FAÇON DE COMMUNIQUER</span><span class="hero-discovery-line"></span></div>
+
 <a class="new-button hero-cta" href="#essayer" data-scroll>Faire le premier pas <span>↗</span></a>
 <div class="hero-bottom"><a href="#demo" data-scroll class="hero-chevron" aria-label="Découvrir Sensorielle"><span>↓</span></a><span class="hero-tag">UN PROJET NÉ AU QUÉBEC</span></div>
 </div>
@@ -7992,9 +7992,11 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
     if (v) {
       v.removeAttribute("id");
       v.preload = "metadata";
-      // Même repère visuel "en lecture" (fondu du bouton/méta) que les
-      // vraies diapositives quand ce clone fait partie des 3 visibles.
-      v.addEventListener("play", function () { clone.classList.add("is-playing"); });
+      // David, 2026-11-20 (5e passe) : le fondu du bouton/méta ne doit
+      // s'appliquer que lors d'une vraie lecture avec son (clic), jamais
+      // pendant la boucle ambiante muette -- sinon titre/bouton restent
+      // invisibles en permanence sur les 3 cartes visibles.
+      v.addEventListener("play", function () { if (!v.muted) clone.classList.add("is-playing"); });
       v.addEventListener("pause", function () { clone.classList.remove("is-playing"); });
     }
   });
@@ -8008,7 +8010,7 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
       s.classList.toggle("is-active", i === current);
       s.setAttribute("aria-selected", i === current ? "true" : "false");
     });
-    if (fill) fill.style.width = (total > 1 ? (current / (total - 1)) * 100 : 100) + "%";
+    if (fill) fill.style.width = ((current + 1) / total) * 100 + "%";
     if (count) count.textContent = (current + 1) + " / " + total;
   }
 
@@ -8099,11 +8101,18 @@ if(matchMedia('(hover: hover) and (pointer: fine)').matches){hero.addEventListen
         video.loop = false;
         video.muted = false;
         video.setAttribute("controls", "");
+        // La vidéo joue déjà (boucle ambiante) : passer muted à false ne
+        // redéclenche pas l'évènement "play", donc on bascule la classe
+        // ici directement plutôt que de compter dessus.
+        slide.classList.add("is-playing");
         video.play().catch(function () { /* lecture bloquée par le navigateur -- rien à faire de plus */ });
       });
     }
 
-    video.addEventListener("play", function () { slide.classList.add("is-playing"); });
+    // David, 2026-11-20 (5e passe) : idem -- "is-playing" (qui masque le
+    // bouton et la méta) ne doit se déclencher que pour une lecture
+    // explicite avec son, jamais pour la boucle ambiante muette.
+    video.addEventListener("play", function () { if (!video.muted) slide.classList.add("is-playing"); });
     video.addEventListener("pause", function () { slide.classList.remove("is-playing"); });
     video.addEventListener("ended", function () {
       slide.classList.remove("is-playing");
