@@ -2258,6 +2258,15 @@ body{overflow-x:hidden}
   radial-gradient(ellipse 60% 50% at 95% 85%,rgba(232,83,215,.24) 0%,transparent 100%),
   linear-gradient(165deg,#161a33 0%,#120f28 100%)!important;
 }
+/* David, 2026-11-20 (10e passe, étape 2/3 — boutons) : le contour
+   blanc + la forme pilule + la lueur du hero sur tous les boutons
+   d'action du site (.new-button, quelle que soit sa variante/couleur
+   de fond déjà en place -- on ne touche pas aux couleurs, juste à la
+   forme, pour ne rien casser côté contraste). .new-button seul avec
+   !important suffit à gagner sur toutes les variantes existantes,
+   aucune d'elles n'étant elle-même en !important. */
+.new-button{border-radius:100px!important;border:1.5px solid rgba(255,255,255,.85)!important;box-shadow:0 0 16px 2px rgba(124,77,255,.4)!important;transition:background .2s,transform .2s,box-shadow .2s,border-color .2s!important}
+.new-button:hover{transform:translateY(-2px)!important;box-shadow:0 8px 22px 2px rgba(124,77,255,.45)!important}
 </style>
 </head>
 <body>
