@@ -2236,6 +2236,28 @@ body{overflow-x:hidden}
 .hero-scroll-arrow svg{width:20px!important;height:20px!important;stroke:currentColor!important}
 @keyframes heroArrowBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
 @media(prefers-reduced-motion:reduce){.hero-scroll-arrow{animation:none!important}}
+/* David, 2026-11-20 (10e passe, étape 1/3 — fond et couleurs) : étend
+   l'ambiance du hero (mêmes dégradés radiaux violet/rose sur fond
+   lavande) aux sections claires du site, et une variante sombre avec
+   les mêmes lueurs violet/rose pour la section "contribuer" qui était
+   un bloc marine uni. Rien d'autre n'est touché (mise en page, texte,
+   boutons) -- ça vient aux étapes 2 et 3. */
+#demo,#essayer,#comment,#dictionnaire,#don{
+ position:relative!important;isolation:isolate!important;overflow:hidden!important;
+ background:
+  radial-gradient(ellipse 45% 22% at 4% 15%,rgba(178,178,252,.32) 0%,transparent 100%),
+  radial-gradient(ellipse 55% 30% at 95% 20%,rgba(247,192,224,.3) 0%,transparent 100%),
+  radial-gradient(ellipse 60% 32% at 10% 92%,rgba(191,181,252,.4) 0%,transparent 100%),
+  radial-gradient(ellipse 55% 28% at 92% 90%,rgba(252,214,210,.38) 0%,transparent 100%),
+  linear-gradient(176deg,#edebfb 0%,#f1eafc 50%,#eadffa 100%)!important;
+}
+#contribuer{
+ position:relative!important;isolation:isolate!important;overflow:hidden!important;
+ background:
+  radial-gradient(ellipse 55% 45% at 10% 15%,rgba(124,77,255,.38) 0%,transparent 100%),
+  radial-gradient(ellipse 60% 50% at 95% 85%,rgba(232,83,215,.24) 0%,transparent 100%),
+  linear-gradient(165deg,#161a33 0%,#120f28 100%)!important;
+}
 </style>
 </head>
 <body>
