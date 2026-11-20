@@ -2104,6 +2104,40 @@ body{overflow-x:hidden}
 @media(max-width:699px){
  .hero-extra.hero-extra{padding-top:0px!important}
 }
+/* David, 2026-11-20 (8e passe) : reprend la maquette carrousel reçue
+   ("exactement comme ça mais pour mes vidéos") -- taille des cartes,
+   fondu/zoom, inclinaison asymétrique plus marquée, ombres, boutons
+   lecture et flèches, et disparition totale de ce qui sort des 3
+   cartes visibles. Deux choses de la maquette ne sont PAS reprises,
+   volontairement : 1) son aspect-ratio 360/500 + object-fit:cover
+   recadrerait les vidéos -- on garde le vrai format 720/1094 en
+   contain (demandé explicitement plus tôt pour ne pas recadrer) ;
+   2) elle masque .hc-meta (titre/durée) complètement -- on la garde
+   visible, y compris sur la carte centrale (demandé explicitement). */
+.hero-carousel{position:relative!important;width:100%!important;margin:0!important;padding:0!important;perspective:1000px!important;transform:translateX(-4px)!important}
+.hc-viewport{position:relative!important;overflow-x:auto!important;overflow-y:hidden!important;scroll-snap-type:x mandatory!important;scrollbar-width:none!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior-inline:contain!important;perspective:1000px!important;width:100%!important}
+.hc-track{display:flex!important;gap:7px!important;align-items:center!important;padding:0 calc((100% - min(42.4vw,185px))/2)!important;perspective:1000px!important}
+.hc-slide{display:block!important;flex:none!important;width:min(42.4vw,185px)!important;aspect-ratio:720/1094!important;height:auto!important;border:1.4px solid rgba(255,255,255,.94)!important;border-radius:clamp(16px,4.25vw,25px)!important;background:#d8d9df!important;opacity:.82!important;overflow:hidden!important;transform:scale(.89)!important;backface-visibility:hidden!important;transform-origin:center center!important;transition:transform .35s ease,opacity .35s ease,box-shadow .35s ease!important;box-shadow:0 12px 30px #6557a63a!important;scroll-snap-align:center!important}
+.hc-slide.is-active{z-index:3!important;opacity:1!important;transform:rotateY(0deg) scale(1)!important;box-shadow:0 11px 30px #7e67bf30,0 0 5px #ffffffee,0 0 18px #fff7!important}
+.hc-slide:has(+ .hc-slide.is-active){opacity:.89!important;transform:rotateY(-52deg) rotateZ(-4deg) scale(.84)!important;transform-origin:right center!important}
+.hc-slide.is-active + .hc-slide{opacity:.89!important;transform:rotateY(38deg) rotateZ(4deg) scale(.86)!important;transform-origin:left center!important}
+.hc-slide:not(.is-active) .hc-play{display:none!important}
+.hc-slide:not(.is-active):not(:has(+ .hc-slide.is-active)):not(.is-active + .hc-slide){opacity:0!important;pointer-events:none!important}
+.hc-play{z-index:4!important;width:clamp(39px,10vw,50px)!important;height:clamp(39px,10vw,50px)!important;border-radius:50%!important;background:#1b1b31a9!important;color:#fff!important;border:1.6px solid rgba(255,255,255,.9)!important;box-shadow:0 3px 15px #28203a3d!important}
+.hc-play svg{width:45%!important;height:45%!important;margin-left:2px!important}
+.hc-arrow{width:clamp(32px,7.5vw,42px)!important;height:clamp(32px,7.5vw,42px)!important;top:50%!important;border:1.3px solid #ffffffea!important;border-radius:50%!important;background:#18172cac!important;color:white!important;box-shadow:0 2px 10px #22203930!important}
+.hc-arrow-prev{left:7.5%!important}
+.hc-arrow-next{right:7.5%!important}
+.hc-arrow svg{width:18px!important;height:18px!important}
+@media(min-width:700px){
+ .hc-track{padding-left:calc((100% - min(38vw,350px))/2)!important;padding-right:calc((100% - min(38vw,350px))/2)!important;gap:16px!important}
+ .hc-slide{width:min(38vw,350px)!important}
+}
+@media(max-width:370px){
+ .hc-slide{width:43vw!important}
+ .hc-track{padding-left:calc((100% - 43vw)/2)!important;padding-right:calc((100% - 43vw)/2)!important}
+}
+@media(prefers-reduced-motion:reduce){.hc-slide{transition:none!important}}
 </style>
 </head>
 <body>
