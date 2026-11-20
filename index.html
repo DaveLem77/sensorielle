@@ -2117,7 +2117,7 @@ body{overflow-x:hidden}
 .nav .nav-wordmark::after { content:".";color:#eb28b5; }
 .nav-right { gap:10px!important; }
 .nav-cta,.nav-cta.js-live-cta { display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:11px!important;width:106px!important;height:36px!important;min-height:36px!important;padding:0 12px!important;background:linear-gradient(115deg,#20203b,#15162e)!important;border:1px solid #ebdbff!important;border-radius:40px!important;box-shadow:0 6px 14px #53407924!important;color:white!important;font-family:Inter,sans-serif!important;font-weight:600!important;font-size:14px!important;text-decoration:none!important; }
-.nav-cta::after { content:"↗";font-size:17px;line-height:1; }
+/* flèche texte remplacée par une icône SVG blanche, voir .nav-cta-icon */
 .nav .nav-burger { display:flex!important;align-items:center!important;justify-content:center!important;min-width:34px!important;width:34px!important;height:42px!important;background:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important;gap:5px!important; }
 .nav-burger span { width:21px!important;height:1.8px!important; }
 .nav-account { display:none!important; }
@@ -2227,6 +2227,15 @@ body{overflow-x:hidden}
 @media(min-width:980px) {
  .nav .nav-logo,.nav .nav-right {transform:none!important;}
 }
+/* David, 2026-11-20 (9e passe) : icône blanche (pas un caractère emoji)
+   dans le bouton Essayer, et le bouton "Faire le premier pas" remplacé
+   par une flèche qui rebondit doucement, collée au badge Québec. */
+.nav-cta-icon{width:15px!important;height:15px!important;flex:none!important;color:#fff!important;stroke:#fff!important}
+.ref-quebec.ref-quebec{margin:0 auto 10px!important}
+.hero-scroll-arrow{display:flex!important;justify-content:center!important;align-items:center!important;width:30px!important;height:30px!important;margin:0 auto!important;color:#5b34d6!important;animation:heroArrowBounce 1.8s ease-in-out infinite!important}
+.hero-scroll-arrow svg{width:20px!important;height:20px!important;stroke:currentColor!important}
+@keyframes heroArrowBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
+@media(prefers-reduced-motion:reduce){.hero-scroll-arrow{animation:none!important}}
 </style>
 </head>
 <body>
@@ -2326,7 +2335,7 @@ body{overflow-x:hidden}
             <button type="button" class="nav-account-signout" id="navAccountSignOut" role="menuitem">Déconnexion</button>
           </div>
         </div>
-        <a class="nav-cta js-live-cta" href="#essayer" data-scroll>Essayer</a>
+        <a class="nav-cta js-live-cta" href="#essayer" data-scroll>Essayer<svg class="nav-cta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7M17 7H9M17 7V15" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <button class="nav-burger" id="navBurger" aria-label="Menu" aria-expanded="false" aria-controls="mobileMenu">
           <span></span><span></span><span></span>
         </button>
@@ -2363,7 +2372,7 @@ body{overflow-x:hidden}
   </div>
   <div class="ref-quebec-text">Pensé et développé<br>au <strong>Québec<span>.</span></strong></div>
 </div>
-<a class="new-button hero-cta" href="#essayer" data-scroll>Faire le premier pas <span>↗</span></a>
+<div class="hero-scroll-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
 
 </div>
 <svg class="ref-background-waves" viewBox="0 0 850 520" preserveAspectRatio="none" aria-hidden="true" focusable="false">
