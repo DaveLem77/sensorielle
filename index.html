@@ -2267,17 +2267,6 @@ body{overflow-x:hidden}
    aucune d'elles n'étant elle-même en !important. */
 .new-button{border-radius:100px!important;border:1.5px solid rgba(255,255,255,.85)!important;box-shadow:0 0 16px 2px rgba(124,77,255,.4)!important;transition:background .2s,transform .2s,box-shadow .2s,border-color .2s!important}
 .new-button:hover{transform:translateY(-2px)!important;box-shadow:0 8px 22px 2px rgba(124,77,255,.45)!important}
-/* David, 2026-11-20 (10e passe, étape 3/3 — titres) : les titres de
-   section utilisent déjà tous un <em>/<span> en dégradé via
-   var(--s-gradient) (défini 2x plus haut, lignes 118 et 1735) --
-   on redéfinit juste ce jeton ici, une seule fois, pour qu'il
-   reprenne le dégradé violet→rose du hero au lieu de l'ancien
-   violet→rose→orange, et ça se propage partout où il est déjà
-   utilisé (titres, pastille du footer, avatar compte, puce du
-   hero, soulignés de carte, etc.) sans toucher à aucun sélecteur.
-   Même chose pour la police d'affichage : Manrope passe devant
-   Geist, comme dans le hero. */
-:root{--s-gradient:linear-gradient(100deg,#6642ff 0%,#922fea 44%,#df29b8 98%);--s-display:'Manrope','Geist','Inter',sans-serif}
 </style>
 </head>
 <body>
