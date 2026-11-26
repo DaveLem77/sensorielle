@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr-CA">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tome 1 — Sensorielle</title>
+<meta name="description" content="Page compagnon du livre Mia et ses premiers signes.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f3f2f8">
+<link rel="icon" href="../media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --s-bg:#F8F9FF;--s-surface:#fff;--s-ink:#080D25;--s-ink-dim:#62677A;--s-ink-faint:#9b9eac;
+  --s-line:#080d2514;
+  --s-gradient:linear-gradient(100deg,#7157F5 0%,#B94FE4 38%,#F45E9A 68%,#FF8058 100%);
+  --s-display:'Geist','Inter',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--s-bg);color:var(--s-ink);font:15px/1.6 'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{width:min(640px,92%);margin-inline:auto}
+header{padding:22px 0;border-bottom:1px solid var(--s-line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:9px;text-decoration:none}
+.brand img{height:30px;width:30px;object-fit:contain}
+.brand span{font-family:var(--s-display);font-weight:600;font-size:19px;letter-spacing:-.5px;color:var(--s-ink)}
+main{padding:56px 0 80px}
+.eyebrow{font-size:11px;letter-spacing:2px;color:#8a8ea0;font-weight:600;text-transform:uppercase;margin:0 0 14px}
+h1{font-family:var(--s-display);font-size:clamp(26px,4.4vw,36px);font-weight:600;letter-spacing:-.04em;line-height:1.18;margin:0 0 12px}
+.lead{font-size:14.5px;color:var(--s-ink-dim);line-height:1.7;margin:0 0 36px;max-width:50ch}
+.stage{
+  position:relative;
+  aspect-ratio:16/9;
+  width:100%;
+  border-radius:20px;
+  background:var(--s-surface);
+  border:1px solid var(--s-line);
+  box-shadow:0 20px 55px rgba(50,35,100,0.08);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+.stage::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:var(--s-gradient);
+  opacity:.06;
+}
+.stage-label{
+  position:relative;
+  font-family:var(--s-display);
+  font-weight:700;
+  font-size:clamp(28px,5vw,40px);
+  letter-spacing:-.02em;
+  background:var(--s-gradient);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.note{margin-top:18px;font-size:13px;color:var(--s-ink-faint)}
+footer{padding:20px 0;color:var(--s-ink-faint);font-size:12px}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <a class="brand" href="/">
+    <img src="../media/favicon.png" alt="">
+    <span>Sensorielle</span>
+  </a>
+</header>
+<main class="wrap">
+  <p class="eyebrow">Tome 1</p>
+  <h1>Mia et ses premiers signes</h1>
+  <p class="lead">
+    Chaque signe du livre aura bientôt sa propre vidéo ici, accessible directement
+    avec le code QR imprimé sur ses pages.
+  </p>
+  <div class="stage">
+    <span class="stage-label">Vidéo</span>
+  </div>
+  <p class="note">Contenu à venir.</p>
+</main>
+<footer class="wrap">
+  <a href="../index.html">← Retour au site</a>
+</footer>
+</body>
+</html>
